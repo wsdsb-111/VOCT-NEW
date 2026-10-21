@@ -19,6 +19,7 @@ jobs:
         with:
           lfs: true
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
@@ -28,6 +29,7 @@ jobs:
       - name: Build runtime from source
         run: node scripts/build-runtime.js
       - name: Verify and materialize generated runtime
+        id: materialize
         run: |
           node scripts/verify-runtime-build.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -37,3 +39,13 @@ jobs:
       - name: Run release regression
         # Existing tests now exercise source-generated resources/app/out.
         run: node scripts/test-release.js
+      - name: Cold-start complete Windows distribution
+        if: ${{ !cancelled() && steps.materialize.outcome == 'success' }}
+        run: node scripts/test-v9.4-windows-packaged-smoke.js --launch --keep-temp
+      - name: Preserve anonymous packaged smoke evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: v94-packaged-smoke-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .build/v9.4-construction/smoke-temp/**/evidence.json
+          if-no-files-found: ignore

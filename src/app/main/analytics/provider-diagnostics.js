@@ -3,6 +3,7 @@
 const { resolveProviderPromptProfile, resolvePromptLayoutId } = require("../prompts/provider-prompt-adapter");
 const { normalizeProviderUsage, normalizeUsage } = require("../providers/usage-normalization");
 const { projectProviderUsage } = require("./usage-analytics");
+const { CACHE_DIAGNOSTICS_V2_VERSION, fingerprintEffectiveParameters, projectCacheDiagnosticsV2, projectEffectiveBudget, summarizeCacheDiagnosticsV2 } = require("./cache-usage-reconciliation");
 const { projectMemoryAttemptDiagnostics, projectPairMemoryMetrics } = require("../memory-system/player-memory-diagnostics");
 const {
   buildRealRequestSnapshot,
@@ -112,13 +113,52 @@ function buildLocalPrefixDiagnostics({ normalizedUsage, blocks = [], TokenCounte
   };
 }
 
+function buildCacheDiagnosticRequestMeta({ request, blocks, blockMetadata, promptPlan, messageSpans, cacheDiagnosticContext } = {}) {
+  const v2Context = cacheDiagnosticContext && typeof cacheDiagnosticContext === "object" ? cacheDiagnosticContext : {};
+  const plan = v2Context.plan || promptPlan || {};
+  return {
+    stream: typeof request?.stream === "boolean" ? request.stream : null,
+    plan: {
+      layoutId: plan?.layoutId,
+      layoutRevision: plan?.layoutRevision,
+      stablePrefixCandidateTokens: plan?.stablePrefixCandidateTokens ?? v2Context.stablePrefixCandidateTokens,
+      evidenceStatus: plan?.evidenceStatus ?? plan?.status,
+      ownerEvidence: plan?.ownerEvidence,
+      fallbackReason: v2Context.fallbackReason
+    },
+    messageSpans: Array.isArray(v2Context.messageSpans) ? v2Context.messageSpans : Array.isArray(messageSpans) ? messageSpans : [],
+    blocks: Array.isArray(v2Context.blockMetadata) ? v2Context.blockMetadata : Array.isArray(blockMetadata) ? blockMetadata : Array.isArray(blocks) ? blocks : []
+  };
+}
+
+function usageFromNativeEvidence(evidence) {
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) return null;
+  const usage = {};
+  const readField = (field) => {
+    if (!field || typeof field !== "object" || field.present !== true) return void 0;
+    return field.value === null || field.value === void 0 || typeof field.value === "object" || typeof field.value === "boolean"
+      ? Number.NaN : field.value;
+  };
+  for (const key of ["prompt_tokens", "completion_tokens", "total_tokens"]) {
+    const value = readField(evidence[key]);
+    if (value !== void 0) usage[key] = value;
+  }
+  for (const [containerKey, valueKey] of [["prompt_tokens_details", "cached_tokens"], ["completion_tokens_details", "reasoning_tokens"]]) {
+    const value = readField(evidence[containerKey]?.[valueKey]);
+    if (value !== void 0) usage[containerKey] = { [valueKey]: value };
+  }
+  return usage;
+}
+
 function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, providerRegistry, TokenCounter, diagnosticsFile }) {
   const filePath = diagnosticsFile || path.join(dataDir, "provider-diagnostics.jsonl");
   const previousRealRequestByRoute = new Map();
   const previousRealRequestByConversation = new Map();
+  const preparedCacheContextByDiff = new WeakMap();
+  const cacheDiagnosticsObserversByToken = new WeakMap();
 
   class ProviderDiagnostics {
-    prepareOutboundRequest({ provider, model, requestType, request, messages, blocks, conversationId, responderId, baseUrl, promptProfile, staticTokens, dynamicTokens, prefixFingerprint, globalStaticTokens, conversationFrozenTokens, responderFrozenTokens, stableKinshipTokens, actualStablePrefixTokens, declaredStaticTokens, dynamicTailTokens }) {
+    prepareOutboundRequest({ provider, model, requestType, request, messages, blocks, blockMetadata, conversationId, responderId, baseUrl, promptProfile, staticTokens, dynamicTokens, prefixFingerprint, globalStaticTokens, conversationFrozenTokens, responderFrozenTokens, stableKinshipTokens, actualStablePrefixTokens, declaredStaticTokens, dynamicTailTokens, promptPlan, messageSpans, cacheDiagnosticContext }) {
       if (requestType !== "chat") return null;
       const effectiveRequest = request && typeof request === "object" ? request : { messages };
       const current = buildRealRequestSnapshot({
@@ -149,7 +189,57 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
       const diff = buildRealRequestDiff({ previousRoute, previousConversation, current, TokenCounter });
       previousRealRequestByRoute.set(current.routeScopeKey, current);
       if (canCompareConversation) previousRealRequestByConversation.set(current.conversationScopeKey, current);
+      preparedCacheContextByDiff.set(diff, buildCacheDiagnosticRequestMeta({
+        request: effectiveRequest,
+        blocks,
+        blockMetadata,
+        promptPlan,
+        messageSpans,
+        cacheDiagnosticContext
+      }));
       return diff;
+    }
+
+    createCacheDiagnosticsObserver({ provider, model, requestType, requestDiff, request, blocks, blockMetadata, promptPlan, messageSpans, cacheDiagnosticContext } = {}) {
+      const token = Object.freeze({});
+      const preparedContext = requestDiff && requestDiff.version === "real_request_diff_v1"
+        ? preparedCacheContextByDiff.get(requestDiff) : null;
+      const requestMeta = preparedContext || buildCacheDiagnosticRequestMeta({ request, blocks, blockMetadata, promptPlan, messageSpans, cacheDiagnosticContext });
+      cacheDiagnosticsObserversByToken.set(token, {
+        providerType: provider || null,
+        model: model || null,
+        requestType: requestType || "unknown",
+        requestMeta: {
+          ...requestMeta,
+          plan: { ...requestMeta.plan, evidenceStatus: "LEGACY_OBSERVED", ownerEvidence: "UNKNOWN" }
+        }
+      });
+      return token;
+    }
+
+    attachEffectiveRequest(observerToken, snapshot, budget) {
+      const observer = observerToken && cacheDiagnosticsObserversByToken.get(observerToken);
+      if (!observer || !snapshot || typeof snapshot !== "object") return false;
+      const requestMeta = observer.requestMeta;
+      const protocol = typeof snapshot.protocol === "string" ? snapshot.protocol : null;
+      const payload = snapshot.payload && typeof snapshot.payload === "object" && !Array.isArray(snapshot.payload) ? snapshot.payload : null;
+      requestMeta.plan = {
+        ...requestMeta.plan,
+        evidenceStatus: snapshot.planStatus === "PROMPT_PLAN_V9" ? "PLAN_OBSERVED" : "LEGACY_OBSERVED",
+        ownerEvidence: snapshot.ownerEvidence === "PRESENT" ? "VERIFIED" : "UNKNOWN"
+      };
+      requestMeta.effectiveRequest = {
+        source: "ADAPTER_FINAL",
+        fingerprint: snapshot.effectiveRequestFingerprint,
+        endpointFingerprint: snapshot.endpoint?.fingerprint,
+        protocol,
+        stream: typeof snapshot.stream === "boolean" ? snapshot.stream : null,
+        payloadParametersFingerprint: fingerprintEffectiveParameters(protocol, payload),
+        providerType: snapshot.providerType,
+        model: payload?.model,
+        budget: projectEffectiveBudget(budget)
+      };
+      return true;
     }
 
     getStatus() {
@@ -240,9 +330,15 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
 
     recordResponse({ provider, model, requestType, response, usage, metadata = {}, startedAt, completedAt, firstReasoningAt, firstVisibleContentAt }) {
       const hasRealDiff = metadata.realRequestDiff && metadata.realRequestDiff.version === "real_request_diff_v1";
+      const observerToken = metadata.cacheDiagnosticsObserverToken;
+      const observer = observerToken && cacheDiagnosticsObserversByToken.get(observerToken);
+      const hasCacheObserver = Boolean(observer);
+      const diagnosticProvider = provider || observer?.providerType || metadata.providerType;
+      const diagnosticModel = model || observer?.model || metadata.model;
+      const diagnosticRequestType = requestType || observer?.requestType || "unknown";
       const memoryAttemptDiagnostics = projectMemoryAttemptDiagnostics(metadata.memoryAttemptDiagnostics);
-      if (!hasRealDiff && !memoryAttemptDiagnostics?.memoryInjectionDigest && provider !== "zhipu"
-        && !["summary", "final_summary", "memory_recovery", "rolling_summary"].includes(requestType)) return null;
+      if (!hasRealDiff && !hasCacheObserver && !memoryAttemptDiagnostics?.memoryInjectionDigest && diagnosticProvider !== "zhipu"
+        && !["summary", "final_summary", "memory_recovery", "rolling_summary"].includes(diagnosticRequestType)) return null;
       const usageDebug = response?.usage_debug;
       const normalizedUsage = sanitizeUsage(normalizeProviderUsage(usageDebug?.normalized_usage || usage), true);
       const rawUsage = sanitizeUsage(usageDebug?.raw_usage || response?.usage, false);
@@ -250,11 +346,41 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
       const blocks = Array.isArray(metadata.blocks) ? metadata.blocks : [];
       const realRequestDiff = hasRealDiff ? attachProviderObservation(metadata.realRequestDiff, normalizedUsage) : null;
       const providerUsage = buildProviderUsage(normalizedUsage);
+      const nativeUsageEvidence = usageFromNativeEvidence(usageDebug?.native_usage_evidence);
+      const usageSource = nativeUsageEvidence || (usageDebug?.raw_usage && typeof usageDebug.raw_usage === "object" && !Array.isArray(usageDebug.raw_usage)
+        ? usageDebug.raw_usage
+        : response?.usage && typeof response.usage === "object" && !Array.isArray(response.usage)
+          ? response.usage
+          : usage?.votc_estimated === true ? { votc_estimated: true } : null);
+      const cacheUsage = normalizeUsage(usageSource, {
+        providerType: diagnosticProvider,
+        terminalStatus: metadata.generationStatus,
+        estimatedInputTokens: usage?.votc_estimated === true ? usage.prompt_tokens : undefined
+      });
+      const requestMeta = hasCacheObserver
+        ? observer.requestMeta
+        : hasRealDiff ? preparedCacheContextByDiff.get(metadata.realRequestDiff) || {} : {};
+      if (hasRealDiff) preparedCacheContextByDiff.delete(metadata.realRequestDiff);
+      if (hasCacheObserver) cacheDiagnosticsObserversByToken.delete(observerToken);
+      const hasFinalRequestObservation = hasCacheObserver && requestMeta.effectiveRequest?.source === "ADAPTER_FINAL";
+      const cacheDiagnosticsV2 = hasFinalRequestObservation ? projectCacheDiagnosticsV2({
+        providerType: diagnosticProvider,
+        model: diagnosticModel,
+        requestType: diagnosticRequestType,
+        requestDiff: hasRealDiff ? metadata.realRequestDiff : null,
+        normalizedUsage: cacheUsage,
+        requestMeta,
+        startedAt,
+        firstReasoningAt,
+        firstVisibleAt: firstVisibleContentAt,
+        completedAt,
+        outcome: metadata.generationStatus
+      }) : null;
       const entry = {
         timestamp: new Date().toISOString(),
-        provider: provider || null,
-        model: model || DEFAULT_MODEL,
-        requestType: requestType || "unknown",
+        provider: diagnosticProvider || null,
+        model: diagnosticModel || DEFAULT_MODEL,
+        requestType: diagnosticRequestType,
         rawUsage,
         normalizedUsage,
         providerUsage,
@@ -277,6 +403,7 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
         actionDeferred: requestType === "chat" && ["length", "max_tokens", "max_output_tokens"].includes(response?.finish_reason ?? response?.finishReason),
         alignmentStatus: realRequestDiff?.alignmentStatus || null,
         realRequestDiff,
+        cacheDiagnosticsV2,
         memoryAttemptDiagnostics,
         pairMemoryMetrics: projectPairMemoryMetrics(metadata.pairMemoryMetrics),
         localPrefixDiagnostics: buildLocalPrefixDiagnostics({ normalizedUsage, blocks, TokenCounter, messages }),
@@ -309,12 +436,16 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
 
     getRealRequestDiffStatus(limit = 300) {
       const entries = this.getRecentRealRequestDiff(limit);
+      const count = Math.min(300, Math.max(1, Math.floor(Number(limit) || 300)));
+      const cacheEntries = this.readEntries().map((entry) => entry.cacheDiagnosticsV2)
+        .filter((entry) => entry?.schemaVersion === CACHE_DIAGNOSTICS_V2_VERSION).slice(-count).reverse();
       return {
         success: true,
         version: "real_request_diff_v1",
         captureEnabled: this.getStatus().captureEnabled,
         retainedEntries: entries.length,
         summary: summarizeRealRequestEntries(entries),
+        cacheDiagnosticsV2: { summary: summarizeCacheDiagnosticsV2(cacheEntries), entries: cacheEntries },
         entries,
         memoryAttemptComparisons: this.getMemoryAttemptComparisons(limit)
       };
@@ -337,6 +468,23 @@ function createProviderDiagnostics({ fs, path, dataDir, settingsRepository, prov
       fs.mkdirSync(dataDir, { recursive: true });
       const memoryAttemptComparisons = this.getMemoryAttemptComparisons(limit);
       fs.writeFileSync(exportPath, JSON.stringify({ version: "real_request_diff_v1", generatedAt: new Date().toISOString(), summary: summarizeRealRequestEntries(entries), entries, memoryAttemptComparisons }, null, 2), "utf8");
+      return { success: true, path: exportPath, count: entries.length };
+    }
+
+    exportCacheDiagnosticsV2(limit = 300) {
+      const date = new Date().toISOString().slice(0, 10);
+      const exportPath = path.join(dataDir, `voct-cache-diagnostics-v2-${date}.json`);
+      const count = Math.min(300, Math.max(1, Math.floor(Number(limit) || 300)));
+      const entries = this.readEntries().map((entry) => entry.cacheDiagnosticsV2)
+        .filter((entry) => entry?.schemaVersion === CACHE_DIAGNOSTICS_V2_VERSION).slice(-count);
+      const payload = {
+        schemaVersion: CACHE_DIAGNOSTICS_V2_VERSION,
+        generatedAt: new Date().toISOString(),
+        summary: summarizeCacheDiagnosticsV2(entries),
+        entries
+      };
+      fs.mkdirSync(dataDir, { recursive: true });
+      fs.writeFileSync(exportPath, JSON.stringify(payload, null, 2), "utf8");
       return { success: true, path: exportPath, count: entries.length };
     }
 

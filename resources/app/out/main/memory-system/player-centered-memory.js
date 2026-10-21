@@ -617,6 +617,12 @@ function retrievePlayerCenteredMemory(engine, options) {
     relevant: [...baseline.direct, ...baseline.official, ...dynamic.sources], extra: dynamic.sources, mentioned: [], topicPatch: [],
     pairMemoryItems: [...baseline.items, ...dynamic.items], pairMemorySources: dynamic.sources, pairMemoryMetrics: metrics,
     thirdPersonDecision: dynamic.decision, temporal: dynamic.temporal,
+    ...(frozenPolicy ? {
+      committedDynamicPlanSources: (state.frozenDynamicSources || []).map(entry => ({ key: dynamicFreeze.sourceKey(entry), frozenText: entry.frozenText })),
+      pendingDynamicPlanSources: (state.pendingDynamicSources || []).filter(entry => !(state.frozenDynamicSources || [])
+        .some(committed => dynamicFreeze.sourceKey(committed) === dynamicFreeze.sourceKey(entry)))
+        .map(entry => ({ key: dynamicFreeze.sourceKey(entry), frozenText: entry.frozenText }))
+    } : {}),
     frozenDynamicText, temporalExtraText: (frozenPolicy ? dynamic.nonSummaryText : dynamic.text) || null, mentionedSnapshotText: null, mentionedText: null, entityTargetText: null,
     topicPatchText: null, relevantText: null, tokenBudget: budget, selectedTokens: metrics.finalInjectedTokens,
     routing: { ownerId, playerAnchorId: playerId, directCounterpartIds: [playerId], activeParticipantIds: options.activeParticipantIds || [],

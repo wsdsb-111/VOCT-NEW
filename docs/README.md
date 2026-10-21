@@ -1,5 +1,9 @@
 # VOTC 文档索引
 
+当前施工入口为 **V9.4 PromptPlan 与缓存诊断候选**：[设计](current/v9/V9_4_DESIGN.md)、[实施](current/v9/V9_4_IMPLEMENTATION.md)、[验证](current/v9/V9_4_VERIFICATION.md)、[交接](current/v9/V9_4_HANDOFF.md)。遵守静态／冻结在前、动态在后及时间／第三人来源成功后冻结复用的合同。当前完整回归未通过、EXE 冷启动失败，未签署发布；重启后本机只串行执行小型测试。
+
+以下 V9.3.9.3 及更早的通过记录均为历史证据，不替代 V9.4 验证。
+
 2026-10-19输入补丁见[V9.3.9.3报告末节](current/v9/V9_3_9_3_IMPLEMENTATION_REPORT.md)：优化／摘要编辑返回后输入恢复及草稿保留已通过隔离打包窗口验证；main代码`291040b`的[原生Windows CI 39242368694](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39242368694)通过471组。下方470组为补丁前冻结资源历史结果，本地TEMP／junction限制与真实CK3／Provider验收边界仍分别保留。
 
 V9.3.9.3 为当前修复候选：带动作回复只重写台词、不重放动作；修复正文替换显示、场外子女公开父母导出缺口及长幼知情边界，校正 Legacy 回归夹具。最终470组发布回归通过，298项资源部署一致，隔离 UI 实点与DOM断言通过；见 [V9.3.9.3 实施报告](current/v9/V9_3_9_3_IMPLEMENTATION_REPORT.md)。V9.3.9 摘要配额、预算、全文冻结与来源复验继续有效。原数字年龄 +1、CK3 新导出、真实 Provider 和 Soak 分别验收。

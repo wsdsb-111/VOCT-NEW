@@ -1192,6 +1192,38 @@
     {
       "source": "renderer/character-knowledge-ui.js",
       "target": "out/renderer/character-knowledge-ui.js"
+    },
+    {
+      "source": "main/prompts/prompt-plan-builder.js",
+      "target": "out/main/prompts/prompt-plan-builder.js"
+    },
+    {
+      "source": "main/prompts/prompt-plan-compat.js",
+      "target": "out/main/prompts/prompt-plan-compat.js"
+    },
+    {
+      "source": "main/prompts/prompt-plan-contract.js",
+      "target": "out/main/prompts/prompt-plan-contract.js"
+    },
+    {
+      "source": "main/prompts/prompt-plan-errors.js",
+      "target": "out/main/prompts/prompt-plan-errors.js"
+    },
+    {
+      "source": "main/prompts/prompt-plan-layouts.js",
+      "target": "out/main/prompts/prompt-plan-layouts.js"
+    },
+    {
+      "source": "main/prompts/prompt-plan-prefix.js",
+      "target": "out/main/prompts/prompt-plan-prefix.js"
+    },
+    {
+      "source": "main/prompts/prompt-plan-serializer.js",
+      "target": "out/main/prompts/prompt-plan-serializer.js"
+    },
+    {
+      "source": "main/providers/effective-request.js",
+      "target": "out/main/providers/effective-request.js"
     }
   ]
 }

@@ -250,14 +250,29 @@ async function main() {
     const referenceBytes = Buffer.from(JSON.stringify(results[0].result), "utf8");
     const legacyBytes = Buffer.from(JSON.stringify(results[1].result), "utf8");
     assert(referenceBytes.equals(legacyBytes), "v9.2.1_and_v9.2.2_native_usage_fixtures_must_remain_byte_for_byte_frozen");
-    const canonical = result => ({
-      zero: result.zero,
-      unknown: result.unknown,
-      emptyUnknown: result.emptyUnknown,
-      streamTail: { bodyJson: result.streamTail.bodyJson, final: result.streamTail.final }
-    });
+    const canonical = result => {
+      const final = { ...result.streamTail.final };
+      if (final.usage_debug && typeof final.usage_debug === "object") {
+        const legacyUsageDebug = { ...final.usage_debug };
+        delete legacyUsageDebug.native_usage_evidence;
+        final.usage_debug = legacyUsageDebug;
+      }
+      return {
+        zero: result.zero,
+        unknown: result.unknown,
+        emptyUnknown: result.emptyUnknown,
+        streamTail: { bodyJson: result.streamTail.bodyJson, final }
+      };
+    };
     for (const { target, result } of results.slice(2)) {
       assert.deepEqual(canonical(result), canonical(results[0].result), `${target.id}:canonical_native_usage_has_no_synthetic_counts`);
+      assert.deepEqual(result.streamTail.final.usage_debug?.native_usage_evidence, {
+        prompt_tokens: { present: true, value: 100 },
+        completion_tokens: { present: true, value: 5 },
+        total_tokens: { present: true, value: 105 },
+        prompt_tokens_details: { cached_tokens: { present: true, value: 0 } },
+        completion_tokens_details: { reasoning_tokens: { present: true, value: 2 } }
+      }, `${target.id}:native_usage_evidence_matches_the_raw_provider_fixture`);
       assert.strictEqual(JSON.parse(result.streamTail.clientJson).maxRetries, 0, `${target.id}:sdk_hidden_retries_disabled`);
     }
     const digest = sha256(referenceBytes);

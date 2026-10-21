@@ -7,3 +7,6 @@
 /.playwright-cli/
 /.build/
 
+
+# Local Notepad debugging copy; not a VOTC distribution entry.
+/np-test.exe

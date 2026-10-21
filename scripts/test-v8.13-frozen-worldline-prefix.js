@@ -68,7 +68,8 @@ for (const provider of providers) {
     worldCurrentText: "本轮世界状态", presenceText: "甲在场", temporalExtraText: "首轮召回",
     confirmedActionText: null, historicalWorldText: null, mentionedSnapshotText: null, coveragePatchText: null
   };
-  const build = (responder, history) => PromptBuilder.buildMessagesWithTokenCount(history, responder, gameData, "", context, provider);
+  const build = (responder, history) => PromptBuilder.buildMessagesWithTokenCount(history, responder, gameData, "", context, provider,
+    { promptPlanMode: "legacy" });
   const first = build(characters.get(1), [{ role: "user", content: "初始问题" }]);
   const firstMeta = Conversation.buildPromptBlockMetadata(first);
   assert.strictEqual(first.promptProfile.layoutId, "v813", `${provider.providerType}: layout`);
@@ -113,8 +114,8 @@ for (const provider of providers) {
 mainTemplate = "{{! VOTC_SEGMENT:stable_global }}固定规则\n{{! VOTC_SEGMENT:stable_history_rp }}你是{{fullName}}。{{fullName}}须遵守共同规则。\n{{! VOTC_SEGMENT:world_context }}日期={{gameData.date}}";
 const sharedSnapshots = { conversation: null, responders: new Map(), prefixByResponder: new Map() };
 const sharedContext = { cacheV2FrozenSnapshots: sharedSnapshots, activeParticipantIds: [1, 2] };
-const sharedA = PromptBuilder.buildMessagesWithTokenCount([], characters.get(1), gameData, "", sharedContext, providers[1]);
-const sharedB = PromptBuilder.buildMessagesWithTokenCount([], characters.get(2), gameData, "", sharedContext, providers[1]);
+const sharedA = PromptBuilder.buildMessagesWithTokenCount([], characters.get(1), gameData, "", sharedContext, providers[1], { promptPlanMode: "legacy" });
+const sharedB = PromptBuilder.buildMessagesWithTokenCount([], characters.get(2), gameData, "", sharedContext, providers[1], { promptPlanMode: "legacy" });
 const sharedRuleA = sharedA.blocks.find(({ block }) => block.id?.endsWith("-stable_history_rp"));
 const sharedRuleB = sharedB.blocks.find(({ block }) => block.id?.endsWith("-stable_history_rp"));
 assert(sharedRuleA && sharedRuleB, "name-only roleplay rules must be hoisted");
@@ -125,7 +126,7 @@ assert(sharedA.blocks.find(({ block }) => block.id === "responder-frozen-profile
 assert(sharedB.blocks.find(({ block }) => block.id === "responder-frozen-profile").content.includes("【当前回应角色】即乙"));
 
 mainTemplate = "{{! VOTC_SEGMENT:stable_global }}固定规则\n{{! VOTC_SEGMENT:stable_history_rp }}你是{{fullName}}，今天是{{gameData.date}}。";
-const unsafe = PromptBuilder.buildMessagesWithTokenCount([], characters.get(1), gameData, "", sharedContext, providers[1]);
+const unsafe = PromptBuilder.buildMessagesWithTokenCount([], characters.get(1), gameData, "", sharedContext, providers[1], { promptPlanMode: "legacy" });
 const unsafeRule = unsafe.blocks.find(({ block }) => block.id?.endsWith("-stable_history_rp"));
 assert(unsafeRule && unsafeRule.content.includes("甲") && unsafeRule.content.includes(gameData.date), "other dynamic expressions must preserve the original rendering");
 assert(unsafe.blocks.findIndex(({ block }) => block.id?.endsWith("-stable_history_rp")) > unsafe.blocks.findIndex(({ block }) => block.id === "conversation-frozen"));

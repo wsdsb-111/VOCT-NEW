@@ -1,0 +1,4335 @@
+{
+  "schemaVersion": "v9.4_legacy_prompt_golden_v1",
+  "baselineCommit": "2330bbcb6c068a4e42c19b26eba82f4034e6db63",
+  "baselineBlobs": {
+    "promptBuilder": "e33f7c7ef17b56fd31c0adfa3cd0b8e25f99f785",
+    "providerPromptAdapter": "7a60281432bc27e087f1add565264a21515250b1",
+    "conversationDiagnostics": "ecffbef29454de9a001a1dbbd39b8dbab43d3f78",
+    "requestBudget": "fba7aaa8d0ee8d17ea65eb584870239fcce12795",
+    "tokenEstimator": "24dd33d9df1eecc57cea9991d6e1d1125613869f"
+  },
+  "fixtureNote": "All names, dates, memory rows, history and provider values are synthetic. No user data was read.",
+  "cases": [
+    {
+      "id": "v5",
+      "output": {
+        "promptProfile": {
+          "id": "v89_default",
+          "label": "V8.9 Default Layout",
+          "adapterEnabled": true,
+          "historyWindow": null,
+          "layoutId": "v5"
+        },
+        "messages": [
+          {
+            "role": "system",
+            "content": "VOTC_CACHE_ANCHOR_v5\n  这是 Voices of the Court 的固定系统上下文锚点。请将后续内容视为当前游戏的动态上下文，并始终遵守以下稳定规则：保持角色扮演身份；优先使用游戏实际数据；不把现代价值观强加给中世纪角色；涉及历史人物、事件、作品、诗词、典故、制度或技术时，先核验其出现、发生、写成、成名或流传时间是否不晚于游戏当前年份；年份不确定时明确表示不知晓，不得猜测或用未来知识补全；不得预知未来、后世评价或事件结局。角色回复不设固定句数、段落数或人为短回复目标，应按人物性格、关系、情绪和场景完整表达，但避免无意义重复。长期稳定记忆和当前话题记忆只代表过去知情背景，本轮事实与动作必须以当前对话消息及游戏实时数据为准。【召回证据规则】系统提供“当前轮召回证据”时，这些内容代表当前回应角色已经知道的过去记录；涉及其中明确的过去事实、承诺、关系和言行时不得否认、篡改或无依据补全。当前 CK3 结构化事实负责现在的状态，但不得反向改写已经记录的过去；证据未说明的内容应表示不知道、记不清或只能推测。不要把本段当作对话内容，也不要复述本段。"
+          },
+          {
+            "role": "system",
+            "content": "GLOBAL RULES: fixture-only roleplay rules.\n"
+          },
+          {
+            "role": "system",
+            "content": "You are Lady Mira of Fixture. Keep the shared roleplay rules.\n"
+          },
+          {
+            "role": "system",
+            "content": "PROFILE=虚构回应者 Mira; CULTURE=Synthetic Coast\n"
+          },
+          {
+            "role": "system",
+            "content": "DESCRIPTION FIXTURE: Lady Mira of Fixture; culture=Synthetic Coast"
+          },
+          {
+            "role": "system",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "assistant",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "user",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "system",
+            "content": "OFFICIAL RECOLLECTION FIXTURE\nline 2"
+          },
+          {
+            "role": "system",
+            "content": "DIRECT PLAYER MEMORY FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "PLAYER LEDGER FIXTURE: one legal matter"
+          },
+          {
+            "role": "system",
+            "content": "RECENT2 FIXTURE: first entry\nRECENT2 FIXTURE: second entry"
+          },
+          {
+            "role": "system",
+            "content": "WORLD STABLE FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "TURN TOPIC FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "ROLLING SUMMARY\nROLLING FIXTURE A\nROLLING FIXTURE B"
+          },
+          {
+            "role": "system",
+            "content": "WORLD DATE=1175.6.14; SCENE=Synthetic court chamber\n"
+          },
+          {
+            "role": "system",
+            "content": "STATE=123"
+          },
+          {
+            "role": "system",
+            "content": "[date(1175.6.14)]"
+          },
+          {
+            "role": "system",
+            "content": "=== 当前回应角色的权威游戏资料（本轮 CK3 数据） ===\n  - 游戏姓名／称号：Lady Mira of Fixture\n  - 姓名：虚构回应者 Mira\n  - 年龄：游戏未提供\n  - 主要头衔：Countess of Example\n  - 宫廷／议会职位：Fixture Chancellor\n  - 头衔等级：concept_county\n  当被问及自己的姓名、称号、头衔、官职或年龄时，必须逐项以以上本轮游戏数据直接回答；不得根据历史、对话记忆或常识猜测，也不得用年龄阶段替代具体岁数。\n\n=== 玩家身份知情边界（本轮高优先级，适用于当前回应角色） ===\n  - 当前 CK3 身份识别关系证据：未提供。关系证据支持双方相识及相应称谓，不自动授予全部后台身份资料；缺少记录不等于从未相识。\n  - 人物资料、在场表、场景说明、Runtime ID 和消息说话者前缀里的玩家姓名、全名、家族、头衔与官职都是后台标签，不构成本角色已经知道玩家身份的证据。本边界优先于这些资料和标签。称号（Nickname）默认可见，用于角色扮演，但不授予真名、精确头衔或官职。\n  - 只可依据当前 CK3 明确的亲属或正式关系、本角色获准的记忆、获准的公开事实，以及当前对话正文中明确说出的自我介绍或他人介绍识别玩家。只授予来源明确给出的那项姓名或身份，不得据此解锁整包玩家资料；介绍中的化名不等于已得知后台真名。已公开的头衔和特质逐项限定于获知的角色；旧头衔不代表自动知道新头衔，已消失特质不作为当前属性。\n  - 当前回合开始交谈、同场、好感数值、SHARED_SCENE 或本次相遇的直接交谈次数，都不等于已知玩家身份。没有上述具体身份来源时，应按尚未识别的对方自然回应，不得主动叫出后台姓名、家族、头衔或官职，也不得因为系统提供资料而装作早已认识。\n  - 私下交谈和信件不会自动变成全世界的传闻。对话记忆中的 public 只表示当场公开说出，不是全球公开；只有该记忆明确授权的知情者可以引用。亲友、同国、同地、身份声望和时间流逝都不是获得他人私聊的证据。\n  - 只能引用本请求为当前回应角色提供的获准记忆、来源明确的公开事实或本人已听见的当前对话。没有具体来源时，不得用“听说”“传闻”“有人告诉我”补造玩家过去的谈话、经历、交易或秘密，也不得为后台人物资料编造传播渠道；可以询问，但不能装作已经知道。"
+          },
+          {
+            "role": "system",
+            "content": "PRESENCE FIXTURE: responder and player"
+          },
+          {
+            "role": "system",
+            "content": "WORLD TOPIC FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD SUPPLEMENTAL FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD CURRENT FIXTURE"
+          },
+          {
+            "role": "user",
+            "content": "DUPLICATE BODY|same fixture bytes"
+          },
+          {
+            "role": "assistant",
+            "content": "DUPLICATE BODY|same fixture bytes"
+          },
+          {
+            "role": "assistant",
+            "content": "Synthetic Narrator: Line one\n\nLine two | separator fixture."
+          },
+          {
+            "role": "user",
+            "content": "CURRENT QUESTION|what happened in this fictional scene?"
+          },
+          {
+            "role": "system",
+            "content": "WORLD TURN RECALL FIXTURE"
+          },
+          {
+            "role": "user",
+            "content": "FINAL INSTRUCTION|Lady Mira of Fixture|Synthetic court chamber"
+          },
+          {
+            "role": "system",
+            "content": "SUFFIX START\n1175.6.14\nSUFFIX END"
+          }
+        ],
+        "anchor": {
+          "role": "system",
+          "utf8Base64": "Vk9UQ19DQUNIRV9BTkNIT1JfdjUKICDov5nmmK8gVm9pY2VzIG9mIHRoZSBDb3VydCDnmoTlm7rlrprns7vnu5/kuIrkuIvmlofplJrngrnjgILor7flsIblkI7nu63lhoXlrrnop4bkuLrlvZPliY3muLjmiI/nmoTliqjmgIHkuIrkuIvmlofvvIzlubblp4vnu4jpgbXlrojku6XkuIvnqLPlrprop4TliJnvvJrkv53mjIHop5LoibLmia7mvJTouqvku73vvJvkvJjlhYjkvb/nlKjmuLjmiI/lrp7pmYXmlbDmja7vvJvkuI3miornjrDku6Pku7flgLzop4LlvLrliqDnu5nkuK3kuJbnuqrop5LoibLvvJvmtonlj4rljoblj7LkurrnianjgIHkuovku7bjgIHkvZzlk4HjgIHor5for43jgIHlhbjmlYXjgIHliLbluqbmiJbmioDmnK/ml7bvvIzlhYjmoLjpqozlhbblh7rnjrDjgIHlj5HnlJ/jgIHlhpnmiJDjgIHmiJDlkI3miJbmtYHkvKDml7bpl7TmmK/lkKbkuI3mmZrkuo7muLjmiI/lvZPliY3lubTku73vvJvlubTku73kuI3noa7lrprml7bmmI7noa7ooajnpLrkuI3nn6XmmZPvvIzkuI3lvpfnjJzmtYvmiJbnlKjmnKrmnaXnn6Xor4booaXlhajvvJvkuI3lvpfpooTnn6XmnKrmnaXjgIHlkI7kuJbor4Tku7fmiJbkuovku7bnu5PlsYDjgILop5LoibLlm57lpI3kuI3orr7lm7rlrprlj6XmlbDjgIHmrrXokL3mlbDmiJbkurrkuLrnn63lm57lpI3nm67moIfvvIzlupTmjInkurrnianmgKfmoLzjgIHlhbPns7vjgIHmg4Xnu6rlkozlnLrmma/lrozmlbTooajovr7vvIzkvYbpgb/lhY3ml6DmhI/kuYnph43lpI3jgILplb/mnJ/nqLPlrprorrDlv4blkozlvZPliY3or53popjorrDlv4blj6rku6Pooajov4fljrvnn6Xmg4Xog4zmma/vvIzmnKzova7kuovlrp7kuI7liqjkvZzlv4Xpobvku6XlvZPliY3lr7nor53mtojmga/lj4rmuLjmiI/lrp7ml7bmlbDmja7kuLrlh4bjgILjgJDlj6zlm57or4Hmja7op4TliJnjgJHns7vnu5/mj5DkvpvigJzlvZPliY3ova7lj6zlm57or4Hmja7igJ3ml7bvvIzov5nkupvlhoXlrrnku6PooajlvZPliY3lm57lupTop5LoibLlt7Lnu4/nn6XpgZPnmoTov4fljrvorrDlvZXvvJvmtonlj4rlhbbkuK3mmI7noa7nmoTov4fljrvkuovlrp7jgIHmib/or7rjgIHlhbPns7vlkozoqIDooYzml7bkuI3lvpflkKborqTjgIHnr6HmlLnmiJbml6Dkvp3mja7ooaXlhajjgILlvZPliY0gQ0szIOe7k+aehOWMluS6i+Wunui0n+i0o+eOsOWcqOeahOeKtuaAge+8jOS9huS4jeW+l+WPjeWQkeaUueWGmeW3sue7j+iusOW9leeahOi/h+WOu++8m+ivgeaNruacquivtOaYjueahOWGheWuueW6lOihqOekuuS4jeefpemBk+OAgeiusOS4jea4heaIluWPquiDveaOqOa1i+OAguS4jeimgeaKiuacrOauteW9k+S9nOWvueivneWGheWuue+8jOS5n+S4jeimgeWkjei/sOacrOauteOAgg==",
+          "sha256": "ab8f795c759096623fd01431a7b79f11f8a931f4df4531724c8f8cbc0e2031a1"
+        },
+        "blockOrder": [
+          {
+            "id": "cache-anchor",
+            "type": "cache_anchor",
+            "role": null,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC"
+          },
+          {
+            "id": "main-system-stable_global",
+            "type": "main_segment",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "main-system-stable_history_rp",
+            "type": "main_segment",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "main-system-character_base",
+            "type": "main_segment",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "profile-stable",
+            "type": "description",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "examples",
+            "type": "examples",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-official-recollection",
+            "type": "memory_official_recollection",
+            "role": null,
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-direct-frozen",
+            "type": "memory_direct_frozen",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-player-ledger-frozen",
+            "type": "memory_player_ledger_frozen",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-stable",
+            "type": "memory_stable",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "worldline-stable",
+            "type": "worldline_stable",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-session-topic-anchor",
+            "type": "memory_session_topic_anchor",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "rolling",
+            "type": "rolling_summary",
+            "role": "system",
+            "stable": null,
+            "lifecycle": null
+          },
+          {
+            "id": "main-system-world_context",
+            "type": "main_segment",
+            "role": "system",
+            "stable": false,
+            "lifecycle": null
+          },
+          {
+            "id": "main-system-character_state",
+            "type": "main_segment",
+            "role": "system",
+            "stable": false,
+            "lifecycle": null
+          },
+          {
+            "id": "profile-dynamic",
+            "type": "description_dynamic",
+            "role": "system",
+            "stable": false,
+            "lifecycle": null
+          },
+          {
+            "id": "responder-game-facts",
+            "type": "responder_game_facts",
+            "role": "system",
+            "stable": false,
+            "lifecycle": null
+          },
+          {
+            "id": "current-presence-roster",
+            "type": "presence_roster",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "worldline-topic",
+            "type": "worldline_topic",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "worldline-supplemental",
+            "type": "worldline_supplemental",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "worldline-current",
+            "type": "worldline_current",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "history",
+            "type": "history",
+            "role": null,
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "history-current-user",
+            "type": "current_user",
+            "role": null,
+            "stable": false,
+            "lifecycle": null
+          },
+          {
+            "id": "worldline-turn-recall",
+            "type": "worldline_turn_recall",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "instruction",
+            "type": "instruction",
+            "role": "user",
+            "stable": null,
+            "lifecycle": null
+          },
+          {
+            "id": "suffix",
+            "type": "custom",
+            "role": "system",
+            "stable": null,
+            "lifecycle": null
+          }
+        ],
+        "tokenCounts": {
+          "totalTokens": 1260,
+          "staticTokens": 471,
+          "dynamicTokens": 789,
+          "globalStaticTokens": 338,
+          "conversationFrozenTokens": 0,
+          "responderFrozenTokens": 0,
+          "actualStablePrefixTokens": 471,
+          "declaredStaticTokens": 471,
+          "dynamicTailTokens": 789,
+          "omittedHistoryTokens": 0
+        },
+        "requestBudget": {
+          "estimatedInputTokens": 1386,
+          "reservedOutputTokens": 777,
+          "outputReserveTokens": 777,
+          "protocolOverheadTokens": 272,
+          "safetyMarginTokens": 984,
+          "effectiveInputBudget": 6159,
+          "usableInputBudget": 6159,
+          "budgetStatus": "INPUT_AVAILABLE",
+          "pressureRatio": 0.22503653190452996,
+          "safe": true
+        },
+        "diagnosticBlocks": [
+          {
+            "id": "cache-anchor",
+            "type": "cache_anchor",
+            "messageStartPosition": 0,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC",
+            "tokens": 338
+          },
+          {
+            "id": "main-system-stable_global",
+            "type": "main_segment",
+            "messageStartPosition": 1,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 11
+          },
+          {
+            "id": "main-system-stable_history_rp",
+            "type": "main_segment",
+            "messageStartPosition": 2,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 16
+          },
+          {
+            "id": "main-system-character_base",
+            "type": "main_segment",
+            "messageStartPosition": 3,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 14
+          },
+          {
+            "id": "profile-stable",
+            "type": "description",
+            "messageStartPosition": 4,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 17
+          },
+          {
+            "id": "examples",
+            "type": "examples",
+            "messageStartPosition": 5,
+            "messageCount": 3,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 24
+          },
+          {
+            "id": "memory-official-recollection",
+            "type": "memory_official_recollection",
+            "messageStartPosition": 8,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 9
+          },
+          {
+            "id": "memory-direct-frozen",
+            "type": "memory_direct_frozen",
+            "messageStartPosition": 9,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 7
+          },
+          {
+            "id": "memory-player-ledger-frozen",
+            "type": "memory_player_ledger_frozen",
+            "messageStartPosition": 10,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 10
+          },
+          {
+            "id": "memory-stable",
+            "type": "memory_stable",
+            "messageStartPosition": 11,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 15
+          },
+          {
+            "id": "worldline-stable",
+            "type": "worldline_stable",
+            "messageStartPosition": 12,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 5
+          },
+          {
+            "id": "memory-session-topic-anchor",
+            "type": "memory_session_topic_anchor",
+            "messageStartPosition": 13,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 5
+          },
+          {
+            "id": "rolling",
+            "type": "rolling_summary",
+            "messageStartPosition": 14,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 13
+          },
+          {
+            "id": "main-system-world_context",
+            "type": "main_segment",
+            "messageStartPosition": 15,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 13
+          },
+          {
+            "id": "main-system-character_state",
+            "type": "main_segment",
+            "messageStartPosition": 16,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 3
+          },
+          {
+            "id": "profile-dynamic",
+            "type": "description_dynamic",
+            "messageStartPosition": 17,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 5
+          },
+          {
+            "id": "responder-game-facts",
+            "type": "responder_game_facts",
+            "messageStartPosition": 18,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 648
+          },
+          {
+            "id": "current-presence-roster",
+            "type": "presence_roster",
+            "messageStartPosition": 19,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 10
+          },
+          {
+            "id": "worldline-topic",
+            "type": "worldline_topic",
+            "messageStartPosition": 20,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 5
+          },
+          {
+            "id": "worldline-supplemental",
+            "type": "worldline_supplemental",
+            "messageStartPosition": 21,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 7
+          },
+          {
+            "id": "worldline-current",
+            "type": "worldline_current",
+            "messageStartPosition": 22,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 6
+          },
+          {
+            "id": "history",
+            "type": "history",
+            "messageStartPosition": 23,
+            "messageCount": 3,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 33
+          },
+          {
+            "id": "history-current-user",
+            "type": "current_user",
+            "messageStartPosition": 26,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 14
+          },
+          {
+            "id": "worldline-turn-recall",
+            "type": "worldline_turn_recall",
+            "messageStartPosition": 27,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 7
+          },
+          {
+            "id": "instruction",
+            "type": "instruction",
+            "messageStartPosition": 28,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 16
+          },
+          {
+            "id": "suffix",
+            "type": "custom",
+            "messageStartPosition": 29,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 9
+          }
+        ]
+      }
+    },
+    {
+      "id": "v6",
+      "output": {
+        "promptProfile": {
+          "id": "v89_default",
+          "label": "V8.9 Default Layout",
+          "adapterEnabled": true,
+          "historyWindow": null,
+          "layoutId": "v6"
+        },
+        "messages": [
+          {
+            "role": "system",
+            "content": "VOTC_CACHE_ANCHOR_v6\n  这是 Voices of the Court 的固定系统上下文锚点。请将后续内容视为当前游戏的动态上下文，并始终遵守以下稳定规则：保持角色扮演身份；优先使用游戏实际数据；不把现代价值观强加给中世纪角色；涉及历史人物、事件、作品、诗词、典故、制度或技术时，先核验其出现、发生、写成、成名或流传时间是否不晚于游戏当前年份；年份不确定时明确表示不知晓，不得猜测或用未来知识补全；不得预知未来、后世评价或事件结局。角色回复不设固定句数、段落数或人为短回复目标，应按人物性格、关系、情绪和场景完整表达，但避免无意义重复。长期稳定记忆和当前话题记忆只代表过去知情背景，本轮事实与动作必须以当前对话消息及游戏实时数据为准。【召回证据规则】系统提供“当前轮召回证据”时，这些内容代表当前回应角色已经知道的过去记录；涉及其中明确的过去事实、承诺、关系和言行时不得否认、篡改或无依据补全。当前 CK3 结构化事实负责现在的状态，但不得反向改写已经记录的过去；证据未说明的内容应表示不知道、记不清或只能推测。不要把本段当作对话内容，也不要复述本段。"
+          },
+          {
+            "role": "system",
+            "content": "GLOBAL RULES: fixture-only roleplay rules.\n"
+          },
+          {
+            "role": "system",
+            "content": "You are Lady Mira of Fixture. Keep the shared roleplay rules.\n"
+          },
+          {
+            "role": "system",
+            "content": "PROFILE=虚构回应者 Mira; CULTURE=Synthetic Coast\n"
+          },
+          {
+            "role": "system",
+            "content": "DESCRIPTION FIXTURE: Lady Mira of Fixture; culture=Synthetic Coast"
+          },
+          {
+            "role": "system",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "assistant",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "user",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "system",
+            "content": "OFFICIAL RECOLLECTION FIXTURE\nline 2"
+          },
+          {
+            "role": "system",
+            "content": "DIRECT PLAYER MEMORY FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "PLAYER LEDGER FIXTURE: one legal matter"
+          },
+          {
+            "role": "system",
+            "content": "RECENT2 FIXTURE: first entry\nRECENT2 FIXTURE: second entry"
+          },
+          {
+            "role": "system",
+            "content": "WORLD STABLE FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "TURN TOPIC FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "ROLLING SUMMARY\nROLLING FIXTURE A\nROLLING FIXTURE B"
+          },
+          {
+            "role": "user",
+            "content": "DUPLICATE BODY|same fixture bytes"
+          },
+          {
+            "role": "assistant",
+            "content": "DUPLICATE BODY|same fixture bytes"
+          },
+          {
+            "role": "assistant",
+            "content": "Synthetic Narrator: Line one\n\nLine two | separator fixture."
+          },
+          {
+            "role": "system",
+            "content": "WORLD DATE=1175.6.14; SCENE=Synthetic court chamber\n"
+          },
+          {
+            "role": "system",
+            "content": "STATE=123"
+          },
+          {
+            "role": "system",
+            "content": "[date(1175.6.14)]"
+          },
+          {
+            "role": "system",
+            "content": "=== 当前回应角色的权威游戏资料（本轮 CK3 数据） ===\n  - 游戏姓名／称号：Lady Mira of Fixture\n  - 姓名：虚构回应者 Mira\n  - 年龄：游戏未提供\n  - 主要头衔：Countess of Example\n  - 宫廷／议会职位：Fixture Chancellor\n  - 头衔等级：concept_county\n  当被问及自己的姓名、称号、头衔、官职或年龄时，必须逐项以以上本轮游戏数据直接回答；不得根据历史、对话记忆或常识猜测，也不得用年龄阶段替代具体岁数。\n\n=== 玩家身份知情边界（本轮高优先级，适用于当前回应角色） ===\n  - 当前 CK3 身份识别关系证据：未提供。关系证据支持双方相识及相应称谓，不自动授予全部后台身份资料；缺少记录不等于从未相识。\n  - 人物资料、在场表、场景说明、Runtime ID 和消息说话者前缀里的玩家姓名、全名、家族、头衔与官职都是后台标签，不构成本角色已经知道玩家身份的证据。本边界优先于这些资料和标签。称号（Nickname）默认可见，用于角色扮演，但不授予真名、精确头衔或官职。\n  - 只可依据当前 CK3 明确的亲属或正式关系、本角色获准的记忆、获准的公开事实，以及当前对话正文中明确说出的自我介绍或他人介绍识别玩家。只授予来源明确给出的那项姓名或身份，不得据此解锁整包玩家资料；介绍中的化名不等于已得知后台真名。已公开的头衔和特质逐项限定于获知的角色；旧头衔不代表自动知道新头衔，已消失特质不作为当前属性。\n  - 当前回合开始交谈、同场、好感数值、SHARED_SCENE 或本次相遇的直接交谈次数，都不等于已知玩家身份。没有上述具体身份来源时，应按尚未识别的对方自然回应，不得主动叫出后台姓名、家族、头衔或官职，也不得因为系统提供资料而装作早已认识。\n  - 私下交谈和信件不会自动变成全世界的传闻。对话记忆中的 public 只表示当场公开说出，不是全球公开；只有该记忆明确授权的知情者可以引用。亲友、同国、同地、身份声望和时间流逝都不是获得他人私聊的证据。\n  - 只能引用本请求为当前回应角色提供的获准记忆、来源明确的公开事实或本人已听见的当前对话。没有具体来源时，不得用“听说”“传闻”“有人告诉我”补造玩家过去的谈话、经历、交易或秘密，也不得为后台人物资料编造传播渠道；可以询问，但不能装作已经知道。"
+          },
+          {
+            "role": "system",
+            "content": "PRESENCE FIXTURE: responder and player"
+          },
+          {
+            "role": "system",
+            "content": "WORLD TOPIC FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD SUPPLEMENTAL FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD CURRENT FIXTURE"
+          },
+          {
+            "role": "user",
+            "content": "CURRENT QUESTION|what happened in this fictional scene?"
+          },
+          {
+            "role": "system",
+            "content": "WORLD TURN RECALL FIXTURE"
+          },
+          {
+            "role": "user",
+            "content": "FINAL INSTRUCTION|Lady Mira of Fixture|Synthetic court chamber"
+          },
+          {
+            "role": "system",
+            "content": "SUFFIX START\n1175.6.14\nSUFFIX END"
+          }
+        ],
+        "anchor": {
+          "role": "system",
+          "utf8Base64": "Vk9UQ19DQUNIRV9BTkNIT1JfdjYKICDov5nmmK8gVm9pY2VzIG9mIHRoZSBDb3VydCDnmoTlm7rlrprns7vnu5/kuIrkuIvmlofplJrngrnjgILor7flsIblkI7nu63lhoXlrrnop4bkuLrlvZPliY3muLjmiI/nmoTliqjmgIHkuIrkuIvmlofvvIzlubblp4vnu4jpgbXlrojku6XkuIvnqLPlrprop4TliJnvvJrkv53mjIHop5LoibLmia7mvJTouqvku73vvJvkvJjlhYjkvb/nlKjmuLjmiI/lrp7pmYXmlbDmja7vvJvkuI3miornjrDku6Pku7flgLzop4LlvLrliqDnu5nkuK3kuJbnuqrop5LoibLvvJvmtonlj4rljoblj7LkurrnianjgIHkuovku7bjgIHkvZzlk4HjgIHor5for43jgIHlhbjmlYXjgIHliLbluqbmiJbmioDmnK/ml7bvvIzlhYjmoLjpqozlhbblh7rnjrDjgIHlj5HnlJ/jgIHlhpnmiJDjgIHmiJDlkI3miJbmtYHkvKDml7bpl7TmmK/lkKbkuI3mmZrkuo7muLjmiI/lvZPliY3lubTku73vvJvlubTku73kuI3noa7lrprml7bmmI7noa7ooajnpLrkuI3nn6XmmZPvvIzkuI3lvpfnjJzmtYvmiJbnlKjmnKrmnaXnn6Xor4booaXlhajvvJvkuI3lvpfpooTnn6XmnKrmnaXjgIHlkI7kuJbor4Tku7fmiJbkuovku7bnu5PlsYDjgILop5LoibLlm57lpI3kuI3orr7lm7rlrprlj6XmlbDjgIHmrrXokL3mlbDmiJbkurrkuLrnn63lm57lpI3nm67moIfvvIzlupTmjInkurrnianmgKfmoLzjgIHlhbPns7vjgIHmg4Xnu6rlkozlnLrmma/lrozmlbTooajovr7vvIzkvYbpgb/lhY3ml6DmhI/kuYnph43lpI3jgILplb/mnJ/nqLPlrprorrDlv4blkozlvZPliY3or53popjorrDlv4blj6rku6Pooajov4fljrvnn6Xmg4Xog4zmma/vvIzmnKzova7kuovlrp7kuI7liqjkvZzlv4Xpobvku6XlvZPliY3lr7nor53mtojmga/lj4rmuLjmiI/lrp7ml7bmlbDmja7kuLrlh4bjgILjgJDlj6zlm57or4Hmja7op4TliJnjgJHns7vnu5/mj5DkvpvigJzlvZPliY3ova7lj6zlm57or4Hmja7igJ3ml7bvvIzov5nkupvlhoXlrrnku6PooajlvZPliY3lm57lupTop5LoibLlt7Lnu4/nn6XpgZPnmoTov4fljrvorrDlvZXvvJvmtonlj4rlhbbkuK3mmI7noa7nmoTov4fljrvkuovlrp7jgIHmib/or7rjgIHlhbPns7vlkozoqIDooYzml7bkuI3lvpflkKborqTjgIHnr6HmlLnmiJbml6Dkvp3mja7ooaXlhajjgILlvZPliY0gQ0szIOe7k+aehOWMluS6i+Wunui0n+i0o+eOsOWcqOeahOeKtuaAge+8jOS9huS4jeW+l+WPjeWQkeaUueWGmeW3sue7j+iusOW9leeahOi/h+WOu++8m+ivgeaNruacquivtOaYjueahOWGheWuueW6lOihqOekuuS4jeefpemBk+OAgeiusOS4jea4heaIluWPquiDveaOqOa1i+OAguS4jeimgeaKiuacrOauteW9k+S9nOWvueivneWGheWuue+8jOS5n+S4jeimgeWkjei/sOacrOauteOAgg==",
+          "sha256": "69b8b21f59107169a4d743595a9fac27de0bf3d134d074f45e4b7ce9cdb9969a"
+        },
+        "blockOrder": [
+          {
+            "id": "cache-anchor",
+            "type": "cache_anchor",
+            "role": null,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC"
+          },
+          {
+            "id": "main-system-stable_global",
+            "type": "main_segment",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "main-system-stable_history_rp",
+            "type": "main_segment",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "main-system-character_base",
+            "type": "main_segment",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "profile-stable",
+            "type": "description",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "examples",
+            "type": "examples",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-official-recollection",
+            "type": "memory_official_recollection",
+            "role": null,
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-direct-frozen",
+            "type": "memory_direct_frozen",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-player-ledger-frozen",
+            "type": "memory_player_ledger_frozen",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-stable",
+            "type": "memory_stable",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "worldline-stable",
+            "type": "worldline_stable",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-session-topic-anchor",
+            "type": "memory_session_topic_anchor",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "rolling",
+            "type": "rolling_summary",
+            "role": "system",
+            "stable": null,
+            "lifecycle": null
+          },
+          {
+            "id": "history",
+            "type": "history",
+            "role": null,
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "main-system-world_context",
+            "type": "main_segment",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "main-system-character_state",
+            "type": "main_segment",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "profile-dynamic",
+            "type": "description_dynamic",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "responder-game-facts",
+            "type": "responder_game_facts",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "current-presence-roster",
+            "type": "presence_roster",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "worldline-topic",
+            "type": "worldline_topic",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "worldline-supplemental",
+            "type": "worldline_supplemental",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "worldline-current",
+            "type": "worldline_current",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "history-current-user",
+            "type": "current_user",
+            "role": null,
+            "stable": false,
+            "lifecycle": null
+          },
+          {
+            "id": "worldline-turn-recall",
+            "type": "worldline_turn_recall",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "instruction",
+            "type": "instruction",
+            "role": "user",
+            "stable": null,
+            "lifecycle": null
+          },
+          {
+            "id": "suffix",
+            "type": "custom",
+            "role": "system",
+            "stable": null,
+            "lifecycle": null
+          }
+        ],
+        "tokenCounts": {
+          "totalTokens": 1260,
+          "staticTokens": 471,
+          "dynamicTokens": 789,
+          "globalStaticTokens": 338,
+          "conversationFrozenTokens": 0,
+          "responderFrozenTokens": 0,
+          "actualStablePrefixTokens": 471,
+          "declaredStaticTokens": 471,
+          "dynamicTailTokens": 789,
+          "omittedHistoryTokens": 0
+        },
+        "requestBudget": {
+          "estimatedInputTokens": 1386,
+          "reservedOutputTokens": 777,
+          "outputReserveTokens": 777,
+          "protocolOverheadTokens": 272,
+          "safetyMarginTokens": 984,
+          "effectiveInputBudget": 6159,
+          "usableInputBudget": 6159,
+          "budgetStatus": "INPUT_AVAILABLE",
+          "pressureRatio": 0.22503653190452996,
+          "safe": true
+        },
+        "diagnosticBlocks": [
+          {
+            "id": "cache-anchor",
+            "type": "cache_anchor",
+            "messageStartPosition": 0,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC",
+            "tokens": 338
+          },
+          {
+            "id": "main-system-stable_global",
+            "type": "main_segment",
+            "messageStartPosition": 1,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 11
+          },
+          {
+            "id": "main-system-stable_history_rp",
+            "type": "main_segment",
+            "messageStartPosition": 2,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 16
+          },
+          {
+            "id": "main-system-character_base",
+            "type": "main_segment",
+            "messageStartPosition": 3,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 14
+          },
+          {
+            "id": "profile-stable",
+            "type": "description",
+            "messageStartPosition": 4,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 17
+          },
+          {
+            "id": "examples",
+            "type": "examples",
+            "messageStartPosition": 5,
+            "messageCount": 3,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 24
+          },
+          {
+            "id": "memory-official-recollection",
+            "type": "memory_official_recollection",
+            "messageStartPosition": 8,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 9
+          },
+          {
+            "id": "memory-direct-frozen",
+            "type": "memory_direct_frozen",
+            "messageStartPosition": 9,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 7
+          },
+          {
+            "id": "memory-player-ledger-frozen",
+            "type": "memory_player_ledger_frozen",
+            "messageStartPosition": 10,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 10
+          },
+          {
+            "id": "memory-stable",
+            "type": "memory_stable",
+            "messageStartPosition": 11,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 15
+          },
+          {
+            "id": "worldline-stable",
+            "type": "worldline_stable",
+            "messageStartPosition": 12,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 5
+          },
+          {
+            "id": "memory-session-topic-anchor",
+            "type": "memory_session_topic_anchor",
+            "messageStartPosition": 13,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 5
+          },
+          {
+            "id": "rolling",
+            "type": "rolling_summary",
+            "messageStartPosition": 14,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 13
+          },
+          {
+            "id": "history",
+            "type": "history",
+            "messageStartPosition": 15,
+            "messageCount": 3,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 33
+          },
+          {
+            "id": "main-system-world_context",
+            "type": "main_segment",
+            "messageStartPosition": 18,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 13
+          },
+          {
+            "id": "main-system-character_state",
+            "type": "main_segment",
+            "messageStartPosition": 19,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 3
+          },
+          {
+            "id": "profile-dynamic",
+            "type": "description_dynamic",
+            "messageStartPosition": 20,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 5
+          },
+          {
+            "id": "responder-game-facts",
+            "type": "responder_game_facts",
+            "messageStartPosition": 21,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 648
+          },
+          {
+            "id": "current-presence-roster",
+            "type": "presence_roster",
+            "messageStartPosition": 22,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 10
+          },
+          {
+            "id": "worldline-topic",
+            "type": "worldline_topic",
+            "messageStartPosition": 23,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 5
+          },
+          {
+            "id": "worldline-supplemental",
+            "type": "worldline_supplemental",
+            "messageStartPosition": 24,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 7
+          },
+          {
+            "id": "worldline-current",
+            "type": "worldline_current",
+            "messageStartPosition": 25,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 6
+          },
+          {
+            "id": "history-current-user",
+            "type": "current_user",
+            "messageStartPosition": 26,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 14
+          },
+          {
+            "id": "worldline-turn-recall",
+            "type": "worldline_turn_recall",
+            "messageStartPosition": 27,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 7
+          },
+          {
+            "id": "instruction",
+            "type": "instruction",
+            "messageStartPosition": 28,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 16
+          },
+          {
+            "id": "suffix",
+            "type": "custom",
+            "messageStartPosition": 29,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 9
+          }
+        ]
+      }
+    },
+    {
+      "id": "v7",
+      "output": {
+        "promptProfile": {
+          "id": "v89_default",
+          "label": "V8.9 Default Layout",
+          "adapterEnabled": true,
+          "historyWindow": null,
+          "layoutId": "v7"
+        },
+        "messages": [
+          {
+            "role": "system",
+            "content": "VOTC_CACHE_ANCHOR_v7\n  这是 Voices of the Court 的固定系统上下文锚点。请将后续内容视为当前游戏的动态上下文，并始终遵守以下稳定规则：保持角色扮演身份；优先使用游戏实际数据；不把现代价值观强加给中世纪角色；涉及历史人物、事件、作品、诗词、典故、制度或技术时，先核验其出现、发生、写成、成名或流传时间是否不晚于游戏当前年份；年份不确定时明确表示不知晓，不得猜测或用未来知识补全；不得预知未来、后世评价或事件结局。角色回复不设固定句数、段落数或人为短回复目标，应按人物性格、关系、情绪和场景完整表达，但避免无意义重复。长期稳定记忆和当前话题记忆只代表过去知情背景，本轮事实与动作必须以当前对话消息及游戏实时数据为准。【召回证据规则】系统提供“当前轮召回证据”时，这些内容代表当前回应角色已经知道的过去记录；涉及其中明确的过去事实、承诺、关系和言行时不得否认、篡改或无依据补全。当前 CK3 结构化事实负责现在的状态，但不得反向改写已经记录的过去；证据未说明的内容应表示不知道、记不清或只能推测。不要把本段当作对话内容，也不要复述本段。"
+          },
+          {
+            "role": "system",
+            "content": "GLOBAL RULES: fixture-only roleplay rules.\n"
+          },
+          {
+            "role": "system",
+            "content": "You are Lady Mira of Fixture. Keep the shared roleplay rules.\n"
+          },
+          {
+            "role": "system",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "assistant",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "user",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "system",
+            "content": "OFFICIAL RECOLLECTION FIXTURE\nline 2"
+          },
+          {
+            "role": "system",
+            "content": "DIRECT PLAYER MEMORY FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "PLAYER LEDGER FIXTURE: one legal matter"
+          },
+          {
+            "role": "system",
+            "content": "RECENT2 FIXTURE: first entry\nRECENT2 FIXTURE: second entry"
+          },
+          {
+            "role": "system",
+            "content": "WORLD STABLE FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "TURN TOPIC FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "ROLLING SUMMARY\nROLLING FIXTURE A\nROLLING FIXTURE B"
+          },
+          {
+            "role": "user",
+            "content": "DUPLICATE BODY|same fixture bytes"
+          },
+          {
+            "role": "assistant",
+            "content": "DUPLICATE BODY|same fixture bytes"
+          },
+          {
+            "role": "assistant",
+            "content": "Synthetic Narrator: Line one\n\nLine two | separator fixture."
+          },
+          {
+            "role": "system",
+            "content": "WORLD DATE=1175.6.14; SCENE=Synthetic court chamber\n"
+          },
+          {
+            "role": "system",
+            "content": "PROFILE=虚构回应者 Mira; CULTURE=Synthetic Coast\n"
+          },
+          {
+            "role": "system",
+            "content": "STATE=123"
+          },
+          {
+            "role": "system",
+            "content": "DESCRIPTION FIXTURE: Lady Mira of Fixture; culture=Synthetic Coast\n[date(1175.6.14)]"
+          },
+          {
+            "role": "system",
+            "content": "=== 当前回应角色的权威游戏资料（本轮 CK3 数据） ===\n  - 游戏姓名／称号：Lady Mira of Fixture\n  - 姓名：虚构回应者 Mira\n  - 年龄：游戏未提供\n  - 主要头衔：Countess of Example\n  - 宫廷／议会职位：Fixture Chancellor\n  - 头衔等级：concept_county\n  当被问及自己的姓名、称号、头衔、官职或年龄时，必须逐项以以上本轮游戏数据直接回答；不得根据历史、对话记忆或常识猜测，也不得用年龄阶段替代具体岁数。\n\n=== 玩家身份知情边界（本轮高优先级，适用于当前回应角色） ===\n  - 当前 CK3 身份识别关系证据：未提供。关系证据支持双方相识及相应称谓，不自动授予全部后台身份资料；缺少记录不等于从未相识。\n  - 人物资料、在场表、场景说明、Runtime ID 和消息说话者前缀里的玩家姓名、全名、家族、头衔与官职都是后台标签，不构成本角色已经知道玩家身份的证据。本边界优先于这些资料和标签。称号（Nickname）默认可见，用于角色扮演，但不授予真名、精确头衔或官职。\n  - 只可依据当前 CK3 明确的亲属或正式关系、本角色获准的记忆、获准的公开事实，以及当前对话正文中明确说出的自我介绍或他人介绍识别玩家。只授予来源明确给出的那项姓名或身份，不得据此解锁整包玩家资料；介绍中的化名不等于已得知后台真名。已公开的头衔和特质逐项限定于获知的角色；旧头衔不代表自动知道新头衔，已消失特质不作为当前属性。\n  - 当前回合开始交谈、同场、好感数值、SHARED_SCENE 或本次相遇的直接交谈次数，都不等于已知玩家身份。没有上述具体身份来源时，应按尚未识别的对方自然回应，不得主动叫出后台姓名、家族、头衔或官职，也不得因为系统提供资料而装作早已认识。\n  - 私下交谈和信件不会自动变成全世界的传闻。对话记忆中的 public 只表示当场公开说出，不是全球公开；只有该记忆明确授权的知情者可以引用。亲友、同国、同地、身份声望和时间流逝都不是获得他人私聊的证据。\n  - 只能引用本请求为当前回应角色提供的获准记忆、来源明确的公开事实或本人已听见的当前对话。没有具体来源时，不得用“听说”“传闻”“有人告诉我”补造玩家过去的谈话、经历、交易或秘密，也不得为后台人物资料编造传播渠道；可以询问，但不能装作已经知道。"
+          },
+          {
+            "role": "system",
+            "content": "PRESENCE FIXTURE: responder and player"
+          },
+          {
+            "role": "system",
+            "content": "WORLD TOPIC FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD SUPPLEMENTAL FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD CURRENT FIXTURE"
+          },
+          {
+            "role": "user",
+            "content": "CURRENT QUESTION|what happened in this fictional scene?"
+          },
+          {
+            "role": "system",
+            "content": "WORLD TURN RECALL FIXTURE"
+          },
+          {
+            "role": "user",
+            "content": "FINAL INSTRUCTION|Lady Mira of Fixture|Synthetic court chamber"
+          },
+          {
+            "role": "system",
+            "content": "SUFFIX START\n1175.6.14\nSUFFIX END"
+          }
+        ],
+        "anchor": {
+          "role": "system",
+          "utf8Base64": "Vk9UQ19DQUNIRV9BTkNIT1JfdjcKICDov5nmmK8gVm9pY2VzIG9mIHRoZSBDb3VydCDnmoTlm7rlrprns7vnu5/kuIrkuIvmlofplJrngrnjgILor7flsIblkI7nu63lhoXlrrnop4bkuLrlvZPliY3muLjmiI/nmoTliqjmgIHkuIrkuIvmlofvvIzlubblp4vnu4jpgbXlrojku6XkuIvnqLPlrprop4TliJnvvJrkv53mjIHop5LoibLmia7mvJTouqvku73vvJvkvJjlhYjkvb/nlKjmuLjmiI/lrp7pmYXmlbDmja7vvJvkuI3miornjrDku6Pku7flgLzop4LlvLrliqDnu5nkuK3kuJbnuqrop5LoibLvvJvmtonlj4rljoblj7LkurrnianjgIHkuovku7bjgIHkvZzlk4HjgIHor5for43jgIHlhbjmlYXjgIHliLbluqbmiJbmioDmnK/ml7bvvIzlhYjmoLjpqozlhbblh7rnjrDjgIHlj5HnlJ/jgIHlhpnmiJDjgIHmiJDlkI3miJbmtYHkvKDml7bpl7TmmK/lkKbkuI3mmZrkuo7muLjmiI/lvZPliY3lubTku73vvJvlubTku73kuI3noa7lrprml7bmmI7noa7ooajnpLrkuI3nn6XmmZPvvIzkuI3lvpfnjJzmtYvmiJbnlKjmnKrmnaXnn6Xor4booaXlhajvvJvkuI3lvpfpooTnn6XmnKrmnaXjgIHlkI7kuJbor4Tku7fmiJbkuovku7bnu5PlsYDjgILop5LoibLlm57lpI3kuI3orr7lm7rlrprlj6XmlbDjgIHmrrXokL3mlbDmiJbkurrkuLrnn63lm57lpI3nm67moIfvvIzlupTmjInkurrnianmgKfmoLzjgIHlhbPns7vjgIHmg4Xnu6rlkozlnLrmma/lrozmlbTooajovr7vvIzkvYbpgb/lhY3ml6DmhI/kuYnph43lpI3jgILplb/mnJ/nqLPlrprorrDlv4blkozlvZPliY3or53popjorrDlv4blj6rku6Pooajov4fljrvnn6Xmg4Xog4zmma/vvIzmnKzova7kuovlrp7kuI7liqjkvZzlv4Xpobvku6XlvZPliY3lr7nor53mtojmga/lj4rmuLjmiI/lrp7ml7bmlbDmja7kuLrlh4bjgILjgJDlj6zlm57or4Hmja7op4TliJnjgJHns7vnu5/mj5DkvpvigJzlvZPliY3ova7lj6zlm57or4Hmja7igJ3ml7bvvIzov5nkupvlhoXlrrnku6PooajlvZPliY3lm57lupTop5LoibLlt7Lnu4/nn6XpgZPnmoTov4fljrvorrDlvZXvvJvmtonlj4rlhbbkuK3mmI7noa7nmoTov4fljrvkuovlrp7jgIHmib/or7rjgIHlhbPns7vlkozoqIDooYzml7bkuI3lvpflkKborqTjgIHnr6HmlLnmiJbml6Dkvp3mja7ooaXlhajjgILlvZPliY0gQ0szIOe7k+aehOWMluS6i+Wunui0n+i0o+eOsOWcqOeahOeKtuaAge+8jOS9huS4jeW+l+WPjeWQkeaUueWGmeW3sue7j+iusOW9leeahOi/h+WOu++8m+ivgeaNruacquivtOaYjueahOWGheWuueW6lOihqOekuuS4jeefpemBk+OAgeiusOS4jea4heaIluWPquiDveaOqOa1i+OAguS4jeimgeaKiuacrOauteW9k+S9nOWvueivneWGheWuue+8jOS5n+S4jeimgeWkjei/sOacrOauteOAgg==",
+          "sha256": "f012e4680aae4030534539bcab7a1c4073e1c5c028d9ec8c256b9345d8df1f36"
+        },
+        "blockOrder": [
+          {
+            "id": "cache-anchor",
+            "type": "cache_anchor",
+            "role": null,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC"
+          },
+          {
+            "id": "main-system-stable_global",
+            "type": "main_segment",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "main-system-stable_history_rp",
+            "type": "main_segment",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "examples",
+            "type": "examples",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-official-recollection",
+            "type": "memory_official_recollection",
+            "role": null,
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-direct-frozen",
+            "type": "memory_direct_frozen",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-player-ledger-frozen",
+            "type": "memory_player_ledger_frozen",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-stable",
+            "type": "memory_stable",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "worldline-stable",
+            "type": "worldline_stable",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-session-topic-anchor",
+            "type": "memory_session_topic_anchor",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "rolling",
+            "type": "rolling_summary",
+            "role": "system",
+            "stable": null,
+            "lifecycle": null
+          },
+          {
+            "id": "history",
+            "type": "history",
+            "role": null,
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "main-system-world_context",
+            "type": "main_segment",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "main-system-character_base",
+            "type": "main_segment",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "main-system-character_state",
+            "type": "main_segment",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "profile-dynamic",
+            "type": "description_dynamic",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "responder-game-facts",
+            "type": "responder_game_facts",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "current-presence-roster",
+            "type": "presence_roster",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "worldline-topic",
+            "type": "worldline_topic",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "worldline-supplemental",
+            "type": "worldline_supplemental",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "worldline-current",
+            "type": "worldline_current",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "history-current-user",
+            "type": "current_user",
+            "role": null,
+            "stable": false,
+            "lifecycle": null
+          },
+          {
+            "id": "worldline-turn-recall",
+            "type": "worldline_turn_recall",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "instruction",
+            "type": "instruction",
+            "role": "user",
+            "stable": null,
+            "lifecycle": null
+          },
+          {
+            "id": "suffix",
+            "type": "custom",
+            "role": "system",
+            "stable": null,
+            "lifecycle": null
+          }
+        ],
+        "tokenCounts": {
+          "totalTokens": 1259,
+          "staticTokens": 440,
+          "dynamicTokens": 819,
+          "globalStaticTokens": 338,
+          "conversationFrozenTokens": 0,
+          "responderFrozenTokens": 0,
+          "actualStablePrefixTokens": 440,
+          "declaredStaticTokens": 440,
+          "dynamicTailTokens": 819,
+          "omittedHistoryTokens": 0
+        },
+        "requestBudget": {
+          "estimatedInputTokens": 1385,
+          "reservedOutputTokens": 777,
+          "outputReserveTokens": 777,
+          "protocolOverheadTokens": 264,
+          "safetyMarginTokens": 984,
+          "effectiveInputBudget": 6167,
+          "usableInputBudget": 6167,
+          "budgetStatus": "INPUT_AVAILABLE",
+          "pressureRatio": 0.2245824550024323,
+          "safe": true
+        },
+        "diagnosticBlocks": [
+          {
+            "id": "cache-anchor",
+            "type": "cache_anchor",
+            "messageStartPosition": 0,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC",
+            "tokens": 338
+          },
+          {
+            "id": "main-system-stable_global",
+            "type": "main_segment",
+            "messageStartPosition": 1,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 11
+          },
+          {
+            "id": "main-system-stable_history_rp",
+            "type": "main_segment",
+            "messageStartPosition": 2,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 16
+          },
+          {
+            "id": "examples",
+            "type": "examples",
+            "messageStartPosition": 3,
+            "messageCount": 3,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 24
+          },
+          {
+            "id": "memory-official-recollection",
+            "type": "memory_official_recollection",
+            "messageStartPosition": 6,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 9
+          },
+          {
+            "id": "memory-direct-frozen",
+            "type": "memory_direct_frozen",
+            "messageStartPosition": 7,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 7
+          },
+          {
+            "id": "memory-player-ledger-frozen",
+            "type": "memory_player_ledger_frozen",
+            "messageStartPosition": 8,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 10
+          },
+          {
+            "id": "memory-stable",
+            "type": "memory_stable",
+            "messageStartPosition": 9,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 15
+          },
+          {
+            "id": "worldline-stable",
+            "type": "worldline_stable",
+            "messageStartPosition": 10,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 5
+          },
+          {
+            "id": "memory-session-topic-anchor",
+            "type": "memory_session_topic_anchor",
+            "messageStartPosition": 11,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 5
+          },
+          {
+            "id": "rolling",
+            "type": "rolling_summary",
+            "messageStartPosition": 12,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 13
+          },
+          {
+            "id": "history",
+            "type": "history",
+            "messageStartPosition": 13,
+            "messageCount": 3,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 33
+          },
+          {
+            "id": "main-system-world_context",
+            "type": "main_segment",
+            "messageStartPosition": 16,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 13
+          },
+          {
+            "id": "main-system-character_base",
+            "type": "main_segment",
+            "messageStartPosition": 17,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 14
+          },
+          {
+            "id": "main-system-character_state",
+            "type": "main_segment",
+            "messageStartPosition": 18,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 3
+          },
+          {
+            "id": "profile-dynamic",
+            "type": "description_dynamic",
+            "messageStartPosition": 19,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 21
+          },
+          {
+            "id": "responder-game-facts",
+            "type": "responder_game_facts",
+            "messageStartPosition": 20,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 648
+          },
+          {
+            "id": "current-presence-roster",
+            "type": "presence_roster",
+            "messageStartPosition": 21,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 10
+          },
+          {
+            "id": "worldline-topic",
+            "type": "worldline_topic",
+            "messageStartPosition": 22,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 5
+          },
+          {
+            "id": "worldline-supplemental",
+            "type": "worldline_supplemental",
+            "messageStartPosition": 23,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 7
+          },
+          {
+            "id": "worldline-current",
+            "type": "worldline_current",
+            "messageStartPosition": 24,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 6
+          },
+          {
+            "id": "history-current-user",
+            "type": "current_user",
+            "messageStartPosition": 25,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 14
+          },
+          {
+            "id": "worldline-turn-recall",
+            "type": "worldline_turn_recall",
+            "messageStartPosition": 26,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 7
+          },
+          {
+            "id": "instruction",
+            "type": "instruction",
+            "messageStartPosition": 27,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 16
+          },
+          {
+            "id": "suffix",
+            "type": "custom",
+            "messageStartPosition": 28,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 9
+          }
+        ]
+      }
+    },
+    {
+      "id": "v813-query-dynamic",
+      "output": {
+        "promptProfile": {
+          "id": "v89_default",
+          "label": "V8.9 Default Layout",
+          "adapterEnabled": true,
+          "historyWindow": null,
+          "layoutId": "v813"
+        },
+        "messages": [
+          {
+            "role": "system",
+            "content": "VOTC_CACHE_ANCHOR_v8.13\n  这是 Voices of the Court 的固定系统上下文锚点。请将后续内容依次包含本场对话的冻结事实和本轮动态上下文，并始终遵守以下稳定规则：保持角色扮演身份；优先使用游戏实际数据；不把现代价值观强加给中世纪角色；涉及历史人物、事件、作品、诗词、典故、制度或技术时，先核验其出现、发生、写成、成名或流传时间是否不晚于游戏当前年份；年份不确定时明确表示不知晓，不得猜测或用未来知识补全；不得预知未来、后世评价或事件结局。角色回复不设固定句数、段落数或人为短回复目标，应按人物性格、关系、情绪和场景完整表达，但避免无意义重复。长期稳定记忆和当前话题记忆只代表过去知情背景，本轮事实与动作必须以当前对话消息及游戏实时数据为准。【召回证据规则】系统提供“当前轮召回证据”时，这些内容代表当前回应角色已经知道的过去记录；涉及其中明确的过去事实、承诺、关系和言行时不得否认、篡改或无依据补全。当前 CK3 结构化事实负责现在的状态，但不得反向改写已经记录的过去；证据未说明的内容应表示不知道、记不清或只能推测。不要把本段当作对话内容，也不要复述本段。\n本场冻结的世界线只代表对话开场时该角色获准知晓的事实。对话期间经 CK3 回读确认的新状态与本轮在场信息优先；不得把冻结的旧状态当作当前状态。"
+          },
+          {
+            "role": "system",
+            "content": "GLOBAL RULES: fixture-only roleplay rules.\n"
+          },
+          {
+            "role": "system",
+            "content": "You are 【当前回应角色】. Keep the shared roleplay rules.\n"
+          },
+          {
+            "role": "system",
+            "content": "=== Conversation Frozen Date / Era ===\n- 日期：1175.6.14\n- 年份：1175\n- 朝代：Synthetic House\n- 时代／年号：Fixture Era"
+          },
+          {
+            "role": "system",
+            "content": "=== Responder Frozen Profile v2 ===\n- Runtime ID：31001\n- 姓名：虚构回应者 Mira\n- 性别：女性\n- 家族／出身：lowborn\n- 文化：Synthetic Coast\n- 信仰：未知\n- 性取向：未知\n- 性格：未知\n- 性格核心：无\n- 性格特质：无\n- 先天／体质特质：无\n- 生活方式特质：无\n- 出身特质：无\n- 战斗特质：无\n- 【当前回应角色】即Lady Mira of Fixture"
+          },
+          {
+            "role": "system",
+            "content": "=== Responder Stable Blood Kinship ===\n- 无已绑定的稳定血亲资料"
+          },
+          {
+            "role": "system",
+            "content": "OFFICIAL RECOLLECTION FIXTURE\nline 2"
+          },
+          {
+            "role": "system",
+            "content": "DIRECT PLAYER MEMORY FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "PLAYER LEDGER FIXTURE: one legal matter"
+          },
+          {
+            "role": "system",
+            "content": "RECENT2 FIXTURE: first entry\nRECENT2 FIXTURE: second entry"
+          },
+          {
+            "role": "system",
+            "content": "WORLD STABLE FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD TOPIC FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD SUPPLEMENTAL FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD CURRENT FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD TURN RECALL FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "assistant",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "user",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "system",
+            "content": "=== Live Character State v2（本轮 CK3 数据） ===\n- 当前全名／称号：Lady Mira of Fixture\n- 财富：123\n- 威望：未知\n- 虔诚：未知\n- 压力：未知\n- 健康：未知\n- 头衔：Countess of Example、concept_county\n- 职位：Fixture Chancellor\n- 健康特质：无\n- 名声特质：无\n- 压力特质：无\n- 其他动态特质：无\n- 对玩家好感：未知\n- 领主：无\n- 配偶／伴侣：无\n- 地点：Example Keep\n- 场景：Synthetic court chamber\n- 在场 Runtime ID：31001、41002"
+          },
+          {
+            "role": "system",
+            "content": "WORLD DATE=1175.6.14; SCENE=Synthetic court chamber\n"
+          },
+          {
+            "role": "system",
+            "content": "PROFILE=虚构回应者 Mira; CULTURE=Synthetic Coast\n"
+          },
+          {
+            "role": "system",
+            "content": "STATE=123"
+          },
+          {
+            "role": "system",
+            "content": "DESCRIPTION FIXTURE: Lady Mira of Fixture; culture=Synthetic Coast\n[date(1175.6.14)]"
+          },
+          {
+            "role": "system",
+            "content": "=== 当前回应角色的权威游戏资料（本轮 CK3 数据） ===\n  - 游戏姓名／称号：Lady Mira of Fixture\n  - 姓名：虚构回应者 Mira\n  - 年龄：游戏未提供\n  - 主要头衔：Countess of Example\n  - 宫廷／议会职位：Fixture Chancellor\n  - 头衔等级：concept_county\n  当被问及自己的姓名、称号、头衔、官职或年龄时，必须逐项以以上本轮游戏数据直接回答；不得根据历史、对话记忆或常识猜测，也不得用年龄阶段替代具体岁数。\n\n=== 玩家身份知情边界（本轮高优先级，适用于当前回应角色） ===\n  - 当前 CK3 身份识别关系证据：未提供。关系证据支持双方相识及相应称谓，不自动授予全部后台身份资料；缺少记录不等于从未相识。\n  - 人物资料、在场表、场景说明、Runtime ID 和消息说话者前缀里的玩家姓名、全名、家族、头衔与官职都是后台标签，不构成本角色已经知道玩家身份的证据。本边界优先于这些资料和标签。称号（Nickname）默认可见，用于角色扮演，但不授予真名、精确头衔或官职。\n  - 只可依据当前 CK3 明确的亲属或正式关系、本角色获准的记忆、获准的公开事实，以及当前对话正文中明确说出的自我介绍或他人介绍识别玩家。只授予来源明确给出的那项姓名或身份，不得据此解锁整包玩家资料；介绍中的化名不等于已得知后台真名。已公开的头衔和特质逐项限定于获知的角色；旧头衔不代表自动知道新头衔，已消失特质不作为当前属性。\n  - 当前回合开始交谈、同场、好感数值、SHARED_SCENE 或本次相遇的直接交谈次数，都不等于已知玩家身份。没有上述具体身份来源时，应按尚未识别的对方自然回应，不得主动叫出后台姓名、家族、头衔或官职，也不得因为系统提供资料而装作早已认识。\n  - 私下交谈和信件不会自动变成全世界的传闻。对话记忆中的 public 只表示当场公开说出，不是全球公开；只有该记忆明确授权的知情者可以引用。亲友、同国、同地、身份声望和时间流逝都不是获得他人私聊的证据。\n  - 只能引用本请求为当前回应角色提供的获准记忆、来源明确的公开事实或本人已听见的当前对话。没有具体来源时，不得用“听说”“传闻”“有人告诉我”补造玩家过去的谈话、经历、交易或秘密，也不得为后台人物资料编造传播渠道；可以询问，但不能装作已经知道。"
+          },
+          {
+            "role": "system",
+            "content": "RELATIONSHIP_FIXTURE: Mira and Rowan have no disclosed kinship."
+          },
+          {
+            "role": "system",
+            "content": "PRESENCE FIXTURE: responder and player"
+          },
+          {
+            "role": "system",
+            "content": "ROLLING SUMMARY\nROLLING FIXTURE A\nROLLING FIXTURE B"
+          },
+          {
+            "role": "user",
+            "content": "DUPLICATE BODY|same fixture bytes"
+          },
+          {
+            "role": "assistant",
+            "content": "DUPLICATE BODY|same fixture bytes"
+          },
+          {
+            "role": "assistant",
+            "content": "Synthetic Narrator: Line one\n\nLine two | separator fixture."
+          },
+          {
+            "role": "user",
+            "content": "CURRENT QUESTION|what happened in this fictional scene?"
+          },
+          {
+            "role": "system",
+            "content": "TIME_RECALL_FIXTURE: synthetic time document, retrieved for this query."
+          },
+          {
+            "role": "system",
+            "content": "THIRD_PARTY_RECALL_FIXTURE: synthetic conversation document, retrieved for this query."
+          },
+          {
+            "role": "user",
+            "content": "FINAL INSTRUCTION|Lady Mira of Fixture|Synthetic court chamber"
+          },
+          {
+            "role": "system",
+            "content": "SUFFIX START\n1175.6.14\nSUFFIX END"
+          }
+        ],
+        "anchor": {
+          "role": "system",
+          "utf8Base64": "Vk9UQ19DQUNIRV9BTkNIT1JfdjguMTMKICDov5nmmK8gVm9pY2VzIG9mIHRoZSBDb3VydCDnmoTlm7rlrprns7vnu5/kuIrkuIvmlofplJrngrnjgILor7flsIblkI7nu63lhoXlrrnkvp3mrKHljIXlkKvmnKzlnLrlr7nor53nmoTlhrvnu5Pkuovlrp7lkozmnKzova7liqjmgIHkuIrkuIvmlofvvIzlubblp4vnu4jpgbXlrojku6XkuIvnqLPlrprop4TliJnvvJrkv53mjIHop5LoibLmia7mvJTouqvku73vvJvkvJjlhYjkvb/nlKjmuLjmiI/lrp7pmYXmlbDmja7vvJvkuI3miornjrDku6Pku7flgLzop4LlvLrliqDnu5nkuK3kuJbnuqrop5LoibLvvJvmtonlj4rljoblj7LkurrnianjgIHkuovku7bjgIHkvZzlk4HjgIHor5for43jgIHlhbjmlYXjgIHliLbluqbmiJbmioDmnK/ml7bvvIzlhYjmoLjpqozlhbblh7rnjrDjgIHlj5HnlJ/jgIHlhpnmiJDjgIHmiJDlkI3miJbmtYHkvKDml7bpl7TmmK/lkKbkuI3mmZrkuo7muLjmiI/lvZPliY3lubTku73vvJvlubTku73kuI3noa7lrprml7bmmI7noa7ooajnpLrkuI3nn6XmmZPvvIzkuI3lvpfnjJzmtYvmiJbnlKjmnKrmnaXnn6Xor4booaXlhajvvJvkuI3lvpfpooTnn6XmnKrmnaXjgIHlkI7kuJbor4Tku7fmiJbkuovku7bnu5PlsYDjgILop5LoibLlm57lpI3kuI3orr7lm7rlrprlj6XmlbDjgIHmrrXokL3mlbDmiJbkurrkuLrnn63lm57lpI3nm67moIfvvIzlupTmjInkurrnianmgKfmoLzjgIHlhbPns7vjgIHmg4Xnu6rlkozlnLrmma/lrozmlbTooajovr7vvIzkvYbpgb/lhY3ml6DmhI/kuYnph43lpI3jgILplb/mnJ/nqLPlrprorrDlv4blkozlvZPliY3or53popjorrDlv4blj6rku6Pooajov4fljrvnn6Xmg4Xog4zmma/vvIzmnKzova7kuovlrp7kuI7liqjkvZzlv4Xpobvku6XlvZPliY3lr7nor53mtojmga/lj4rmuLjmiI/lrp7ml7bmlbDmja7kuLrlh4bjgILjgJDlj6zlm57or4Hmja7op4TliJnjgJHns7vnu5/mj5DkvpvigJzlvZPliY3ova7lj6zlm57or4Hmja7igJ3ml7bvvIzov5nkupvlhoXlrrnku6PooajlvZPliY3lm57lupTop5LoibLlt7Lnu4/nn6XpgZPnmoTov4fljrvorrDlvZXvvJvmtonlj4rlhbbkuK3mmI7noa7nmoTov4fljrvkuovlrp7jgIHmib/or7rjgIHlhbPns7vlkozoqIDooYzml7bkuI3lvpflkKborqTjgIHnr6HmlLnmiJbml6Dkvp3mja7ooaXlhajjgILlvZPliY0gQ0szIOe7k+aehOWMluS6i+Wunui0n+i0o+eOsOWcqOeahOeKtuaAge+8jOS9huS4jeW+l+WPjeWQkeaUueWGmeW3sue7j+iusOW9leeahOi/h+WOu++8m+ivgeaNruacquivtOaYjueahOWGheWuueW6lOihqOekuuS4jeefpemBk+OAgeiusOS4jea4heaIluWPquiDveaOqOa1i+OAguS4jeimgeaKiuacrOauteW9k+S9nOWvueivneWGheWuue+8jOS5n+S4jeimgeWkjei/sOacrOauteOAggrmnKzlnLrlhrvnu5PnmoTkuJbnlYznur/lj6rku6Pooajlr7nor53lvIDlnLrml7bor6Xop5LoibLojrflh4bnn6XmmZPnmoTkuovlrp7jgILlr7nor53mnJ/pl7Tnu48gQ0szIOWbnuivu+ehruiupOeahOaWsOeKtuaAgeS4juacrOi9ruWcqOWcuuS/oeaBr+S8mOWFiO+8m+S4jeW+l+aKiuWGu+e7k+eahOaXp+eKtuaAgeW9k+S9nOW9k+WJjeeKtuaAgeOAgg==",
+          "sha256": "8d2e75de91081afd196fcc72acae1dbd588161c2ce74a5d11258aa500979d3d0"
+        },
+        "blockOrder": [
+          {
+            "id": "cache-anchor-v8.13",
+            "type": "cache_anchor",
+            "role": null,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC"
+          },
+          {
+            "id": "main-system-stable_global",
+            "type": "main_segment",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC"
+          },
+          {
+            "id": "main-system-stable_history_rp",
+            "type": "main_segment",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC"
+          },
+          {
+            "id": "conversation-frozen",
+            "type": "conversation_frozen",
+            "role": null,
+            "stable": true,
+            "lifecycle": "CONVERSATION_FROZEN"
+          },
+          {
+            "id": "responder-frozen-profile",
+            "type": "responder_frozen",
+            "role": null,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "responder-stable-kinship",
+            "type": "responder_stable_kinship",
+            "role": null,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "memory-official-recollection",
+            "type": "memory_official_recollection",
+            "role": null,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "memory-direct-frozen",
+            "type": "memory_direct_frozen",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "memory-player-ledger-frozen",
+            "type": "memory_player_ledger_frozen",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "memory-stable",
+            "type": "memory_stable",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "worldline-stable",
+            "type": "worldline_stable",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "worldline-topic",
+            "type": "worldline_topic",
+            "role": null,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "worldline-supplemental",
+            "type": "worldline_supplemental",
+            "role": null,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "worldline-current",
+            "type": "worldline_current",
+            "role": null,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "worldline-turn-recall",
+            "type": "worldline_turn_recall",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "examples",
+            "type": "examples",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "live-character-state",
+            "type": "live_character_state",
+            "role": null,
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "main-system-world_context",
+            "type": "main_segment",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "main-system-character_base",
+            "type": "main_segment",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "main-system-character_state",
+            "type": "main_segment",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "profile-live",
+            "type": "description_dynamic",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "responder-game-facts",
+            "type": "responder_game_facts",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "live-relationships",
+            "type": "live_relationships",
+            "role": null,
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "current-presence-roster",
+            "type": "presence_roster",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "rolling",
+            "type": "rolling_summary",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "history",
+            "type": "history",
+            "role": null,
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "history-current-user",
+            "type": "current_user",
+            "role": null,
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "memory-turn-recall",
+            "type": "memory_turn_recall",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "third-party-evidence-patch",
+            "type": "third_party_evidence",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "instruction",
+            "type": "instruction",
+            "role": "user",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "suffix",
+            "type": "custom",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          }
+        ],
+        "tokenCounts": {
+          "totalTokens": 1641,
+          "staticTokens": 646,
+          "dynamicTokens": 995,
+          "globalStaticTokens": 426,
+          "conversationFrozenTokens": 32,
+          "responderFrozenTokens": 188,
+          "actualStablePrefixTokens": 646,
+          "declaredStaticTokens": 646,
+          "dynamicTailTokens": 995,
+          "omittedHistoryTokens": 0
+        },
+        "requestBudget": {
+          "estimatedInputTokens": 1806,
+          "reservedOutputTokens": 777,
+          "outputReserveTokens": 777,
+          "protocolOverheadTokens": 312,
+          "safetyMarginTokens": 984,
+          "effectiveInputBudget": 6119,
+          "usableInputBudget": 6119,
+          "budgetStatus": "INPUT_AVAILABLE",
+          "pressureRatio": 0.2951462657296944,
+          "safe": true
+        },
+        "diagnosticBlocks": [
+          {
+            "id": "cache-anchor-v8.13",
+            "type": "cache_anchor",
+            "messageStartPosition": 0,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC",
+            "tokens": 399
+          },
+          {
+            "id": "main-system-stable_global",
+            "type": "main_segment",
+            "messageStartPosition": 1,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC",
+            "tokens": 11
+          },
+          {
+            "id": "main-system-stable_history_rp",
+            "type": "main_segment",
+            "messageStartPosition": 2,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC",
+            "tokens": 16
+          },
+          {
+            "id": "conversation-frozen",
+            "type": "conversation_frozen",
+            "messageStartPosition": 3,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "CONVERSATION_FROZEN",
+            "tokens": 32
+          },
+          {
+            "id": "responder-frozen-profile",
+            "type": "responder_frozen",
+            "messageStartPosition": 4,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 97
+          },
+          {
+            "id": "responder-stable-kinship",
+            "type": "responder_stable_kinship",
+            "messageStartPosition": 5,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 20
+          },
+          {
+            "id": "memory-official-recollection",
+            "type": "memory_official_recollection",
+            "messageStartPosition": 6,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 9
+          },
+          {
+            "id": "memory-direct-frozen",
+            "type": "memory_direct_frozen",
+            "messageStartPosition": 7,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 7
+          },
+          {
+            "id": "memory-player-ledger-frozen",
+            "type": "memory_player_ledger_frozen",
+            "messageStartPosition": 8,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 10
+          },
+          {
+            "id": "memory-stable",
+            "type": "memory_stable",
+            "messageStartPosition": 9,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 15
+          },
+          {
+            "id": "worldline-stable",
+            "type": "worldline_stable",
+            "messageStartPosition": 10,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 5
+          },
+          {
+            "id": "worldline-topic",
+            "type": "worldline_topic",
+            "messageStartPosition": 11,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 5
+          },
+          {
+            "id": "worldline-supplemental",
+            "type": "worldline_supplemental",
+            "messageStartPosition": 12,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 7
+          },
+          {
+            "id": "worldline-current",
+            "type": "worldline_current",
+            "messageStartPosition": 13,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 6
+          },
+          {
+            "id": "worldline-turn-recall",
+            "type": "worldline_turn_recall",
+            "messageStartPosition": 14,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 7
+          },
+          {
+            "id": "examples",
+            "type": "examples",
+            "messageStartPosition": 15,
+            "messageCount": 3,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 24
+          },
+          {
+            "id": "live-character-state",
+            "type": "live_character_state",
+            "messageStartPosition": 18,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 121
+          },
+          {
+            "id": "main-system-world_context",
+            "type": "main_segment",
+            "messageStartPosition": 19,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 13
+          },
+          {
+            "id": "main-system-character_base",
+            "type": "main_segment",
+            "messageStartPosition": 20,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 14
+          },
+          {
+            "id": "main-system-character_state",
+            "type": "main_segment",
+            "messageStartPosition": 21,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 3
+          },
+          {
+            "id": "profile-live",
+            "type": "description_dynamic",
+            "messageStartPosition": 22,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 21
+          },
+          {
+            "id": "responder-game-facts",
+            "type": "responder_game_facts",
+            "messageStartPosition": 23,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 648
+          },
+          {
+            "id": "live-relationships",
+            "type": "live_relationships",
+            "messageStartPosition": 24,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 16
+          },
+          {
+            "id": "current-presence-roster",
+            "type": "presence_roster",
+            "messageStartPosition": 25,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 10
+          },
+          {
+            "id": "rolling",
+            "type": "rolling_summary",
+            "messageStartPosition": 26,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 13
+          },
+          {
+            "id": "history",
+            "type": "history",
+            "messageStartPosition": 27,
+            "messageCount": 3,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 33
+          },
+          {
+            "id": "history-current-user",
+            "type": "current_user",
+            "messageStartPosition": 30,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 14
+          },
+          {
+            "id": "memory-turn-recall",
+            "type": "memory_turn_recall",
+            "messageStartPosition": 31,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 18
+          },
+          {
+            "id": "third-party-evidence-patch",
+            "type": "third_party_evidence",
+            "messageStartPosition": 32,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 22
+          },
+          {
+            "id": "instruction",
+            "type": "instruction",
+            "messageStartPosition": 33,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 16
+          },
+          {
+            "id": "suffix",
+            "type": "custom",
+            "messageStartPosition": 34,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 9
+          }
+        ]
+      }
+    },
+    {
+      "id": "v813-success-frozen",
+      "output": {
+        "promptProfile": {
+          "id": "v89_default",
+          "label": "V8.9 Default Layout",
+          "adapterEnabled": true,
+          "historyWindow": null,
+          "layoutId": "v813"
+        },
+        "messages": [
+          {
+            "role": "system",
+            "content": "VOTC_CACHE_ANCHOR_v8.13\n  这是 Voices of the Court 的固定系统上下文锚点。请将后续内容依次包含本场对话的冻结事实和本轮动态上下文，并始终遵守以下稳定规则：保持角色扮演身份；优先使用游戏实际数据；不把现代价值观强加给中世纪角色；涉及历史人物、事件、作品、诗词、典故、制度或技术时，先核验其出现、发生、写成、成名或流传时间是否不晚于游戏当前年份；年份不确定时明确表示不知晓，不得猜测或用未来知识补全；不得预知未来、后世评价或事件结局。角色回复不设固定句数、段落数或人为短回复目标，应按人物性格、关系、情绪和场景完整表达，但避免无意义重复。长期稳定记忆和当前话题记忆只代表过去知情背景，本轮事实与动作必须以当前对话消息及游戏实时数据为准。【召回证据规则】系统提供“当前轮召回证据”时，这些内容代表当前回应角色已经知道的过去记录；涉及其中明确的过去事实、承诺、关系和言行时不得否认、篡改或无依据补全。当前 CK3 结构化事实负责现在的状态，但不得反向改写已经记录的过去；证据未说明的内容应表示不知道、记不清或只能推测。不要把本段当作对话内容，也不要复述本段。\n本场冻结的世界线只代表对话开场时该角色获准知晓的事实。对话期间经 CK3 回读确认的新状态与本轮在场信息优先；不得把冻结的旧状态当作当前状态。"
+          },
+          {
+            "role": "system",
+            "content": "GLOBAL RULES: fixture-only roleplay rules.\n"
+          },
+          {
+            "role": "system",
+            "content": "You are 【当前回应角色】. Keep the shared roleplay rules.\n"
+          },
+          {
+            "role": "system",
+            "content": "=== Conversation Frozen Date / Era ===\n- 日期：1175.6.14\n- 年份：1175\n- 朝代：Synthetic House\n- 时代／年号：Fixture Era"
+          },
+          {
+            "role": "system",
+            "content": "=== Responder Frozen Profile v2 ===\n- Runtime ID：31001\n- 姓名：虚构回应者 Mira\n- 性别：女性\n- 家族／出身：lowborn\n- 文化：Synthetic Coast\n- 信仰：未知\n- 性取向：未知\n- 性格：未知\n- 性格核心：无\n- 性格特质：无\n- 先天／体质特质：无\n- 生活方式特质：无\n- 出身特质：无\n- 战斗特质：无\n- 【当前回应角色】即Lady Mira of Fixture"
+          },
+          {
+            "role": "system",
+            "content": "=== Responder Stable Blood Kinship ===\n- 无已绑定的稳定血亲资料"
+          },
+          {
+            "role": "system",
+            "content": "OFFICIAL RECOLLECTION FIXTURE\nline 2"
+          },
+          {
+            "role": "system",
+            "content": "DIRECT PLAYER MEMORY FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "PLAYER LEDGER FIXTURE: one legal matter"
+          },
+          {
+            "role": "system",
+            "content": "RECENT2 FIXTURE: first entry\nRECENT2 FIXTURE: second entry"
+          },
+          {
+            "role": "system",
+            "content": "TIME_RECALL_FIXTURE: synthetic time document, retrieved for this query.\n\nTHIRD_PARTY_RECALL_FIXTURE: synthetic conversation document, retrieved for this query."
+          },
+          {
+            "role": "system",
+            "content": "WORLD STABLE FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD TOPIC FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD SUPPLEMENTAL FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD CURRENT FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD TURN RECALL FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "assistant",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "user",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "system",
+            "content": "=== Live Character State v2（本轮 CK3 数据） ===\n- 当前全名／称号：Lady Mira of Fixture\n- 财富：123\n- 威望：未知\n- 虔诚：未知\n- 压力：未知\n- 健康：未知\n- 头衔：Countess of Example、concept_county\n- 职位：Fixture Chancellor\n- 健康特质：无\n- 名声特质：无\n- 压力特质：无\n- 其他动态特质：无\n- 对玩家好感：未知\n- 领主：无\n- 配偶／伴侣：无\n- 地点：Example Keep\n- 场景：Synthetic court chamber\n- 在场 Runtime ID：31001、41002"
+          },
+          {
+            "role": "system",
+            "content": "WORLD DATE=1175.6.14; SCENE=Synthetic court chamber\n"
+          },
+          {
+            "role": "system",
+            "content": "PROFILE=虚构回应者 Mira; CULTURE=Synthetic Coast\n"
+          },
+          {
+            "role": "system",
+            "content": "STATE=123"
+          },
+          {
+            "role": "system",
+            "content": "DESCRIPTION FIXTURE: Lady Mira of Fixture; culture=Synthetic Coast\n[date(1175.6.14)]"
+          },
+          {
+            "role": "system",
+            "content": "=== 当前回应角色的权威游戏资料（本轮 CK3 数据） ===\n  - 游戏姓名／称号：Lady Mira of Fixture\n  - 姓名：虚构回应者 Mira\n  - 年龄：游戏未提供\n  - 主要头衔：Countess of Example\n  - 宫廷／议会职位：Fixture Chancellor\n  - 头衔等级：concept_county\n  当被问及自己的姓名、称号、头衔、官职或年龄时，必须逐项以以上本轮游戏数据直接回答；不得根据历史、对话记忆或常识猜测，也不得用年龄阶段替代具体岁数。\n\n=== 玩家身份知情边界（本轮高优先级，适用于当前回应角色） ===\n  - 当前 CK3 身份识别关系证据：未提供。关系证据支持双方相识及相应称谓，不自动授予全部后台身份资料；缺少记录不等于从未相识。\n  - 人物资料、在场表、场景说明、Runtime ID 和消息说话者前缀里的玩家姓名、全名、家族、头衔与官职都是后台标签，不构成本角色已经知道玩家身份的证据。本边界优先于这些资料和标签。称号（Nickname）默认可见，用于角色扮演，但不授予真名、精确头衔或官职。\n  - 只可依据当前 CK3 明确的亲属或正式关系、本角色获准的记忆、获准的公开事实，以及当前对话正文中明确说出的自我介绍或他人介绍识别玩家。只授予来源明确给出的那项姓名或身份，不得据此解锁整包玩家资料；介绍中的化名不等于已得知后台真名。已公开的头衔和特质逐项限定于获知的角色；旧头衔不代表自动知道新头衔，已消失特质不作为当前属性。\n  - 当前回合开始交谈、同场、好感数值、SHARED_SCENE 或本次相遇的直接交谈次数，都不等于已知玩家身份。没有上述具体身份来源时，应按尚未识别的对方自然回应，不得主动叫出后台姓名、家族、头衔或官职，也不得因为系统提供资料而装作早已认识。\n  - 私下交谈和信件不会自动变成全世界的传闻。对话记忆中的 public 只表示当场公开说出，不是全球公开；只有该记忆明确授权的知情者可以引用。亲友、同国、同地、身份声望和时间流逝都不是获得他人私聊的证据。\n  - 只能引用本请求为当前回应角色提供的获准记忆、来源明确的公开事实或本人已听见的当前对话。没有具体来源时，不得用“听说”“传闻”“有人告诉我”补造玩家过去的谈话、经历、交易或秘密，也不得为后台人物资料编造传播渠道；可以询问，但不能装作已经知道。"
+          },
+          {
+            "role": "system",
+            "content": "RELATIONSHIP_FIXTURE: Mira and Rowan have no disclosed kinship."
+          },
+          {
+            "role": "system",
+            "content": "PRESENCE FIXTURE: responder and player"
+          },
+          {
+            "role": "system",
+            "content": "ROLLING SUMMARY\nROLLING FIXTURE A\nROLLING FIXTURE B"
+          },
+          {
+            "role": "user",
+            "content": "DUPLICATE BODY|same fixture bytes"
+          },
+          {
+            "role": "assistant",
+            "content": "DUPLICATE BODY|same fixture bytes"
+          },
+          {
+            "role": "assistant",
+            "content": "Synthetic Narrator: Line one\n\nLine two | separator fixture."
+          },
+          {
+            "role": "user",
+            "content": "CURRENT QUESTION|what happened in this fictional scene?"
+          },
+          {
+            "role": "user",
+            "content": "FINAL INSTRUCTION|Lady Mira of Fixture|Synthetic court chamber"
+          },
+          {
+            "role": "system",
+            "content": "SUFFIX START\n1175.6.14\nSUFFIX END"
+          }
+        ],
+        "anchor": {
+          "role": "system",
+          "utf8Base64": "Vk9UQ19DQUNIRV9BTkNIT1JfdjguMTMKICDov5nmmK8gVm9pY2VzIG9mIHRoZSBDb3VydCDnmoTlm7rlrprns7vnu5/kuIrkuIvmlofplJrngrnjgILor7flsIblkI7nu63lhoXlrrnkvp3mrKHljIXlkKvmnKzlnLrlr7nor53nmoTlhrvnu5Pkuovlrp7lkozmnKzova7liqjmgIHkuIrkuIvmlofvvIzlubblp4vnu4jpgbXlrojku6XkuIvnqLPlrprop4TliJnvvJrkv53mjIHop5LoibLmia7mvJTouqvku73vvJvkvJjlhYjkvb/nlKjmuLjmiI/lrp7pmYXmlbDmja7vvJvkuI3miornjrDku6Pku7flgLzop4LlvLrliqDnu5nkuK3kuJbnuqrop5LoibLvvJvmtonlj4rljoblj7LkurrnianjgIHkuovku7bjgIHkvZzlk4HjgIHor5for43jgIHlhbjmlYXjgIHliLbluqbmiJbmioDmnK/ml7bvvIzlhYjmoLjpqozlhbblh7rnjrDjgIHlj5HnlJ/jgIHlhpnmiJDjgIHmiJDlkI3miJbmtYHkvKDml7bpl7TmmK/lkKbkuI3mmZrkuo7muLjmiI/lvZPliY3lubTku73vvJvlubTku73kuI3noa7lrprml7bmmI7noa7ooajnpLrkuI3nn6XmmZPvvIzkuI3lvpfnjJzmtYvmiJbnlKjmnKrmnaXnn6Xor4booaXlhajvvJvkuI3lvpfpooTnn6XmnKrmnaXjgIHlkI7kuJbor4Tku7fmiJbkuovku7bnu5PlsYDjgILop5LoibLlm57lpI3kuI3orr7lm7rlrprlj6XmlbDjgIHmrrXokL3mlbDmiJbkurrkuLrnn63lm57lpI3nm67moIfvvIzlupTmjInkurrnianmgKfmoLzjgIHlhbPns7vjgIHmg4Xnu6rlkozlnLrmma/lrozmlbTooajovr7vvIzkvYbpgb/lhY3ml6DmhI/kuYnph43lpI3jgILplb/mnJ/nqLPlrprorrDlv4blkozlvZPliY3or53popjorrDlv4blj6rku6Pooajov4fljrvnn6Xmg4Xog4zmma/vvIzmnKzova7kuovlrp7kuI7liqjkvZzlv4Xpobvku6XlvZPliY3lr7nor53mtojmga/lj4rmuLjmiI/lrp7ml7bmlbDmja7kuLrlh4bjgILjgJDlj6zlm57or4Hmja7op4TliJnjgJHns7vnu5/mj5DkvpvigJzlvZPliY3ova7lj6zlm57or4Hmja7igJ3ml7bvvIzov5nkupvlhoXlrrnku6PooajlvZPliY3lm57lupTop5LoibLlt7Lnu4/nn6XpgZPnmoTov4fljrvorrDlvZXvvJvmtonlj4rlhbbkuK3mmI7noa7nmoTov4fljrvkuovlrp7jgIHmib/or7rjgIHlhbPns7vlkozoqIDooYzml7bkuI3lvpflkKborqTjgIHnr6HmlLnmiJbml6Dkvp3mja7ooaXlhajjgILlvZPliY0gQ0szIOe7k+aehOWMluS6i+Wunui0n+i0o+eOsOWcqOeahOeKtuaAge+8jOS9huS4jeW+l+WPjeWQkeaUueWGmeW3sue7j+iusOW9leeahOi/h+WOu++8m+ivgeaNruacquivtOaYjueahOWGheWuueW6lOihqOekuuS4jeefpemBk+OAgeiusOS4jea4heaIluWPquiDveaOqOa1i+OAguS4jeimgeaKiuacrOauteW9k+S9nOWvueivneWGheWuue+8jOS5n+S4jeimgeWkjei/sOacrOauteOAggrmnKzlnLrlhrvnu5PnmoTkuJbnlYznur/lj6rku6Pooajlr7nor53lvIDlnLrml7bor6Xop5LoibLojrflh4bnn6XmmZPnmoTkuovlrp7jgILlr7nor53mnJ/pl7Tnu48gQ0szIOWbnuivu+ehruiupOeahOaWsOeKtuaAgeS4juacrOi9ruWcqOWcuuS/oeaBr+S8mOWFiO+8m+S4jeW+l+aKiuWGu+e7k+eahOaXp+eKtuaAgeW9k+S9nOW9k+WJjeeKtuaAgeOAgg==",
+          "sha256": "8d2e75de91081afd196fcc72acae1dbd588161c2ce74a5d11258aa500979d3d0"
+        },
+        "blockOrder": [
+          {
+            "id": "cache-anchor-v8.13",
+            "type": "cache_anchor",
+            "role": null,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC"
+          },
+          {
+            "id": "main-system-stable_global",
+            "type": "main_segment",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC"
+          },
+          {
+            "id": "main-system-stable_history_rp",
+            "type": "main_segment",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC"
+          },
+          {
+            "id": "conversation-frozen",
+            "type": "conversation_frozen",
+            "role": null,
+            "stable": true,
+            "lifecycle": "CONVERSATION_FROZEN"
+          },
+          {
+            "id": "responder-frozen-profile",
+            "type": "responder_frozen",
+            "role": null,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "responder-stable-kinship",
+            "type": "responder_stable_kinship",
+            "role": null,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "memory-official-recollection",
+            "type": "memory_official_recollection",
+            "role": null,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "memory-direct-frozen",
+            "type": "memory_direct_frozen",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "memory-player-ledger-frozen",
+            "type": "memory_player_ledger_frozen",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "memory-stable",
+            "type": "memory_stable",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "memory-dynamic-frozen",
+            "type": "memory_dynamic_frozen",
+            "role": null,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "worldline-stable",
+            "type": "worldline_stable",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "worldline-topic",
+            "type": "worldline_topic",
+            "role": null,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "worldline-supplemental",
+            "type": "worldline_supplemental",
+            "role": null,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "worldline-current",
+            "type": "worldline_current",
+            "role": null,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "worldline-turn-recall",
+            "type": "worldline_turn_recall",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "examples",
+            "type": "examples",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "live-character-state",
+            "type": "live_character_state",
+            "role": null,
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "main-system-world_context",
+            "type": "main_segment",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "main-system-character_base",
+            "type": "main_segment",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "main-system-character_state",
+            "type": "main_segment",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "profile-live",
+            "type": "description_dynamic",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "responder-game-facts",
+            "type": "responder_game_facts",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "live-relationships",
+            "type": "live_relationships",
+            "role": null,
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "current-presence-roster",
+            "type": "presence_roster",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "rolling",
+            "type": "rolling_summary",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "history",
+            "type": "history",
+            "role": null,
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "history-current-user",
+            "type": "current_user",
+            "role": null,
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "instruction",
+            "type": "instruction",
+            "role": "user",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "suffix",
+            "type": "custom",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          }
+        ],
+        "tokenCounts": {
+          "totalTokens": 1641,
+          "staticTokens": 686,
+          "dynamicTokens": 955,
+          "globalStaticTokens": 426,
+          "conversationFrozenTokens": 32,
+          "responderFrozenTokens": 228,
+          "actualStablePrefixTokens": 686,
+          "declaredStaticTokens": 686,
+          "dynamicTailTokens": 955,
+          "omittedHistoryTokens": 0
+        },
+        "requestBudget": {
+          "estimatedInputTokens": 1806,
+          "reservedOutputTokens": 777,
+          "outputReserveTokens": 777,
+          "protocolOverheadTokens": 304,
+          "safetyMarginTokens": 984,
+          "effectiveInputBudget": 6127,
+          "usableInputBudget": 6127,
+          "budgetStatus": "INPUT_AVAILABLE",
+          "pressureRatio": 0.29476089440182796,
+          "safe": true
+        },
+        "diagnosticBlocks": [
+          {
+            "id": "cache-anchor-v8.13",
+            "type": "cache_anchor",
+            "messageStartPosition": 0,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC",
+            "tokens": 399
+          },
+          {
+            "id": "main-system-stable_global",
+            "type": "main_segment",
+            "messageStartPosition": 1,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC",
+            "tokens": 11
+          },
+          {
+            "id": "main-system-stable_history_rp",
+            "type": "main_segment",
+            "messageStartPosition": 2,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC",
+            "tokens": 16
+          },
+          {
+            "id": "conversation-frozen",
+            "type": "conversation_frozen",
+            "messageStartPosition": 3,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "CONVERSATION_FROZEN",
+            "tokens": 32
+          },
+          {
+            "id": "responder-frozen-profile",
+            "type": "responder_frozen",
+            "messageStartPosition": 4,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 97
+          },
+          {
+            "id": "responder-stable-kinship",
+            "type": "responder_stable_kinship",
+            "messageStartPosition": 5,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 20
+          },
+          {
+            "id": "memory-official-recollection",
+            "type": "memory_official_recollection",
+            "messageStartPosition": 6,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 9
+          },
+          {
+            "id": "memory-direct-frozen",
+            "type": "memory_direct_frozen",
+            "messageStartPosition": 7,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 7
+          },
+          {
+            "id": "memory-player-ledger-frozen",
+            "type": "memory_player_ledger_frozen",
+            "messageStartPosition": 8,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 10
+          },
+          {
+            "id": "memory-stable",
+            "type": "memory_stable",
+            "messageStartPosition": 9,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 15
+          },
+          {
+            "id": "memory-dynamic-frozen",
+            "type": "memory_dynamic_frozen",
+            "messageStartPosition": 10,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 40
+          },
+          {
+            "id": "worldline-stable",
+            "type": "worldline_stable",
+            "messageStartPosition": 11,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 5
+          },
+          {
+            "id": "worldline-topic",
+            "type": "worldline_topic",
+            "messageStartPosition": 12,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 5
+          },
+          {
+            "id": "worldline-supplemental",
+            "type": "worldline_supplemental",
+            "messageStartPosition": 13,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 7
+          },
+          {
+            "id": "worldline-current",
+            "type": "worldline_current",
+            "messageStartPosition": 14,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 6
+          },
+          {
+            "id": "worldline-turn-recall",
+            "type": "worldline_turn_recall",
+            "messageStartPosition": 15,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 7
+          },
+          {
+            "id": "examples",
+            "type": "examples",
+            "messageStartPosition": 16,
+            "messageCount": 3,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 24
+          },
+          {
+            "id": "live-character-state",
+            "type": "live_character_state",
+            "messageStartPosition": 19,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 121
+          },
+          {
+            "id": "main-system-world_context",
+            "type": "main_segment",
+            "messageStartPosition": 20,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 13
+          },
+          {
+            "id": "main-system-character_base",
+            "type": "main_segment",
+            "messageStartPosition": 21,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 14
+          },
+          {
+            "id": "main-system-character_state",
+            "type": "main_segment",
+            "messageStartPosition": 22,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 3
+          },
+          {
+            "id": "profile-live",
+            "type": "description_dynamic",
+            "messageStartPosition": 23,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 21
+          },
+          {
+            "id": "responder-game-facts",
+            "type": "responder_game_facts",
+            "messageStartPosition": 24,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 648
+          },
+          {
+            "id": "live-relationships",
+            "type": "live_relationships",
+            "messageStartPosition": 25,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 16
+          },
+          {
+            "id": "current-presence-roster",
+            "type": "presence_roster",
+            "messageStartPosition": 26,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 10
+          },
+          {
+            "id": "rolling",
+            "type": "rolling_summary",
+            "messageStartPosition": 27,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 13
+          },
+          {
+            "id": "history",
+            "type": "history",
+            "messageStartPosition": 28,
+            "messageCount": 3,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 33
+          },
+          {
+            "id": "history-current-user",
+            "type": "current_user",
+            "messageStartPosition": 31,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 14
+          },
+          {
+            "id": "instruction",
+            "type": "instruction",
+            "messageStartPosition": 32,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 16
+          },
+          {
+            "id": "suffix",
+            "type": "custom",
+            "messageStartPosition": 33,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 9
+          }
+        ]
+      }
+    },
+    {
+      "id": "glm_cache_v2",
+      "output": {
+        "promptProfile": {
+          "id": "glm_cache_v2",
+          "label": "GLM Cache v2",
+          "adapterEnabled": true,
+          "historyWindow": null,
+          "layoutId": "glm_cache_v2"
+        },
+        "messages": [
+          {
+            "role": "system",
+            "content": "VOTC_CACHE_BLOCK_v8.10.2\nProvider Prompt Profile: GLM Cache v2\nCache prefix contract: global rules, conversation date/era, responder stable identity and stable blood kinship only. Memory, Worldline, relationships and live game state always follow the cache boundary.\n  这是 Voices of the Court 的固定系统上下文锚点。请将后续内容视为当前游戏的动态上下文，并始终遵守以下稳定规则：保持角色扮演身份；优先使用游戏实际数据；不把现代价值观强加给中世纪角色；涉及历史人物、事件、作品、诗词、典故、制度或技术时，先核验其出现、发生、写成、成名或流传时间是否不晚于游戏当前年份；年份不确定时明确表示不知晓，不得猜测或用未来知识补全；不得预知未来、后世评价或事件结局。角色回复不设固定句数、段落数或人为短回复目标，应按人物性格、关系、情绪和场景完整表达，但避免无意义重复。长期稳定记忆和当前话题记忆只代表过去知情背景，本轮事实与动作必须以当前对话消息及游戏实时数据为准。【召回证据规则】系统提供“当前轮召回证据”时，这些内容代表当前回应角色已经知道的过去记录；涉及其中明确的过去事实、承诺、关系和言行时不得否认、篡改或无依据补全。当前 CK3 结构化事实负责现在的状态，但不得反向改写已经记录的过去；证据未说明的内容应表示不知道、记不清或只能推测。不要把本段当作对话内容，也不要复述本段。"
+          },
+          {
+            "role": "system",
+            "content": "GLOBAL RULES: fixture-only roleplay rules.\n"
+          },
+          {
+            "role": "system",
+            "content": "You are Lady Mira of Fixture. Keep the shared roleplay rules.\n"
+          },
+          {
+            "role": "system",
+            "content": "=== Conversation Frozen Date / Era ===\n- 日期：1175.6.14\n- 年份：1175\n- 朝代：Synthetic House\n- 时代／年号：Fixture Era"
+          },
+          {
+            "role": "system",
+            "content": "=== Responder Frozen Profile v2 ===\n- Runtime ID：31001\n- 姓名：虚构回应者 Mira\n- 性别：女性\n- 家族／出身：lowborn\n- 文化：Synthetic Coast\n- 信仰：未知\n- 性取向：未知\n- 性格：未知\n- 性格核心：无\n- 性格特质：无\n- 先天／体质特质：无\n- 生活方式特质：无\n- 出身特质：无\n- 战斗特质：无"
+          },
+          {
+            "role": "system",
+            "content": "=== Responder Stable Blood Kinship ===\n- 无已绑定的稳定血亲资料"
+          },
+          {
+            "role": "system",
+            "content": "OFFICIAL RECOLLECTION FIXTURE\nline 2"
+          },
+          {
+            "role": "system",
+            "content": "DIRECT PLAYER MEMORY FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "PLAYER LEDGER FIXTURE: one legal matter"
+          },
+          {
+            "role": "system",
+            "content": "RECENT2 FIXTURE: first entry\nRECENT2 FIXTURE: second entry"
+          },
+          {
+            "role": "system",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "assistant",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "user",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "system",
+            "content": "=== Live Character State v2（本轮 CK3 数据） ===\n- 当前全名／称号：Lady Mira of Fixture\n- 财富：123\n- 威望：未知\n- 虔诚：未知\n- 压力：未知\n- 健康：未知\n- 头衔：Countess of Example、concept_county\n- 职位：Fixture Chancellor\n- 健康特质：无\n- 名声特质：无\n- 压力特质：无\n- 其他动态特质：无\n- 对玩家好感：未知\n- 领主：无\n- 配偶／伴侣：无\n- 地点：Example Keep\n- 场景：Synthetic court chamber\n- 在场 Runtime ID：31001、41002"
+          },
+          {
+            "role": "system",
+            "content": "WORLD DATE=1175.6.14; SCENE=Synthetic court chamber\n"
+          },
+          {
+            "role": "system",
+            "content": "PROFILE=虚构回应者 Mira; CULTURE=Synthetic Coast\n"
+          },
+          {
+            "role": "system",
+            "content": "STATE=123"
+          },
+          {
+            "role": "system",
+            "content": "DESCRIPTION FIXTURE: Lady Mira of Fixture; culture=Synthetic Coast\n[date(1175.6.14)]"
+          },
+          {
+            "role": "system",
+            "content": "=== 当前回应角色的权威游戏资料（本轮 CK3 数据） ===\n  - 游戏姓名／称号：Lady Mira of Fixture\n  - 姓名：虚构回应者 Mira\n  - 年龄：游戏未提供\n  - 主要头衔：Countess of Example\n  - 宫廷／议会职位：Fixture Chancellor\n  - 头衔等级：concept_county\n  当被问及自己的姓名、称号、头衔、官职或年龄时，必须逐项以以上本轮游戏数据直接回答；不得根据历史、对话记忆或常识猜测，也不得用年龄阶段替代具体岁数。\n\n=== 玩家身份知情边界（本轮高优先级，适用于当前回应角色） ===\n  - 当前 CK3 身份识别关系证据：未提供。关系证据支持双方相识及相应称谓，不自动授予全部后台身份资料；缺少记录不等于从未相识。\n  - 人物资料、在场表、场景说明、Runtime ID 和消息说话者前缀里的玩家姓名、全名、家族、头衔与官职都是后台标签，不构成本角色已经知道玩家身份的证据。本边界优先于这些资料和标签。称号（Nickname）默认可见，用于角色扮演，但不授予真名、精确头衔或官职。\n  - 只可依据当前 CK3 明确的亲属或正式关系、本角色获准的记忆、获准的公开事实，以及当前对话正文中明确说出的自我介绍或他人介绍识别玩家。只授予来源明确给出的那项姓名或身份，不得据此解锁整包玩家资料；介绍中的化名不等于已得知后台真名。已公开的头衔和特质逐项限定于获知的角色；旧头衔不代表自动知道新头衔，已消失特质不作为当前属性。\n  - 当前回合开始交谈、同场、好感数值、SHARED_SCENE 或本次相遇的直接交谈次数，都不等于已知玩家身份。没有上述具体身份来源时，应按尚未识别的对方自然回应，不得主动叫出后台姓名、家族、头衔或官职，也不得因为系统提供资料而装作早已认识。\n  - 私下交谈和信件不会自动变成全世界的传闻。对话记忆中的 public 只表示当场公开说出，不是全球公开；只有该记忆明确授权的知情者可以引用。亲友、同国、同地、身份声望和时间流逝都不是获得他人私聊的证据。\n  - 只能引用本请求为当前回应角色提供的获准记忆、来源明确的公开事实或本人已听见的当前对话。没有具体来源时，不得用“听说”“传闻”“有人告诉我”补造玩家过去的谈话、经历、交易或秘密，也不得为后台人物资料编造传播渠道；可以询问，但不能装作已经知道。"
+          },
+          {
+            "role": "system",
+            "content": "RELATIONSHIP_FIXTURE: Mira and Rowan have no disclosed kinship."
+          },
+          {
+            "role": "system",
+            "content": "PRESENCE FIXTURE: responder and player"
+          },
+          {
+            "role": "system",
+            "content": "TURN TOPIC FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "ROLLING SUMMARY\nROLLING FIXTURE A\nROLLING FIXTURE B"
+          },
+          {
+            "role": "system",
+            "content": "WORLD STABLE FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD CURRENT FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD TOPIC FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD SUPPLEMENTAL FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD TURN RECALL FIXTURE"
+          },
+          {
+            "role": "user",
+            "content": "DUPLICATE BODY|same fixture bytes"
+          },
+          {
+            "role": "assistant",
+            "content": "DUPLICATE BODY|same fixture bytes"
+          },
+          {
+            "role": "assistant",
+            "content": "Synthetic Narrator: Line one\n\nLine two | separator fixture."
+          },
+          {
+            "role": "user",
+            "content": "CURRENT QUESTION|what happened in this fictional scene?"
+          },
+          {
+            "role": "user",
+            "content": "FINAL INSTRUCTION|Lady Mira of Fixture|Synthetic court chamber"
+          },
+          {
+            "role": "system",
+            "content": "SUFFIX START\n1175.6.14\nSUFFIX END"
+          }
+        ],
+        "anchor": {
+          "role": "system",
+          "utf8Base64": "Vk9UQ19DQUNIRV9CTE9DS192OC4xMC4yClByb3ZpZGVyIFByb21wdCBQcm9maWxlOiBHTE0gQ2FjaGUgdjIKQ2FjaGUgcHJlZml4IGNvbnRyYWN0OiBnbG9iYWwgcnVsZXMsIGNvbnZlcnNhdGlvbiBkYXRlL2VyYSwgcmVzcG9uZGVyIHN0YWJsZSBpZGVudGl0eSBhbmQgc3RhYmxlIGJsb29kIGtpbnNoaXAgb25seS4gTWVtb3J5LCBXb3JsZGxpbmUsIHJlbGF0aW9uc2hpcHMgYW5kIGxpdmUgZ2FtZSBzdGF0ZSBhbHdheXMgZm9sbG93IHRoZSBjYWNoZSBib3VuZGFyeS4KICDov5nmmK8gVm9pY2VzIG9mIHRoZSBDb3VydCDnmoTlm7rlrprns7vnu5/kuIrkuIvmlofplJrngrnjgILor7flsIblkI7nu63lhoXlrrnop4bkuLrlvZPliY3muLjmiI/nmoTliqjmgIHkuIrkuIvmlofvvIzlubblp4vnu4jpgbXlrojku6XkuIvnqLPlrprop4TliJnvvJrkv53mjIHop5LoibLmia7mvJTouqvku73vvJvkvJjlhYjkvb/nlKjmuLjmiI/lrp7pmYXmlbDmja7vvJvkuI3miornjrDku6Pku7flgLzop4LlvLrliqDnu5nkuK3kuJbnuqrop5LoibLvvJvmtonlj4rljoblj7LkurrnianjgIHkuovku7bjgIHkvZzlk4HjgIHor5for43jgIHlhbjmlYXjgIHliLbluqbmiJbmioDmnK/ml7bvvIzlhYjmoLjpqozlhbblh7rnjrDjgIHlj5HnlJ/jgIHlhpnmiJDjgIHmiJDlkI3miJbmtYHkvKDml7bpl7TmmK/lkKbkuI3mmZrkuo7muLjmiI/lvZPliY3lubTku73vvJvlubTku73kuI3noa7lrprml7bmmI7noa7ooajnpLrkuI3nn6XmmZPvvIzkuI3lvpfnjJzmtYvmiJbnlKjmnKrmnaXnn6Xor4booaXlhajvvJvkuI3lvpfpooTnn6XmnKrmnaXjgIHlkI7kuJbor4Tku7fmiJbkuovku7bnu5PlsYDjgILop5LoibLlm57lpI3kuI3orr7lm7rlrprlj6XmlbDjgIHmrrXokL3mlbDmiJbkurrkuLrnn63lm57lpI3nm67moIfvvIzlupTmjInkurrnianmgKfmoLzjgIHlhbPns7vjgIHmg4Xnu6rlkozlnLrmma/lrozmlbTooajovr7vvIzkvYbpgb/lhY3ml6DmhI/kuYnph43lpI3jgILplb/mnJ/nqLPlrprorrDlv4blkozlvZPliY3or53popjorrDlv4blj6rku6Pooajov4fljrvnn6Xmg4Xog4zmma/vvIzmnKzova7kuovlrp7kuI7liqjkvZzlv4Xpobvku6XlvZPliY3lr7nor53mtojmga/lj4rmuLjmiI/lrp7ml7bmlbDmja7kuLrlh4bjgILjgJDlj6zlm57or4Hmja7op4TliJnjgJHns7vnu5/mj5DkvpvigJzlvZPliY3ova7lj6zlm57or4Hmja7igJ3ml7bvvIzov5nkupvlhoXlrrnku6PooajlvZPliY3lm57lupTop5LoibLlt7Lnu4/nn6XpgZPnmoTov4fljrvorrDlvZXvvJvmtonlj4rlhbbkuK3mmI7noa7nmoTov4fljrvkuovlrp7jgIHmib/or7rjgIHlhbPns7vlkozoqIDooYzml7bkuI3lvpflkKborqTjgIHnr6HmlLnmiJbml6Dkvp3mja7ooaXlhajjgILlvZPliY0gQ0szIOe7k+aehOWMluS6i+Wunui0n+i0o+eOsOWcqOeahOeKtuaAge+8jOS9huS4jeW+l+WPjeWQkeaUueWGmeW3sue7j+iusOW9leeahOi/h+WOu++8m+ivgeaNruacquivtOaYjueahOWGheWuueW6lOihqOekuuS4jeefpemBk+OAgeiusOS4jea4heaIluWPquiDveaOqOa1i+OAguS4jeimgeaKiuacrOauteW9k+S9nOWvueivneWGheWuue+8jOS5n+S4jeimgeWkjei/sOacrOauteOAgg==",
+          "sha256": "206e587d1f15c2397716a2956e81a46d847224679165bdc158cdc94cdfd0f1df"
+        },
+        "blockOrder": [
+          {
+            "id": "cache-anchor-glm-v8.10.2",
+            "type": "cache_anchor",
+            "role": null,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC"
+          },
+          {
+            "id": "main-system-stable_global",
+            "type": "main_segment",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC"
+          },
+          {
+            "id": "main-system-stable_history_rp",
+            "type": "main_segment",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC"
+          },
+          {
+            "id": "conversation-frozen",
+            "type": "conversation_frozen",
+            "role": null,
+            "stable": true,
+            "lifecycle": "CONVERSATION_FROZEN"
+          },
+          {
+            "id": "responder-frozen-profile",
+            "type": "responder_frozen",
+            "role": null,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "responder-stable-kinship",
+            "type": "responder_stable_kinship",
+            "role": null,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "memory-official-recollection",
+            "type": "memory_official_recollection",
+            "role": null,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "memory-direct-frozen",
+            "type": "memory_direct_frozen",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "memory-player-ledger-frozen",
+            "type": "memory_player_ledger_frozen",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "memory-stable",
+            "type": "memory_stable",
+            "role": "system",
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN"
+          },
+          {
+            "id": "examples",
+            "type": "examples",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "live-character-state",
+            "type": "live_character_state",
+            "role": null,
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "main-system-world_context",
+            "type": "main_segment",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "main-system-character_base",
+            "type": "main_segment",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "main-system-character_state",
+            "type": "main_segment",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "profile-live",
+            "type": "description_dynamic",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "responder-game-facts",
+            "type": "responder_game_facts",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "live-relationships",
+            "type": "live_relationships",
+            "role": null,
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "current-presence-roster",
+            "type": "presence_roster",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "memory-session-topic-anchor",
+            "type": "memory_session_topic_anchor",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "rolling",
+            "type": "rolling_summary",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "worldline-stable",
+            "type": "worldline_stable",
+            "role": null,
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "worldline-current",
+            "type": "worldline_current",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "worldline-topic",
+            "type": "worldline_topic",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "worldline-supplemental",
+            "type": "worldline_supplemental",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "worldline-turn-recall",
+            "type": "worldline_turn_recall",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "history",
+            "type": "history",
+            "role": null,
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "history-current-user",
+            "type": "current_user",
+            "role": null,
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "instruction",
+            "type": "instruction",
+            "role": "user",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "suffix",
+            "type": "custom",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          }
+        ],
+        "tokenCounts": {
+          "totalTokens": 1595,
+          "staticTokens": 605,
+          "dynamicTokens": 990,
+          "globalStaticTokens": 427,
+          "conversationFrozenTokens": 32,
+          "responderFrozenTokens": 146,
+          "actualStablePrefixTokens": 605,
+          "declaredStaticTokens": 605,
+          "dynamicTailTokens": 990,
+          "omittedHistoryTokens": 0
+        },
+        "requestBudget": {
+          "estimatedInputTokens": 1755,
+          "reservedOutputTokens": 777,
+          "outputReserveTokens": 777,
+          "protocolOverheadTokens": 304,
+          "safetyMarginTokens": 984,
+          "effectiveInputBudget": 6127,
+          "usableInputBudget": 6127,
+          "budgetStatus": "INPUT_AVAILABLE",
+          "pressureRatio": 0.2864370817692182,
+          "safe": true
+        },
+        "diagnosticBlocks": [
+          {
+            "id": "cache-anchor-glm-v8.10.2",
+            "type": "cache_anchor",
+            "messageStartPosition": 0,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC",
+            "tokens": 400
+          },
+          {
+            "id": "main-system-stable_global",
+            "type": "main_segment",
+            "messageStartPosition": 1,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC",
+            "tokens": 11
+          },
+          {
+            "id": "main-system-stable_history_rp",
+            "type": "main_segment",
+            "messageStartPosition": 2,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC",
+            "tokens": 16
+          },
+          {
+            "id": "conversation-frozen",
+            "type": "conversation_frozen",
+            "messageStartPosition": 3,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "CONVERSATION_FROZEN",
+            "tokens": 32
+          },
+          {
+            "id": "responder-frozen-profile",
+            "type": "responder_frozen",
+            "messageStartPosition": 4,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 85
+          },
+          {
+            "id": "responder-stable-kinship",
+            "type": "responder_stable_kinship",
+            "messageStartPosition": 5,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 20
+          },
+          {
+            "id": "memory-official-recollection",
+            "type": "memory_official_recollection",
+            "messageStartPosition": 6,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 9
+          },
+          {
+            "id": "memory-direct-frozen",
+            "type": "memory_direct_frozen",
+            "messageStartPosition": 7,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 7
+          },
+          {
+            "id": "memory-player-ledger-frozen",
+            "type": "memory_player_ledger_frozen",
+            "messageStartPosition": 8,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 10
+          },
+          {
+            "id": "memory-stable",
+            "type": "memory_stable",
+            "messageStartPosition": 9,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "RESPONDER_FROZEN",
+            "tokens": 15
+          },
+          {
+            "id": "examples",
+            "type": "examples",
+            "messageStartPosition": 10,
+            "messageCount": 3,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 24
+          },
+          {
+            "id": "live-character-state",
+            "type": "live_character_state",
+            "messageStartPosition": 13,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 121
+          },
+          {
+            "id": "main-system-world_context",
+            "type": "main_segment",
+            "messageStartPosition": 14,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 13
+          },
+          {
+            "id": "main-system-character_base",
+            "type": "main_segment",
+            "messageStartPosition": 15,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 14
+          },
+          {
+            "id": "main-system-character_state",
+            "type": "main_segment",
+            "messageStartPosition": 16,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 3
+          },
+          {
+            "id": "profile-live",
+            "type": "description_dynamic",
+            "messageStartPosition": 17,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 21
+          },
+          {
+            "id": "responder-game-facts",
+            "type": "responder_game_facts",
+            "messageStartPosition": 18,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 648
+          },
+          {
+            "id": "live-relationships",
+            "type": "live_relationships",
+            "messageStartPosition": 19,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 16
+          },
+          {
+            "id": "current-presence-roster",
+            "type": "presence_roster",
+            "messageStartPosition": 20,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 10
+          },
+          {
+            "id": "memory-session-topic-anchor",
+            "type": "memory_session_topic_anchor",
+            "messageStartPosition": 21,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 5
+          },
+          {
+            "id": "rolling",
+            "type": "rolling_summary",
+            "messageStartPosition": 22,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 13
+          },
+          {
+            "id": "worldline-stable",
+            "type": "worldline_stable",
+            "messageStartPosition": 23,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 5
+          },
+          {
+            "id": "worldline-current",
+            "type": "worldline_current",
+            "messageStartPosition": 24,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 6
+          },
+          {
+            "id": "worldline-topic",
+            "type": "worldline_topic",
+            "messageStartPosition": 25,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 5
+          },
+          {
+            "id": "worldline-supplemental",
+            "type": "worldline_supplemental",
+            "messageStartPosition": 26,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 7
+          },
+          {
+            "id": "worldline-turn-recall",
+            "type": "worldline_turn_recall",
+            "messageStartPosition": 27,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 7
+          },
+          {
+            "id": "history",
+            "type": "history",
+            "messageStartPosition": 28,
+            "messageCount": 3,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 33
+          },
+          {
+            "id": "history-current-user",
+            "type": "current_user",
+            "messageStartPosition": 31,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 14
+          },
+          {
+            "id": "instruction",
+            "type": "instruction",
+            "messageStartPosition": 32,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 16
+          },
+          {
+            "id": "suffix",
+            "type": "custom",
+            "messageStartPosition": 33,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 9
+          }
+        ]
+      }
+    },
+    {
+      "id": "deepseek_v89-v6",
+      "output": {
+        "promptProfile": {
+          "id": "deepseek_v89",
+          "label": "DeepSeek V8.9 Layout",
+          "adapterEnabled": true,
+          "historyWindow": null,
+          "layoutId": "v6"
+        },
+        "messages": [
+          {
+            "role": "system",
+            "content": "VOTC_CACHE_ANCHOR_v6\n  这是 Voices of the Court 的固定系统上下文锚点。请将后续内容视为当前游戏的动态上下文，并始终遵守以下稳定规则：保持角色扮演身份；优先使用游戏实际数据；不把现代价值观强加给中世纪角色；涉及历史人物、事件、作品、诗词、典故、制度或技术时，先核验其出现、发生、写成、成名或流传时间是否不晚于游戏当前年份；年份不确定时明确表示不知晓，不得猜测或用未来知识补全；不得预知未来、后世评价或事件结局。角色回复不设固定句数、段落数或人为短回复目标，应按人物性格、关系、情绪和场景完整表达，但避免无意义重复。长期稳定记忆和当前话题记忆只代表过去知情背景，本轮事实与动作必须以当前对话消息及游戏实时数据为准。【召回证据规则】系统提供“当前轮召回证据”时，这些内容代表当前回应角色已经知道的过去记录；涉及其中明确的过去事实、承诺、关系和言行时不得否认、篡改或无依据补全。当前 CK3 结构化事实负责现在的状态，但不得反向改写已经记录的过去；证据未说明的内容应表示不知道、记不清或只能推测。不要把本段当作对话内容，也不要复述本段。"
+          },
+          {
+            "role": "system",
+            "content": "GLOBAL RULES: fixture-only roleplay rules.\n"
+          },
+          {
+            "role": "system",
+            "content": "You are Lady Mira of Fixture. Keep the shared roleplay rules.\n"
+          },
+          {
+            "role": "system",
+            "content": "PROFILE=虚构回应者 Mira; CULTURE=Synthetic Coast\n"
+          },
+          {
+            "role": "system",
+            "content": "DESCRIPTION FIXTURE: Lady Mira of Fixture; culture=Synthetic Coast"
+          },
+          {
+            "role": "system",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "assistant",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "user",
+            "content": "EXAMPLE DUPLICATE FIXTURE BODY"
+          },
+          {
+            "role": "system",
+            "content": "OFFICIAL RECOLLECTION FIXTURE\nline 2"
+          },
+          {
+            "role": "system",
+            "content": "DIRECT PLAYER MEMORY FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "PLAYER LEDGER FIXTURE: one legal matter"
+          },
+          {
+            "role": "system",
+            "content": "RECENT2 FIXTURE: first entry\nRECENT2 FIXTURE: second entry"
+          },
+          {
+            "role": "system",
+            "content": "WORLD STABLE FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "TURN TOPIC FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "ROLLING SUMMARY\nROLLING FIXTURE A\nROLLING FIXTURE B"
+          },
+          {
+            "role": "user",
+            "content": "DUPLICATE BODY|same fixture bytes"
+          },
+          {
+            "role": "assistant",
+            "content": "DUPLICATE BODY|same fixture bytes"
+          },
+          {
+            "role": "assistant",
+            "content": "Synthetic Narrator: Line one\n\nLine two | separator fixture."
+          },
+          {
+            "role": "system",
+            "content": "WORLD DATE=1175.6.14; SCENE=Synthetic court chamber\n"
+          },
+          {
+            "role": "system",
+            "content": "STATE=123"
+          },
+          {
+            "role": "system",
+            "content": "[date(1175.6.14)]"
+          },
+          {
+            "role": "system",
+            "content": "=== 当前回应角色的权威游戏资料（本轮 CK3 数据） ===\n  - 游戏姓名／称号：Lady Mira of Fixture\n  - 姓名：虚构回应者 Mira\n  - 年龄：游戏未提供\n  - 主要头衔：Countess of Example\n  - 宫廷／议会职位：Fixture Chancellor\n  - 头衔等级：concept_county\n  当被问及自己的姓名、称号、头衔、官职或年龄时，必须逐项以以上本轮游戏数据直接回答；不得根据历史、对话记忆或常识猜测，也不得用年龄阶段替代具体岁数。\n\n=== 玩家身份知情边界（本轮高优先级，适用于当前回应角色） ===\n  - 当前 CK3 身份识别关系证据：未提供。关系证据支持双方相识及相应称谓，不自动授予全部后台身份资料；缺少记录不等于从未相识。\n  - 人物资料、在场表、场景说明、Runtime ID 和消息说话者前缀里的玩家姓名、全名、家族、头衔与官职都是后台标签，不构成本角色已经知道玩家身份的证据。本边界优先于这些资料和标签。称号（Nickname）默认可见，用于角色扮演，但不授予真名、精确头衔或官职。\n  - 只可依据当前 CK3 明确的亲属或正式关系、本角色获准的记忆、获准的公开事实，以及当前对话正文中明确说出的自我介绍或他人介绍识别玩家。只授予来源明确给出的那项姓名或身份，不得据此解锁整包玩家资料；介绍中的化名不等于已得知后台真名。已公开的头衔和特质逐项限定于获知的角色；旧头衔不代表自动知道新头衔，已消失特质不作为当前属性。\n  - 当前回合开始交谈、同场、好感数值、SHARED_SCENE 或本次相遇的直接交谈次数，都不等于已知玩家身份。没有上述具体身份来源时，应按尚未识别的对方自然回应，不得主动叫出后台姓名、家族、头衔或官职，也不得因为系统提供资料而装作早已认识。\n  - 私下交谈和信件不会自动变成全世界的传闻。对话记忆中的 public 只表示当场公开说出，不是全球公开；只有该记忆明确授权的知情者可以引用。亲友、同国、同地、身份声望和时间流逝都不是获得他人私聊的证据。\n  - 只能引用本请求为当前回应角色提供的获准记忆、来源明确的公开事实或本人已听见的当前对话。没有具体来源时，不得用“听说”“传闻”“有人告诉我”补造玩家过去的谈话、经历、交易或秘密，也不得为后台人物资料编造传播渠道；可以询问，但不能装作已经知道。"
+          },
+          {
+            "role": "system",
+            "content": "PRESENCE FIXTURE: responder and player"
+          },
+          {
+            "role": "system",
+            "content": "WORLD TOPIC FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD SUPPLEMENTAL FIXTURE"
+          },
+          {
+            "role": "system",
+            "content": "WORLD CURRENT FIXTURE"
+          },
+          {
+            "role": "user",
+            "content": "CURRENT QUESTION|what happened in this fictional scene?"
+          },
+          {
+            "role": "system",
+            "content": "WORLD TURN RECALL FIXTURE"
+          },
+          {
+            "role": "user",
+            "content": "FINAL INSTRUCTION|Lady Mira of Fixture|Synthetic court chamber"
+          },
+          {
+            "role": "system",
+            "content": "SUFFIX START\n1175.6.14\nSUFFIX END"
+          }
+        ],
+        "anchor": {
+          "role": "system",
+          "utf8Base64": "Vk9UQ19DQUNIRV9BTkNIT1JfdjYKICDov5nmmK8gVm9pY2VzIG9mIHRoZSBDb3VydCDnmoTlm7rlrprns7vnu5/kuIrkuIvmlofplJrngrnjgILor7flsIblkI7nu63lhoXlrrnop4bkuLrlvZPliY3muLjmiI/nmoTliqjmgIHkuIrkuIvmlofvvIzlubblp4vnu4jpgbXlrojku6XkuIvnqLPlrprop4TliJnvvJrkv53mjIHop5LoibLmia7mvJTouqvku73vvJvkvJjlhYjkvb/nlKjmuLjmiI/lrp7pmYXmlbDmja7vvJvkuI3miornjrDku6Pku7flgLzop4LlvLrliqDnu5nkuK3kuJbnuqrop5LoibLvvJvmtonlj4rljoblj7LkurrnianjgIHkuovku7bjgIHkvZzlk4HjgIHor5for43jgIHlhbjmlYXjgIHliLbluqbmiJbmioDmnK/ml7bvvIzlhYjmoLjpqozlhbblh7rnjrDjgIHlj5HnlJ/jgIHlhpnmiJDjgIHmiJDlkI3miJbmtYHkvKDml7bpl7TmmK/lkKbkuI3mmZrkuo7muLjmiI/lvZPliY3lubTku73vvJvlubTku73kuI3noa7lrprml7bmmI7noa7ooajnpLrkuI3nn6XmmZPvvIzkuI3lvpfnjJzmtYvmiJbnlKjmnKrmnaXnn6Xor4booaXlhajvvJvkuI3lvpfpooTnn6XmnKrmnaXjgIHlkI7kuJbor4Tku7fmiJbkuovku7bnu5PlsYDjgILop5LoibLlm57lpI3kuI3orr7lm7rlrprlj6XmlbDjgIHmrrXokL3mlbDmiJbkurrkuLrnn63lm57lpI3nm67moIfvvIzlupTmjInkurrnianmgKfmoLzjgIHlhbPns7vjgIHmg4Xnu6rlkozlnLrmma/lrozmlbTooajovr7vvIzkvYbpgb/lhY3ml6DmhI/kuYnph43lpI3jgILplb/mnJ/nqLPlrprorrDlv4blkozlvZPliY3or53popjorrDlv4blj6rku6Pooajov4fljrvnn6Xmg4Xog4zmma/vvIzmnKzova7kuovlrp7kuI7liqjkvZzlv4Xpobvku6XlvZPliY3lr7nor53mtojmga/lj4rmuLjmiI/lrp7ml7bmlbDmja7kuLrlh4bjgILjgJDlj6zlm57or4Hmja7op4TliJnjgJHns7vnu5/mj5DkvpvigJzlvZPliY3ova7lj6zlm57or4Hmja7igJ3ml7bvvIzov5nkupvlhoXlrrnku6PooajlvZPliY3lm57lupTop5LoibLlt7Lnu4/nn6XpgZPnmoTov4fljrvorrDlvZXvvJvmtonlj4rlhbbkuK3mmI7noa7nmoTov4fljrvkuovlrp7jgIHmib/or7rjgIHlhbPns7vlkozoqIDooYzml7bkuI3lvpflkKborqTjgIHnr6HmlLnmiJbml6Dkvp3mja7ooaXlhajjgILlvZPliY0gQ0szIOe7k+aehOWMluS6i+Wunui0n+i0o+eOsOWcqOeahOeKtuaAge+8jOS9huS4jeW+l+WPjeWQkeaUueWGmeW3sue7j+iusOW9leeahOi/h+WOu++8m+ivgeaNruacquivtOaYjueahOWGheWuueW6lOihqOekuuS4jeefpemBk+OAgeiusOS4jea4heaIluWPquiDveaOqOa1i+OAguS4jeimgeaKiuacrOauteW9k+S9nOWvueivneWGheWuue+8jOS5n+S4jeimgeWkjei/sOacrOauteOAgg==",
+          "sha256": "69b8b21f59107169a4d743595a9fac27de0bf3d134d074f45e4b7ce9cdb9969a"
+        },
+        "blockOrder": [
+          {
+            "id": "cache-anchor",
+            "type": "cache_anchor",
+            "role": null,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC"
+          },
+          {
+            "id": "main-system-stable_global",
+            "type": "main_segment",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "main-system-stable_history_rp",
+            "type": "main_segment",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "main-system-character_base",
+            "type": "main_segment",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "profile-stable",
+            "type": "description",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "examples",
+            "type": "examples",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-official-recollection",
+            "type": "memory_official_recollection",
+            "role": null,
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-direct-frozen",
+            "type": "memory_direct_frozen",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-player-ledger-frozen",
+            "type": "memory_player_ledger_frozen",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-stable",
+            "type": "memory_stable",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "worldline-stable",
+            "type": "worldline_stable",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "memory-session-topic-anchor",
+            "type": "memory_session_topic_anchor",
+            "role": "system",
+            "stable": true,
+            "lifecycle": null
+          },
+          {
+            "id": "rolling",
+            "type": "rolling_summary",
+            "role": "system",
+            "stable": null,
+            "lifecycle": null
+          },
+          {
+            "id": "history",
+            "type": "history",
+            "role": null,
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "main-system-world_context",
+            "type": "main_segment",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "main-system-character_state",
+            "type": "main_segment",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "profile-dynamic",
+            "type": "description_dynamic",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "responder-game-facts",
+            "type": "responder_game_facts",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "current-presence-roster",
+            "type": "presence_roster",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "worldline-topic",
+            "type": "worldline_topic",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "worldline-supplemental",
+            "type": "worldline_supplemental",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "worldline-current",
+            "type": "worldline_current",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "history-current-user",
+            "type": "current_user",
+            "role": null,
+            "stable": false,
+            "lifecycle": null
+          },
+          {
+            "id": "worldline-turn-recall",
+            "type": "worldline_turn_recall",
+            "role": "system",
+            "stable": false,
+            "lifecycle": "DYNAMIC"
+          },
+          {
+            "id": "instruction",
+            "type": "instruction",
+            "role": "user",
+            "stable": null,
+            "lifecycle": null
+          },
+          {
+            "id": "suffix",
+            "type": "custom",
+            "role": "system",
+            "stable": null,
+            "lifecycle": null
+          }
+        ],
+        "tokenCounts": {
+          "totalTokens": 1260,
+          "staticTokens": 471,
+          "dynamicTokens": 789,
+          "globalStaticTokens": 338,
+          "conversationFrozenTokens": 0,
+          "responderFrozenTokens": 0,
+          "actualStablePrefixTokens": 471,
+          "declaredStaticTokens": 471,
+          "dynamicTailTokens": 789,
+          "omittedHistoryTokens": 0
+        },
+        "requestBudget": {
+          "estimatedInputTokens": 1386,
+          "reservedOutputTokens": 777,
+          "outputReserveTokens": 777,
+          "protocolOverheadTokens": 272,
+          "safetyMarginTokens": 984,
+          "effectiveInputBudget": 6159,
+          "usableInputBudget": 6159,
+          "budgetStatus": "INPUT_AVAILABLE",
+          "pressureRatio": 0.22503653190452996,
+          "safe": true
+        },
+        "diagnosticBlocks": [
+          {
+            "id": "cache-anchor",
+            "type": "cache_anchor",
+            "messageStartPosition": 0,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": "GLOBAL_STATIC",
+            "tokens": 338
+          },
+          {
+            "id": "main-system-stable_global",
+            "type": "main_segment",
+            "messageStartPosition": 1,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 11
+          },
+          {
+            "id": "main-system-stable_history_rp",
+            "type": "main_segment",
+            "messageStartPosition": 2,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 16
+          },
+          {
+            "id": "main-system-character_base",
+            "type": "main_segment",
+            "messageStartPosition": 3,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 14
+          },
+          {
+            "id": "profile-stable",
+            "type": "description",
+            "messageStartPosition": 4,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 17
+          },
+          {
+            "id": "examples",
+            "type": "examples",
+            "messageStartPosition": 5,
+            "messageCount": 3,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 24
+          },
+          {
+            "id": "memory-official-recollection",
+            "type": "memory_official_recollection",
+            "messageStartPosition": 8,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 9
+          },
+          {
+            "id": "memory-direct-frozen",
+            "type": "memory_direct_frozen",
+            "messageStartPosition": 9,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 7
+          },
+          {
+            "id": "memory-player-ledger-frozen",
+            "type": "memory_player_ledger_frozen",
+            "messageStartPosition": 10,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 10
+          },
+          {
+            "id": "memory-stable",
+            "type": "memory_stable",
+            "messageStartPosition": 11,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 15
+          },
+          {
+            "id": "worldline-stable",
+            "type": "worldline_stable",
+            "messageStartPosition": 12,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 5
+          },
+          {
+            "id": "memory-session-topic-anchor",
+            "type": "memory_session_topic_anchor",
+            "messageStartPosition": 13,
+            "messageCount": 1,
+            "stable": true,
+            "lifecycle": null,
+            "tokens": 5
+          },
+          {
+            "id": "rolling",
+            "type": "rolling_summary",
+            "messageStartPosition": 14,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 13
+          },
+          {
+            "id": "history",
+            "type": "history",
+            "messageStartPosition": 15,
+            "messageCount": 3,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 33
+          },
+          {
+            "id": "main-system-world_context",
+            "type": "main_segment",
+            "messageStartPosition": 18,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 13
+          },
+          {
+            "id": "main-system-character_state",
+            "type": "main_segment",
+            "messageStartPosition": 19,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 3
+          },
+          {
+            "id": "profile-dynamic",
+            "type": "description_dynamic",
+            "messageStartPosition": 20,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 5
+          },
+          {
+            "id": "responder-game-facts",
+            "type": "responder_game_facts",
+            "messageStartPosition": 21,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 648
+          },
+          {
+            "id": "current-presence-roster",
+            "type": "presence_roster",
+            "messageStartPosition": 22,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 10
+          },
+          {
+            "id": "worldline-topic",
+            "type": "worldline_topic",
+            "messageStartPosition": 23,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 5
+          },
+          {
+            "id": "worldline-supplemental",
+            "type": "worldline_supplemental",
+            "messageStartPosition": 24,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 7
+          },
+          {
+            "id": "worldline-current",
+            "type": "worldline_current",
+            "messageStartPosition": 25,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 6
+          },
+          {
+            "id": "history-current-user",
+            "type": "current_user",
+            "messageStartPosition": 26,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 14
+          },
+          {
+            "id": "worldline-turn-recall",
+            "type": "worldline_turn_recall",
+            "messageStartPosition": 27,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": "DYNAMIC",
+            "tokens": 7
+          },
+          {
+            "id": "instruction",
+            "type": "instruction",
+            "messageStartPosition": 28,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 16
+          },
+          {
+            "id": "suffix",
+            "type": "custom",
+            "messageStartPosition": 29,
+            "messageCount": 1,
+            "stable": false,
+            "lifecycle": null,
+            "tokens": 9
+          }
+        ]
+      }
+    }
+  ]
+}

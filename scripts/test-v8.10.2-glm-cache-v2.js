@@ -164,7 +164,8 @@ const baseHistory = [
   { role: "user", content: "当前问题 A" }
 ];
 const build = (history = baseHistory, summary = "ROLLING A", context = memoryContext, character = responder) => {
-  const result = PromptBuilder.buildMessagesWithTokenCount(history, character, gameData, summary, context, { providerType: "zhipu", defaultModel: "glm-5.3-flash" });
+  const result = PromptBuilder.buildMessagesWithTokenCount(history, character, gameData, summary, context,
+    { providerType: "zhipu", defaultModel: "glm-5.3-flash" }, { promptPlanMode: "legacy" });
   return { result, metadata: Conversation.buildPromptBlockMetadata(result) };
 };
 

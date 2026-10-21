@@ -98,7 +98,8 @@ const memoryContext = {
   worldTurnRecallText: "WORLD_TURN_RECALL"
 };
 
-const build = (sourceHistory = history) => PromptBuilder.buildMessagesWithTokenCount(sourceHistory, responder, gameData, "", memoryContext, providerConfig);
+const build = (sourceHistory = history) => PromptBuilder.buildMessagesWithTokenCount(sourceHistory, responder, gameData, "", memoryContext, providerConfig,
+  { promptPlanMode: "legacy" });
 const blockIndex = (result, id) => result.blocks.findIndex((entry) => entry.block.id === id);
 const familyContent = (result) => result.blocks.find((entry) => entry.block.id === "responder-family-facts")?.content;
 

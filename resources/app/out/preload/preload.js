@@ -202,6 +202,7 @@ electron.contextBridge.exposeInMainWorld("providerDiagnosticsAPI", {
   getStatus: () => electron.ipcRenderer.invoke("providerDiagnostics:getStatus"),
   getRealRequestDiff: (limit) => electron.ipcRenderer.invoke("provider-diagnostics:get-real-request-diff", limit),
   exportRealRequestDiff: (limit) => electron.ipcRenderer.invoke("provider-diagnostics:export-real-request-diff", limit),
+  exportCacheDiagnosticsV2: (limit) => electron.ipcRenderer.invoke("provider-diagnostics:export-cache-diagnostics-v2", limit),
   getRecent: (limit) => electron.ipcRenderer.invoke("providerDiagnostics:getRecent", limit),
   exportRecent: (limit) => electron.ipcRenderer.invoke("providerDiagnostics:exportRecent", limit),
   getV89Settings: () => electron.ipcRenderer.invoke("providerDiagnostics:getV89Settings"),

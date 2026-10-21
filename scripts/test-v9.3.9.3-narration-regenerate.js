@@ -40,7 +40,13 @@ function fixture({ stream = false, failRewrite = false, revokeBeforeSend = false
   Conversation.configure({
     memoryEngine: { trace: { record() {} }, validatePlayerMemoryContext: () => ({ valid: validSources, reason: "FORGOTTEN" }) },
     PromptBuilder: {
-      buildMessagesWithTokenCount: history => ({ messages: history.map(({ role, content }) => ({ role, content })), blocks: [] }),
+      buildMessagesWithTokenCount: (history, _npc, _gameData, _summary, _memoryContext, _provider, options = {}) => ({
+        messages: [
+          ...history.map(({ role, content }) => ({ role, content })),
+          ...(options.currentTurnInstructions ? [{ role: "user", content: options.currentTurnInstructions }] : [])
+        ],
+        blocks: []
+      }),
       getMemoryBlockTokenCount: () => 0
     },
     TokenCounter: { estimateTokens: text => Math.ceil(String(text).length / 4) },

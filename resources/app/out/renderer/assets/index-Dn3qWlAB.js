@@ -1,6 +1,6 @@
 import { WorldMemoryEditor } from "../world-memory-editor.js";
 import { getLegacySummaryPage, getSummaryDisplayEntries, getSummaryImportantMatters } from "../summary-date-order.js";
-const VOTC_FEATURE_VERSION = "V9.3.9.3";
+const VOTC_FEATURE_VERSION = "V9.4.0";
 const VOTC_WORKSHOP_MOD_VERSION = "2.0.5";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -22582,6 +22582,18 @@ const ProviderDiagnosticsView = () => {
       setBusy(null);
     }
   };
+  const exportCacheV2 = async () => {
+    try {
+      setBusy("cache-export");
+      const result = await window.providerDiagnosticsAPI.exportCacheDiagnosticsV2(300);
+      setExportResult(result);
+      if (!result?.success) setError(result?.error || text("Cache V2 导出失败。", "Cache V2 export failed."));
+    } catch (exportError) {
+      setError(exportError?.message || text("Cache V2 导出失败。", "Cache V2 export failed."));
+    } finally {
+      setBusy(null);
+    }
+  };
   const copyEntry = async (entry) => {
     try {
       await navigator.clipboard.writeText(JSON.stringify(entry, null, 2));
@@ -22592,6 +22604,23 @@ const ProviderDiagnosticsView = () => {
   };
   const summary = report?.summary || {};
   const entries = Array.isArray(report?.entries) ? report.entries : [];
+  const cacheV2 = report?.cacheDiagnosticsV2 || {};
+  const cacheV2Groups = Array.isArray(cacheV2.summary?.groups) ? cacheV2.summary.groups : [];
+  const cacheV2Entries = Array.isArray(cacheV2.entries) ? cacheV2.entries : [];
+  const cacheEvidenceValue = (field) => field?.value == null ? field?.source || "UNKNOWN" : `${formatTokens(field.value)} (${field.source || "UNKNOWN"})`;
+  const cacheEvidenceHash = (value) => typeof value === "string" && value.length >= 12 ? value.slice(0, 12) : "UNKNOWN";
+  const cacheEvidenceTokens = (value) => value == null ? "UNKNOWN" : formatTokens(value);
+  const cacheEvidenceTime = (value) => Number.isFinite(value) ? formatInterval(value) : "UNKNOWN";
+  const renderCacheV2Entry = (entry, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { children: [formatTime(entry.time?.requestStart), " · ", entry.route?.providerType || "UNKNOWN", " / ", entry.route?.modelId || "UNKNOWN", " / ", entry.route?.requestType || "UNKNOWN", " · ", entry.outcome || "UNKNOWN"] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostics", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("原生输入", "Native input"), "：", cacheEvidenceValue(entry.provider?.inputTokens), " · ", text("原生输出", "Native output"), "：", cacheEvidenceValue(entry.provider?.outputTokens)] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("原生命中", "Native cached"), "：", cacheEvidenceValue(entry.provider?.cacheHit), " · ", text("原生 miss", "Native miss"), "：", cacheEvidenceValue(entry.provider?.cacheMiss), " · ", text("派生 miss", "Derived miss"), "：", cacheEvidenceValue(entry.provider?.derivedCacheMissTokens)] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["Plan：", entry.plan?.evidenceStatus || "UNKNOWN", " · Owner：", entry.plan?.ownerEvidence || "UNKNOWN", " · ", text("fallback", "Fallback"), "：", entry.plan?.fallbackReason || "NONE"] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["Final request：", entry.effectiveRequest?.source || "UNKNOWN", " · fingerprint:", cacheEvidenceHash(entry.effectiveRequest?.fingerprint), " · route:", cacheEvidenceHash(entry.effectiveRequest?.endpointFingerprint), " · params:", cacheEvidenceHash(entry.effectiveRequest?.payloadParametersFingerprint), " · protocol:", entry.effectiveRequest?.protocol || "UNKNOWN", " · stream:", entry.effectiveRequest?.stream === true ? "true" : entry.effectiveRequest?.stream === false ? "false" : "UNKNOWN"] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["Provider break：", entry.provider?.nativeCacheBreakPosition?.source || "UNKNOWN", " · reasoning TTFT：", cacheEvidenceTime(entry.time?.reasoningTTFTMs), " · visible TTFT：", cacheEvidenceTime(entry.time?.visibleTTFTMs), " · ", text("首个变化块 hash", "First changed block hash"), "：", entry.local?.firstChangedBlockId || text("未知／多块", "unknown / multiple blocks"), " · ", text("稳定前缀候选", "Stable-prefix candidate"), "：", cacheEvidenceTokens(entry.local?.stablePrefixCandidateTokens), " Estimated"] })
+    ] })
+  ] }, `${entry.requestKey || "cache-v2"}-${index}`);
   const metric = (label, value) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: value })] }, label);
   const renderEntry = (entry, index) => {
     const diff = entry.realRequestDiff || {};
@@ -22610,6 +22639,8 @@ const ProviderDiagnosticsView = () => {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("当前 Prefix Fingerprint", "Current Prefix Fingerprint"), "：", diff.currentPrefixFingerprint || "—", " · ", text("上一 Prefix", "Previous Prefix"), "：", diff.previousPrefixFingerprint || "—", " · ", text("Prefix 变化", "Prefix changed"), "：", diff.prefixChanged == null ? "—" : diff.prefixChanged ? "YES" : "NO"] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("Route Scope Prefix", "Route Scope Prefix"), "：", formatTokens(diff.routeScopeEstimatedCommonPrefixTokens), " Estimated · Provider Cached：", formatTokens(entry.providerUsage?.cachedTokens), " · Ratio：", formatPercent(diff.cacheToEstimatedPrefixRatio)] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("首个语义块变化", "First semantic block difference"), "：", diff.firstDifferentBlockId || "—", " · ", text("对齐", "Alignment"), "：", alignmentLabel(entry.alignmentStatus)] }),
+        entry.cacheDiagnosticsV2 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["Cache V2 · ", text("原生命中", "Native cached"), "：", entry.cacheDiagnosticsV2.provider?.cacheHit?.value == null ? entry.cacheDiagnosticsV2.provider?.cacheHit?.source || "—" : formatTokens(entry.cacheDiagnosticsV2.provider.cacheHit.value) + " (" + entry.cacheDiagnosticsV2.provider.cacheHit.source + ")", " · ", text("原生/派生 miss", "Native/derived miss"), "：", entry.cacheDiagnosticsV2.provider?.cacheMiss?.value == null ? entry.cacheDiagnosticsV2.provider?.cacheMiss?.source || "—" : formatTokens(entry.cacheDiagnosticsV2.provider.cacheMiss.value) + " (" + entry.cacheDiagnosticsV2.provider.cacheMiss.source + ")", " · ", text("本地稳定前缀候选", "Local stable-prefix candidate"), "：", formatTokens(entry.cacheDiagnosticsV2.local?.stablePrefixCandidateTokens), " Estimated · ", text("首个变化块 hash", "First-changed block hash"), "：", entry.cacheDiagnosticsV2.local?.firstChangedBlockId || text("未知／多块", "unknown / multiple blocks"), " · Provider break：", entry.cacheDiagnosticsV2.provider?.nativeCacheBreakPosition?.source || "UNKNOWN"] }),
+        entry.localPrefixDiagnostics?.method === "ordered_prefix_estimate_v1" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("旧 ordered_prefix_estimate_v1 首个未命中区块仅为按序估算，不代表真实 Provider 断点。", "Legacy ordered_prefix_estimate_v1 first-miss block is an ordered estimate, not the real Provider breakpoint.") }),
         first && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("首个变化 Message", "First changed message"), "：#", diff.firstDifferentMessagePosition, " · Shared content：", formatTokens(first.commonPrefixEstimatedTokens), " Estimated · Shared chunks：", first.commonChunkCount] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("Estimated 由 VOTC TokenCounter 计算；8K 只是异常诊断阈值，不是 Provider 官方缓存阈值。", "Estimated values use the VOTC TokenCounter; 8K is a diagnostic threshold, not an official Provider cache threshold.") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "provider-diagnostic-real-messages", children: messages.map((message) => {
@@ -22642,7 +22673,8 @@ const ProviderDiagnosticsView = () => {
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("只分析真实 VOCT Chat outbound request；比较 Route、Conversation 和 Responder scope。只持久化 hash、Token、ID、时间与 Provider Usage，不保存 Prompt 正文。", "Analyzes real VOCT Chat outbound requests across Route, Conversation, and Responder scopes. Only hashes, token counts, IDs, timing, and Provider Usage are persisted; prompt text is never stored.") }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: load, disabled: busy != null, children: text("刷新", "Refresh") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: exportDiff, disabled: busy != null, children: busy === "export" ? text("导出中…", "Exporting…") : text("导出 Real Request Diff", "Export Real Request Diff") })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: exportDiff, disabled: busy != null, children: busy === "export" ? text("导出中…", "Exporting…") : text("导出 Real Request Diff", "Export Real Request Diff") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: exportCacheV2, disabled: busy != null, children: busy === "cache-export" ? text("导出中…", "Exporting…") : text("导出匿名 Cache V2", "Export Anonymous Cache V2") })
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
@@ -22660,6 +22692,26 @@ const ProviderDiagnosticsView = () => {
         /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: conclusionLabel(summary.conclusion) })
       ] })
     ] }),
+    cacheV2Groups.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("Cache Diagnostics V2 · 原生证据", "Cache Diagnostics V2 · Native evidence") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("仅 Provider 原生 cached 与 input Token 参与同组加权率；缺失、非法、零输入、失败和取消均排除并计数。DERIVED miss、本地连续前缀候选与首个变化块是不同证据；真实 Provider 断点在未明确上报时为 UNKNOWN。旧 ordered_prefix_estimate_v1 是历史按序估算。", "Only provider-reported cached and input tokens enter the grouped weighted rate; missing, invalid, zero-input, failed, and cancelled requests are excluded and counted. DERIVED miss, local stable-prefix candidate, and first changed block are separate evidence. The real Provider breakpoint is UNKNOWN unless explicitly reported. Legacy ordered_prefix_estimate_v1 remains an ordered estimate.") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: [text("样本", "Samples"), "：", cacheV2.summary?.sampleCount || 0, " · ", formatTime(cacheV2.summary?.window?.start), " – ", formatTime(cacheV2.summary?.window?.end)] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-table", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-row provider-diagnostic-real-head", children: [text("Provider / Model / Route / Mode", "Provider / Model / Route / Mode"), text("Requests / included", "Requests / included"), text("Weighted native hit", "Weighted native hit"), text("Zero / missing / invalid / inconsistent", "Zero / missing / invalid / inconsistent"), text("Unknown / excluded", "Unknown / excluded"), text("Failed / cancelled · derived miss", "Failed / cancelled · derived miss"), text("Avg reasoning / visible TTFT", "Avg reasoning / visible TTFT")] }),
+        ...cacheV2Groups.map((row) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-row", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: [row.route?.providerType || "—", " / ", row.route?.modelId || "—", " / ", row.route?.requestType || "—", " / ", row.stream === true ? "stream" : row.stream === false ? "non-stream" : "mode unknown", " / route:", row.route?.routeKey?.slice(0, 8) || "unknown", " / params:", row.effectiveParametersKey?.slice(0, 8) || "unknown"] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: [row.requestCount, " / ", row.hitRateIncludedRequests] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: [formatPercent(row.weightedHitRate), " (", formatTokens(row.nativeCachedTokens), " / ", formatTokens(row.nativeInputTokens), ")"] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: [row.providerReportedZeroRequests, " / ", row.missingUsageRequests, " / ", row.invalidUsageRequests, " / ", row.inconsistentUsageRequests] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: [row.unknownRequests, " / ", row.excludedRequests] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: [row.failedRequests, " / ", row.cancelledRequests, " · ", row.derivedMissRequests, " / ", formatTokens(row.derivedCacheMissTokens)] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: [formatInterval(row.averageReasoningTTFTMs), " / ", formatInterval(row.averageVisibleTTFTMs)] })
+        ] }, row.groupKey))
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: text("匿名单次请求证据", "Anonymous per-request evidence") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: [text("显示最近", "Showing latest"), " ", Math.min(cacheV2Entries.length, 30), " / ", cacheV2Entries.length, " · UNKNOWN 保持为 UNKNOWN；仅显示脱敏字段与哈希。"] }),
+      ...cacheV2Entries.slice(0, 30).map(renderCacheV2Entry)
+    ] }) || null,
     status && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("当前 Chat Provider 状态", "Current Chat Provider status") }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-metrics", children: [

@@ -14,6 +14,8 @@ const { verifyActionConfirmation, settleActionResult } = require("../actions/act
 const { readActionCommandReadback } = require("../actions/action-command-readback");
 const { validateGenerationOutcome } = require("../providers/generation-outcome");
 const { planRequestBudget } = require("../providers/request-budget");
+const { preflightPromptPlan, extendContinuationProof } = require("../prompts/prompt-plan-compat");
+const { fingerprint: planFingerprint } = require("../prompts/prompt-plan-contract");
 const { PLAYER_CENTERED_RECALL_ENABLED, DEFAULT_MEMORY_BUDGET_POLICY_REVISION,
   resolveMemoryBudget } = require("../memory-system/memory-budget-policy");
 
@@ -141,11 +143,15 @@ class Conversation {
     const hasExplicitStability = (promptBuild.blocks || []).some(({ block }) => block?.stable !== undefined);
     const messages = Array.isArray(promptBuild.messages) ? promptBuild.messages : [];
     let messageCursor = 0;
-    const blocks = (promptBuild.blocks || []).map(({ block, content, tokens }, index) => {
+    const blocks = (promptBuild.blocks || []).map(({ block, content, tokens, messageSpan }, index) => {
       let messageStartPosition = null;
       let messageCount = 0;
       const blockContent = typeof content === "string" ? content : "";
-      for (let end = messageCursor + 1; blockContent && end <= messages.length; end += 1) {
+      if (messageSpan) {
+        messageStartPosition = messageSpan.start;
+        messageCount = messageSpan.end - messageSpan.start;
+        messageCursor = messageSpan.end;
+      } else for (let end = messageCursor + 1; blockContent && end <= messages.length; end += 1) {
         const candidate = messages.slice(messageCursor, end);
         const directContent = candidate.length === 1 ? candidate[0]?.content : null;
         const roleContent = candidate.map((message) => `${message.role}: ${message.content}`).join("\n\n");
@@ -1471,19 +1477,23 @@ class Conversation {
       if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
       const promptBuildStartedAt = Date.now();
       const activeConfig = settingsRepository.getActiveProviderConfig();
+      const promptGameRevision = () => planFingerprint([this.gameData.campaignToken, this.gameData.date, this.gameData.totalDays,
+        this.gameData.scene, this.gameData.location, this.gameData.locationController]);
+      const builtGameRevision = promptGameRevision();
       const promptBuild = traceOperation(performanceTrace, "prompt.build", { attribution: "MAIN", context: diagnosticsContext }, () => PromptBuilder.buildMessagesWithTokenCount(
         this.getPromptHistoryForCharacter(npc.id),
         npc,
         this.gameData,
         this.getPromptSummaryForCharacter(npc.id),
         memoryContext,
-        activeConfig
+        activeConfig,
+        { promptPlanScope: { campaignToken: this.gameData.campaignToken, conversationId: this.id, ownerId: Number(npc.id),
+            responderId: Number(npc.id), playerId: Number(this.gameData.playerID), conversationEpoch: this.conversationEpoch, logicalTurnEpoch: turnEpoch },
+          ...(narrationTarget ? { currentTurnInstructions: "请只重新表达你在本轮的最后一条台词，不要续写新一轮，也不要重新回应其后的发言。已经发生的游戏动作及其结果保持不变；不得撤销、重复或新增动作，只输出替换台词。" } : {}) }
       ));
       const promptBuildMs = Date.now() - promptBuildStartedAt;
-      const llmMessages = narrationTarget ? [...promptBuild.messages, {
-        role: "user",
-        content: "请只重新表达你在本轮的最后一条台词，不要续写新一轮，也不要重新回应其后的发言。已经发生的游戏动作及其结果保持不变；不得撤销、重复或新增动作，只输出替换台词。"
-      }] : promptBuild.messages;
+      const llmMessages = promptBuild.messages;
+      const chatPlanProof = promptBuild.promptPlan ? { plan: promptBuild.promptPlan, serialized: promptBuild.serialized, ownerEvidence: true } : null;
       const promptBlockMetadata = Conversation.buildPromptBlockMetadata(promptBuild);
       const promptBlockTokens = (id) => promptBlockMetadata.blocks.filter((block) => block.id === id).reduce((total, block) => total + (Number(block.tokens) || 0), 0);
       const mentionedSnapshotTokens = promptBlockTokens("memory-mentioned-snapshot");
@@ -1492,7 +1502,7 @@ class Conversation {
       const worldlineTokens = promptBlockTokens("worldline-stable") + promptBlockTokens("worldline-turn-recall");
       const totalMemoryTokens = promptBlockTokens("memory-stable") + promptBlockTokens("memory-direct-frozen")
         + promptBlockTokens("memory-official-recollection") + promptBlockTokens("memory-player-ledger-frozen")
-        + mentionedSnapshotTokens + promptBlockTokens("memory-dynamic-frozen") + promptBlockTokens("memory-temporal-extra") + promptBlockTokens("memory-session-topic-anchor") + turnRecallTokens + thirdPartyEvidenceTokens;
+        + mentionedSnapshotTokens + promptBlockTokens("memory-dynamic-frozen") + promptBlockTokens("memory-dynamic-pending") + promptBlockTokens("memory-temporal-extra") + promptBlockTokens("memory-session-topic-anchor") + turnRecallTokens + thirdPartyEvidenceTokens;
       const renderedMemoryTokens = typeof PromptBuilder.getMemoryBlockTokenCount === "function"
         ? PromptBuilder.getMemoryBlockTokenCount(promptBuild) : totalMemoryTokens;
       if (memoryContext?.playerCenteredRecallEnabled && renderedMemoryTokens > memoryContext.tokenBudget) throw new Error("chat_memory_budget_exceeded");
@@ -1575,6 +1585,11 @@ class Conversation {
       };
       publishContextUsage("request_snapshot", true);
       const onContinuationRequest = (messages) => {
+        if (chatPlanProof) {
+          extendContinuationProof(chatPlanProof, messages, items => this.estimateTokenCount(items));
+          chatRequestMetadata.cacheDiagnosticContext.messageSpans = chatPlanProof.serialized.messageSpans;
+          chatRequestMetadata.cacheDiagnosticContext.blockMetadata = chatPlanProof.serialized.blockMetadata;
+        }
         if (!contextWindowTokens || !providerMaxOutputTokens) return;
         requestBudget = planRequestBudget({ messages,
           capabilities: { contextWindow: contextWindowTokens, maxOutputTokens: providerMaxOutputTokens },
@@ -1595,6 +1610,24 @@ class Conversation {
       };
       const chatRequestMetadata = {
           requestType: "chat",
+          ...(promptBuild.promptPlanFallbackReason ? { cacheDiagnosticContext: {
+            fallbackReason: promptBuild.promptPlanFallbackReason, plan: { evidenceStatus: "LEGACY_OBSERVED" } } } : {}),
+          ...(chatPlanProof ? {
+            promptPlanProof: chatPlanProof,
+            cacheDiagnosticContext: { plan: { layoutId: chatPlanProof.plan.layoutId, layoutRevision: chatPlanProof.plan.layoutRevision,
+              stablePrefixCandidateTokens: promptBuild.promptPlanPrefix?.stablePrefixCandidateTokens },
+              messageSpans: chatPlanProof.serialized.messageSpans, blockMetadata: chatPlanProof.serialized.blockMetadata },
+            beforeTransportGuard: (snapshot, proof, budget) => preflightPromptPlan({ snapshot, proof, budget,
+              expectedScope: { campaignToken: this.gameData.campaignToken, conversationId: this.id, ownerId: Number(npc.id),
+                responderId: Number(npc.id), playerId: Number(this.gameData.playerID), conversationEpoch: this.conversationEpoch, logicalTurnEpoch: turnEpoch },
+              proofVerifier: () => {
+                if (builtGameRevision !== promptGameRevision()) {
+                  const error = new Error("PLAN_SOURCE_REVOKED"); error.code = "PLAN_SOURCE_REVOKED"; throw error;
+                }
+                chatRequestMetadata.beforeSendGuard();
+                return true;
+              } })
+          } : {}),
           onProviderEvent: (event) => {
             if (event?.type !== "USAGE_UPDATE" || !this.isResponseCurrent(responseState, npc)) return;
             if (event.usage?.native) providerUsage = event.usage;

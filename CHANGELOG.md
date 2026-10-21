@@ -1,3 +1,9 @@
+# V9.4 施工候选（2026-10-21）
+
+- 引入 PromptPlan 语义块、显式消息映射和静态／冻结优先排序；保留时间及第三人摘要成功后冻结复用、配额与来源权限。
+- 最终 Provider 有效请求增加预算／完整性复核；缓存诊断 V2 区分原生、派生和本地估计，不伪造服务端断点。
+- 当前不是正式发布：小型专项已串行验证，完整发布回归、Windows 启动及真实 CK3／Provider／Soak 尚未闭环。详见 [V9.4 验证](docs/current/v9/V9_4_VERIFICATION.md)。
+
 # VOTC 版本变更入口
 
 V9.3.9.3追加输入修复：从对话设置的优化页或摘要编辑返回后，恢复对话区的鼠标输入捕获，保留草稿及空白穿透；专项与隔离打包窗口通过。代码`291040b`已推main，[CI 39242368694](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39242368694)在原生Windows Runner通过471组；本地环境限制与人工验收边界见[报告末节](docs/current/v9/V9_3_9_3_IMPLEMENTATION_REPORT.md)。

@@ -19,6 +19,10 @@ const { isStepFamilyQuery } = require("../worldline/step-family-facts");
 const { formatKnownNameFacts } = require("../conversation/character-disclosure-context");
 const { normalizeSpouseRecords } = require("../worldline/canonical-spouse-record");
 
+const { createPromptAssembly, captureBlockSpans } = require("./prompt-plan-builder");
+const { finalizePromptBuild } = require("./prompt-plan-compat");
+const { fingerprint: planFingerprint } = require("./prompt-plan-contract");
+
 const traitProfileContexts = new WeakSet();
 
 const PROMPT_LIFECYCLE = Object.freeze({
@@ -847,14 +851,15 @@ ${nameAccessRule}
       const glmCacheLayout = promptProfile.glmCacheLayout === true;
       const glmCacheV2 = !v813Layout && promptProfile.id === "glm_cache_v2";
       const layoutId = resolvePromptLayoutId(promptProfile, { v89LayoutEnabled, runtimeProfileSplit, v813Layout });
-      const llmMessages = [];
+      const { messages: llmMessages, blocks: blocksWithTokens } = createPromptAssembly();
       const cacheAnchor = v813Layout ? this.buildV813CacheAnchor(gameData) : glmCacheLayout ? this.buildGlmCacheAnchor(gameData) : this.buildCacheAnchor(gameData, runtimeProfileSplit ? "v7" : v89LayoutEnabled ? "v6" : "v5");
-      const blocksWithTokens = [{
+      const anchorTokenBlock = {
         block: { id: v813Layout ? "cache-anchor-v8.13" : glmCacheV2 ? "cache-anchor-glm-v8.10.2" : glmCacheLayout ? "cache-anchor-glm-v8.10" : "cache-anchor", type: "cache_anchor", label: v813Layout ? "V8.13 Shared Cache Anchor" : glmCacheV2 ? "GLM Cache v2 Global Anchor" : glmCacheLayout ? "GLM Stable Cache Block" : "Stable Cache Anchor", stable: true, lifecycle: PROMPT_LIFECYCLE.GLOBAL_STATIC },
         content: cacheAnchor,
         tokens: TokenCounter.estimateTokens(cacheAnchor)
-      }];
-      llmMessages.push({ role: "system", content: blocksWithTokens[0].content });
+      };
+      llmMessages.push({ role: "system", content: anchorTokenBlock.content });
+      blocksWithTokens.push(anchorTokenBlock);
       if (memoryContext?.subjectiveWorldPolicyActive && !memoryContext.historicalReferenceInfo) {
         memoryContext = { ...memoryContext, historicalReferenceInfo: buildHistoricalReferenceReplacement(null, gameData?.date) || {
           period: "当前年代未确认", context: "游戏为先，历史为次。年代与当前事实缺失时明确未知，不得以历史传记补全人物生死、行踪或战争。", notableEvents: [], notableFigures: []
@@ -1302,6 +1307,11 @@ ${nameAccessRule}
           blocksWithTokens.push({ block: suffixBlock, content: "", tokens: 0, error: `Template error in Suffix block. Check Handlebars syntax.` });
         }
       }
+      if (options.currentTurnInstructions) {
+        llmMessages.push({ role: "user", content: options.currentTurnInstructions });
+        blocksWithTokens.push({ block: { id: "narration-rewrite-instruction", type: "instruction", role: "user", stable: false },
+          content: options.currentTurnInstructions, tokens: TokenCounter.estimateTokens(options.currentTurnInstructions) });
+      }
       for (const [index, tokenBlock] of blocksWithTokens.entries()) {
         if (!tokenBlock?.block) continue;
         if ((glmCacheV2 || v813Layout) && !tokenBlock.block.lifecycle) tokenBlock.block.lifecycle = PROMPT_LIFECYCLE.DYNAMIC;
@@ -1320,7 +1330,7 @@ ${nameAccessRule}
       }, {});
       const declaredStaticTokens = blocksWithTokens.filter((tokenBlock) => tokenBlock.block?.stable === true).reduce((total, tokenBlock) => total + (Number(tokenBlock.tokens) || 0), 0);
       const stableKinshipTokens = blocksWithTokens.filter((tokenBlock) => tokenBlock.block?.id === "responder-stable-kinship").reduce((total, tokenBlock) => total + (Number(tokenBlock.tokens) || 0), 0);
-      return {
+      const legacyBuild = {
         messages: llmMessages,
         blocks: blocksWithTokens,
         totalTokens,
@@ -1344,6 +1354,20 @@ ${nameAccessRule}
         declaredStaticTokens,
         dynamicTailTokens: blocksWithTokens.slice(firstDynamicBlock < 0 ? blocksWithTokens.length : firstDynamicBlock).reduce((total, tokenBlock) => total + (Number(tokenBlock.tokens) || 0), 0)
       };
+      const planned = finalizePromptBuild(legacyBuild, { mode: options.promptPlanMode, memoryContext,
+        providerConfig, promptSettings, estimateTokens: text => TokenCounter.estimateTokens(text),
+        scope: { campaignToken: ageAuthorityGameData.campaignToken ?? memoryContext?.sourceCampaignToken ?? null,
+          conversationId: memoryContext?.conversationId ?? null, ownerId: Number(char.id), responderId: Number(char.id),
+          playerId: Number(gameData.playerID), sourceSnapshotId: memoryContext?.baselineSnapshotId ?? null,
+          ...(options.promptPlanScope || {}) },
+        revisionSnapshot: { promptSettings: planFingerprint(promptSettings), conversation: planFingerprint(workingHistory),
+          memory: planFingerprint([memoryContext?.sourceFolderRevision, memoryContext?.sourceForgetFingerprint]),
+          knowledge: memoryContext?.characterKnowledgeRevision ?? null,
+          worldline: planFingerprint([ageAuthorityGameData.date, ageAuthorityGameData.totalDays, ageAuthorityGameData.scene]),
+          source: planFingerprint([memoryContext?.sourceCampaignToken, memoryContext?.sourceFolderRevision,
+            memoryContext?.sourceForgetFingerprint, memoryContext?.sourceOfficialFingerprint, memoryContext?.baselineSnapshotId]) } });
+      planned.totalTokens = TokenCounter.calculateTotalTokens(planned.messages);
+      return planned;
     }
     static getMemoryBlockTokenCount(promptBuild) {
       return (Array.isArray(promptBuild?.blocks) ? promptBuild.blocks : []).reduce((total, entry) => {
@@ -1359,6 +1383,9 @@ ${nameAccessRule}
      * Template errors are caught and returned as error info in the result rather than thrown.
      */
     static applyBlockWithTokenCount(block, messages, history, baseContext, promptSettings, options = {}) {
+      return captureBlockSpans(messages, () => this.applyAuthorizedBlockWithTokenCount(block, messages, history, baseContext, promptSettings, options));
+    }
+    static applyAuthorizedBlockWithTokenCount(block, messages, history, baseContext, promptSettings, options = {}) {
       baseContext = this.scopeTraitProfileContext(baseContext);
       const { character, gameData, summary } = baseContext;
       const renderTemplate = (template, context) => {
@@ -1390,6 +1417,7 @@ ${nameAccessRule}
                 ...block,
                 id: `${block.id || "main"}-${segment.id}`,
                 type: "main_segment",
+                semanticKind: ["stable_global", "stable_history_rp"].includes(segment.id) && !segment.template.includes("{{") ? "GLOBAL_STATIC" : "DYNAMIC_WORLDLINE",
                 label: segment.label,
                 stable: ["stable_global", "stable_history_rp", "character_base"].includes(segment.id),
                 lifecycle: options.glmCacheV2 && ["stable_global", "stable_history_rp"].includes(segment.id)
@@ -1413,7 +1441,8 @@ ${nameAccessRule}
           }
           if (nonEmptySegments.length === 1 && nonEmptySegments[0].id === "main") {
             const content = nonEmptySegments[0].content;
-            return { block, content, tokens: TokenCounter.estimateTokens(content) };
+            return { block, content, tokens: TokenCounter.estimateTokens(content),
+              ...(immediateBlocks.length === 0 ? { deferredAccountingOnly: true } : {}) };
           }
           if (immediateBlocks.length > 0) return immediateBlocks;
           break;

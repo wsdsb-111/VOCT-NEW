@@ -176,6 +176,21 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.4-deferred-main-span-source", script: "test-v9.4-deferred-main-span-source.js" },
+  { group: "v9.4-static-first-order", script: "test-v9.4-static-first-order.js" },
+  { group: "v9.4-source-path-boundary", script: "test-v9.4-source-path-boundary.js" },
+  { group: "v9.4-conversation-plan-main-chain", script: "test-v9.4-conversation-plan-main-chain.js" },
+  { group: "v9.4-replay-audit", script: "test-v9.4-replay-audit.js" },
+  { group: "v9.4-budget-preflight", script: "test-v9.4-budget-preflight.js" },
+  { group: "v9.4-cache-evidence", script: "test-v9.4-cache-evidence.js" },
+  { group: "v9.4-frozen-dynamic-lifecycle", script: "test-v9.4-frozen-dynamic-lifecycle.js" },
+  { group: "v9.4-knowledge-forget", script: "test-v9.4-knowledge-forget.js" },
+  { group: "v9.4-legacy-layout-golden", script: "test-v9.4-legacy-layout-golden.js" },
+  { group: "v9.4-plan-schema", script: "test-v9.4-plan-schema.js" },
+  { group: "v9.4-provider-effective-request", script: "test-v9.4-provider-effective-request.js" },
+  { group: "v9.4-responder-isolation", script: "test-v9.4-responder-isolation.js" },
+  { group: "v9.4-serializer-spans", script: "test-v9.4-serializer-spans.js" },
+  { group: "v9.4-windows-packaged-smoke", script: "test-v9.4-windows-packaged-smoke.js" },
   { group: "v9.3.9.2-family-whitelist", script: "test-v9.3.9.2-family-whitelist.js" },
   { group: "v9.3.9.2-context-usage", script: "test-v9.3.9.2-context-usage.js" },
   { group: "v9.3.9.2-cache-disclosure-independent-qa", script: "test-v9.3.9.2-cache-disclosure-independent-qa.js" },

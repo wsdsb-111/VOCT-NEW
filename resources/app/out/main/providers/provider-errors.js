@@ -38,7 +38,7 @@ function classifyProviderError(error, { responseStarted = false, attemptCount = 
 }
 
 function toProviderError(error, context = {}) {
-  if (error?.message === SOURCE_GUARD_CODE) return error;
+  if (error?.message === SOURCE_GUARD_CODE || error?.votcPreflight === true) return error;
   const details = classifyProviderError(error, context);
   const safe = new Error(details.messageCode);
   safe.name = details.category === "CANCELLED" ? "AbortError" : details.category === "TIMEOUT" ? "TimeoutError" : "ProviderError";

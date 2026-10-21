@@ -103,6 +103,8 @@ function commit(fixture, engine, cache, ownerId, turnEpoch, result, ids = result
 }
 
 function assertPromptBuilderLifecycle(result) {
+  // This V9.3.9 assertion pins the legacy aggregate frozen block behavior;
+  // V9.4 committed/pending projections are exercised by the dedicated lifecycle test.
   const runtime = makePromptRuntime();
   runtime.gameData.characters.set(RESPONDER_B, {
     id: RESPONDER_B, shortName: "戊", fullName: "戊", age: 35, traits: [], parents: [], children: []
@@ -122,26 +124,26 @@ function assertPromptBuilderLifecycle(result) {
   };
   const blockFor = prompt => prompt.blocks.find(entry => entry.block?.id === "memory-dynamic-frozen");
   for (const layout of ["standard", "glm", "v813"]) {
-    const first = runtime.build(layout, context, RESPONDER_A);
+    const first = runtime.build(layout, context, RESPONDER_A, "legacy");
     const frozen = blockFor(first);
     assert(frozen?.content?.includes("RESPONDER_A_TIME_1_END"), `${layout} Prompt must include the dynamic frozen memory block`);
-    const second = runtime.build(layout, context, RESPONDER_A);
+    const second = runtime.build(layout, context, RESPONDER_A, "legacy");
     assert.equal(blockFor(second)?.content, frozen.content, `${layout} repeated construction must retain byte-identical frozen text`);
     const userIndex = first.messages.findIndex(message => message.role === "user" && String(message.content).includes("甲询问当前宫廷安排"));
     const frozenIndex = first.messages.findIndex(message => message.role === "system" && message.content === frozen.content);
     assert(frozenIndex >= 0 && userIndex >= 0 && frozenIndex < userIndex, `${layout} frozen memory must precede mutable history`);
 
     const expandedContext = { ...context, frozenDynamicText: `${context.frozenDynamicText}\n\nV939_ADDED_SOURCE` };
-    const expanded = runtime.build(layout, expandedContext, RESPONDER_A);
+    const expanded = runtime.build(layout, expandedContext, RESPONDER_A, "legacy");
     assert(blockFor(expanded)?.content.includes("V939_ADDED_SOURCE"), `${layout} newly frozen source must expand the cached prefix`);
 
     const otherResponder = runtime.build(layout, { ...context, frozenDynamicText: null,
-      respondingCharacterId: RESPONDER_B, activeParticipantIds: [PLAYER_ID, RESPONDER_B] }, RESPONDER_B);
+      respondingCharacterId: RESPONDER_B, activeParticipantIds: [PLAYER_ID, RESPONDER_B] }, RESPONDER_B, "legacy");
     assert(!otherResponder.messages.some(message => String(message.content).includes("RESPONDER_A_TIME_1_END")),
       `${layout} another responder must not inherit the first responder's frozen text`);
 
     const nextConversation = runtime.build(layout, { ...context, frozenDynamicText: null,
-      conversationId: `${CONVERSATION}-next`, baselineSnapshotId: `${result.baselineSnapshotId}-next` }, RESPONDER_A);
+      conversationId: `${CONVERSATION}-next`, baselineSnapshotId: `${result.baselineSnapshotId}-next` }, RESPONDER_A, "legacy");
     assert(!nextConversation.messages.some(message => String(message.content).includes("RESPONDER_A_TIME_1_END")),
       `${layout} refreshed conversation scope must clear the old frozen prefix`);
   }
@@ -149,7 +151,7 @@ function assertPromptBuilderLifecycle(result) {
   const excluded = runtime.builder.buildMessagesWithTokenCount(
     [{ role: "user", content: "甲询问当前宫廷安排。" }],
     runtime.gameData.characters.get(RESPONDER_A), runtime.gameData, "", context,
-    { providerType: "openai-compatible", defaultModel: "qa-model" }, { memoryMode: "exclude" });
+    { providerType: "openai-compatible", defaultModel: "qa-model" }, { memoryMode: "exclude", promptPlanMode: "legacy" });
   assert(!excluded.blocks.some(entry => entry.block?.id === "memory-dynamic-frozen"), "exclude mode must omit the frozen block");
   assert(!excluded.messages.some(message => String(message.content).includes("RESPONDER_A_TIME_1_END")),
     "exclude mode must not leak frozen summary text through PromptBuilder prefix caching");

@@ -7,6 +7,7 @@ const { isMemoryBudgetBlock } = require("./memory-system/memory-budget-policy");
 const { OVERLAY_BLOCK_ID, OVERLAY_VERSION, prepareActionMessages } = require("./actions/action-prompt-compatibility-overlay");
 const { buildProviderCapabilities, capabilityCacheKey } = require("./providers/provider-capabilities");
 const { createRequestControl, awaitWithSignal, assertActive, managedIterator } = require("./providers/provider-cancellation");
+const { preflightEffectiveRequestBudget } = require("./providers/effective-request");
 const { ProviderPlatformFacade } = require("./providers/provider-platform");
 const { normalizeProviderResult } = require("./providers/provider-result");
 const { toProviderError, safeProviderConsole } = require("./providers/provider-errors");
@@ -257,8 +258,19 @@ class LLMManager {
   }
   createControl(config, route, signal, metadata = {}) {
     const key = capabilityCacheKey(config, route);
+    const proof = metadata.promptPlanProof;
+    const hasPromptPlanProof = !!proof && typeof proof === "object" && proof.plan && proof.serialized != null;
+    const ownerEvidence = hasPromptPlanProof && proof.ownerEvidence === true ? "PRESENT" : "UNKNOWN";
     return createRequestControl({ signal, deadline: metadata.deadline, maxAttempts: metadata.maxAttempts,
       reserveAttempt: metadata.reserveAttempt, onEvent: event => metadata.onProviderEvent?.(event),
+      requestType: metadata.requestType || (route === "ACTION" ? "action" : route === "SUMMARY" ? "summary" : "chat"),
+      planStatus: hasPromptPlanProof ? "PROMPT_PLAN_V9" : "LEGACY_OBSERVED",
+      ownerEvidence,
+      promptPlanProof: hasPromptPlanProof ? proof : undefined,
+      beforeTransport: typeof metadata.beforeTransportGuard === "function"
+        ? (snapshot, promptPlanProof, budget) => metadata.beforeTransportGuard(snapshot, promptPlanProof, budget)
+        : undefined,
+      onEffectiveRequest: typeof metadata.onEffectiveRequest === "function" ? metadata.onEffectiveRequest : undefined,
       beforeSend: () => {
         const current = this.getRouteProviderConfig(route, metadata.providerSnapshot);
         if (!current || capabilityCacheKey(current, route) !== key || current.apiKey !== config.apiKey) {
@@ -267,7 +279,27 @@ class LLMManager {
         metadata.beforeSendGuard?.();
       } });
   }
+  createCacheDiagnosticsObserver(provider, model, requestType, requestDiff, metadata = {}) {
+    try {
+      return this.providerDiagnostics?.createCacheDiagnosticsObserver?.({
+        provider, model, requestType, requestDiff,
+        cacheDiagnosticContext: metadata.cacheDiagnosticContext,
+        blocks: metadata.blocks
+      }) || null;
+    } catch { return null; }
+  }
+  wireEffectiveRequestObserver(control, observerToken, metadata = {}) {
+    control.onEffectiveRequest = typeof metadata.onEffectiveRequest === "function" ? metadata.onEffectiveRequest : null;
+    control.onEffectiveRequestDiagnostic = (snapshot, budget) => {
+      try { this.providerDiagnostics?.attachEffectiveRequest?.(observerToken, snapshot, budget); } catch {}
+    };
+  }
   generate(provider, request, config, capabilities, control, estimatedPromptTokens) {
+    control?.setEffectiveRequestBudget?.(snapshot => preflightEffectiveRequestBudget(snapshot, {
+      capabilities,
+      requestedOutputTokens: Number(request.max_tokens) || capabilities.maxOutputTokens,
+      countTokens: items => this.TokenCounter.calculateTotalTokens(items)
+    }));
     return this.platform.generate(provider, request, config, { capabilities, control, estimatedPromptTokens,
       estimateTokens: text => this.TokenCounter.estimateTokens(text) });
   }
@@ -419,9 +451,13 @@ class LLMManager {
         stableKinshipTokens: metadata.stableKinshipTokens,
         actualStablePrefixTokens: metadata.actualStablePrefixTokens,
         declaredStaticTokens: metadata.declaredStaticTokens,
-        dynamicTailTokens: metadata.dynamicTailTokens
+        dynamicTailTokens: metadata.dynamicTailTokens,
+        cacheDiagnosticContext: metadata.cacheDiagnosticContext
       }) || null
       : null;
+    const cacheDiagnosticsObserverToken = this.createCacheDiagnosticsObserver(
+      activeConfig.providerType, activeConfig.defaultModel, requestType, realRequestDiff, metadata);
+    this.wireEffectiveRequestObserver(control, cacheDiagnosticsObserverToken, metadata);
     const requestStartedAt = new Date().toISOString();
     const { performanceTraceContext, ...usageMetadata } = metadata;
     const traceRequest = this.performanceTrace?.enabled && performanceTraceContext
@@ -442,6 +478,7 @@ class LLMManager {
       model: activeConfig.defaultModel,
       estimatedPromptTokens,
       realRequestDiff,
+      cacheDiagnosticsObserverToken,
       requestStartedAt,
       requestControl: control,
       captureChatTiming: requestType === "chat"
@@ -521,10 +558,14 @@ class LLMManager {
       requestedOutputTokens: Number(request.max_tokens) || capabilities.maxOutputTokens,
       countTokens: items => this.TokenCounter.calculateTotalTokens(items) + (providerInjectsSchema ? schemaTokenEstimate : 0) });
     if (!budget.safe) { control.dispose(); throw new Error("action_request_budget_exceeded"); }
+    const cacheDiagnosticsObserverToken = this.createCacheDiagnosticsObserver(
+      config.providerType, config.defaultModel, "action", null, { ...metadata, blocks: actionPromptBlocks });
+    this.wireEffectiveRequestObserver(control, cacheDiagnosticsObserverToken, metadata);
     return await this.trackUsage(this.generate(provider, request, config, capabilities, control, estimatedPromptTokens), {
       ...metadata,
       requestControl: control,
       requestBudget: budget,
+      cacheDiagnosticsObserverToken,
       contextMode: capabilities.contextMode,
       contextWindowSource: capabilities.contextWindowSource,
       effectiveContextWindow: capabilities.contextWindow,
@@ -684,13 +725,17 @@ class LLMManager {
     }
     request.max_tokens = budget.reservedOutputTokens;
     const estimatedPromptTokens = this.TokenCounter.calculateTotalTokens(preparedMessages);
+    const requestType = metadata.requestType || "summary";
+    const cacheDiagnosticsObserverToken = this.createCacheDiagnosticsObserver(
+      config.providerType, config.defaultModel, requestType, null, { ...metadata, blocks: summaryBlocks });
+    this.wireEffectiveRequestObserver(control, cacheDiagnosticsObserverToken, metadata);
     const deepseekMode = useDeepseekNonThinking ? `, maxTokens=${structuredSummaryMaxTokens}, thinking=disabled` : "";
     console.log(`[LLMManager] Summary request: provider=${config.providerType}, model=${config.defaultModel}, messages=${preparedMessages.length}, estimatedPromptTokens=${estimatedPromptTokens}${deepseekMode}`);
     try {
       return await this.trackUsage(this.generate(provider, request, config, capabilities, control, estimatedPromptTokens), { ...metadata,
         contextMode: capabilities.contextMode, contextWindowSource: capabilities.contextWindowSource, effectiveContextWindow: capabilities.contextWindow,
         requestControl: control,
-        requestBudget: budget, blocks: summaryBlocks, requestType: metadata.requestType || "summary",
+        requestBudget: budget, blocks: summaryBlocks, requestType, cacheDiagnosticsObserverToken,
         providerType: config.providerType, model: config.defaultModel, estimatedPromptTokens });
     } catch (error) {
       control.dispose();
@@ -711,10 +756,14 @@ class LLMManager {
       const safeMetadata = { ...metadata, generationStatus: typed.status, providerFinish: typed.finish.normalized,
         providerUsage: typed.usage, providerAttemptCount: metadata.requestControl?.attemptCount ?? null };
       delete safeMetadata.requestControl; delete safeMetadata.reserveAttempt; delete safeMetadata.onProviderEvent;
+      delete safeMetadata.beforeTransportGuard; delete safeMetadata.promptPlanProof;
+      delete safeMetadata.cacheDiagnosticContext;
+      delete safeMetadata.cacheDiagnosticsObserverToken;
       this.usageAnalytics.record(safeMetadata, usage);
+      const diagnosticsMetadata = { ...safeMetadata, cacheDiagnosticsObserverToken: metadata.cacheDiagnosticsObserverToken };
       this.providerDiagnostics?.recordResponse({ provider: metadata.providerType, model: metadata.model,
         requestType: metadata.requestType, response: { ...finalResponse, finish_reason: typed.finish.normalized },
-        usage, metadata: safeMetadata, startedAt: metadata.requestStartedAt,
+        usage, metadata: diagnosticsMetadata, startedAt: metadata.requestStartedAt,
         firstReasoningAt: timing.firstReasoningAt, firstVisibleContentAt: timing.firstVisibleContentAt,
         completedAt: timing.completedAt || new Date().toISOString() });
       finishSpan(typed.status, ["ERROR", "PARTIAL"].includes(typed.status) ? "provider_error"

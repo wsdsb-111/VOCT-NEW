@@ -4,8 +4,10 @@ const { VOTC_CORE_VERSION, VOTC_APP_VERSION } = require("../version");
 const { retryOperation } = require("./provider-retry-policy");
 const { SOURCE_GUARD_CODE, toProviderError, safeProviderConsole } = require("./provider-errors");
 const { assertActive, awaitWithSignal } = require("./provider-cancellation");
+const { createEffectiveRequestSnapshot, fingerprintMessages, fingerprintTransportPayload, markAdapterInputMessages, observeEffectiveRequest } = require("./effective-request");
 const { validateGenerationOutcome } = require("./generation-outcome");
 const console = safeProviderConsole;
+const NATIVE_USAGE_SOURCE = Symbol("native_usage_source");
 
 function isRetryableProviderStatus(error) {
   const status = Number(error?.status);
@@ -22,10 +24,91 @@ function requestControlWithSignal(requestControl, request) {
   return { ...(requestControl || {}), signal };
 }
 
+function deepFreezeUsageEvidence(value) {
+  if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) deepFreezeUsageEvidence(child);
+  return Object.freeze(value);
+}
+
 function checkRequestControl(requestControl) {
   assertActive(requestControl?.signal);
   requestControl?.check?.();
   assertActive(requestControl?.signal);
+}
+
+async function beforeProviderTransport(provider, requestControl, protocol, endpoint, payload, stream, transport) {
+  if (typeof transport !== "function") throw new Error("provider_transport_callback_required");
+  if (stream === undefined) stream = payload?.stream === true;
+  const adapterInputMessagesFingerprint = requestControl?.adapterInputMessagesFingerprint || fingerprintMessages(payload?.messages);
+  const snapshot = createEffectiveRequestSnapshot({
+    requestType: requestControl?.requestType,
+    providerType: provider.providerId,
+    protocol,
+    method: "POST",
+    endpoint,
+    stream: stream === true,
+    payload,
+    adapterInputMessagesFingerprint,
+    planStatus: "LEGACY_OBSERVED",
+    ownerEvidence: "UNKNOWN"
+  });
+  const transportPayloadFingerprint = fingerprintTransportPayload(payload);
+  const assertUnchanged = () => {
+    const currentSnapshot = createEffectiveRequestSnapshot({
+      requestType: requestControl?.requestType,
+      providerType: provider.providerId,
+      protocol,
+      method: "POST",
+      endpoint,
+      stream: stream === true,
+      payload,
+      adapterInputMessagesFingerprint: requestControl?.adapterInputMessagesFingerprint,
+      planStatus: requestControl?.planStatus,
+      ownerEvidence: requestControl?.ownerEvidence
+    });
+    const currentAdapterInputMessagesFingerprint = requestControl?.adapterInputMessagesSource
+      ? fingerprintMessages(requestControl.adapterInputMessagesSource)
+      : currentSnapshot.adapterInputMessagesFingerprint;
+    if (fingerprintTransportPayload(payload) !== transportPayloadFingerprint
+      || currentSnapshot.payloadFingerprint !== snapshot.payloadFingerprint
+      || currentAdapterInputMessagesFingerprint !== adapterInputMessagesFingerprint) {
+      const error = new Error("provider_effective_request_changed_before_transport");
+      error.code = "provider_effective_request_changed_before_transport";
+      error.votcPreflight = true;
+      throw error;
+    }
+  };
+  const budget = await observeEffectiveRequest(requestControl, snapshot);
+  assertUnchanged();
+  requestControl?.beforeSend?.();
+  assertUnchanged();
+  const finalOwnerEvidence = requestControl?.sourceGuardPassed === true && requestControl?.ownerEvidence === "PRESENT"
+    ? "PRESENT" : "UNKNOWN";
+  const finalPlanStatus = requestControl?.sourceGuardPassed === true && requestControl?.planStatus === "PROMPT_PLAN_V9"
+    ? "PROMPT_PLAN_V9" : "LEGACY_OBSERVED";
+  const effectiveSnapshot = finalOwnerEvidence === snapshot.ownerEvidence && finalPlanStatus === snapshot.planStatus ? snapshot : createEffectiveRequestSnapshot({
+    requestType: requestControl?.requestType,
+    providerType: provider.providerId,
+    protocol,
+    method: "POST",
+    endpoint,
+    stream: stream === true,
+    payload,
+    adapterInputMessagesFingerprint: requestControl?.adapterInputMessagesFingerprint,
+    planStatus: finalPlanStatus,
+    ownerEvidence: finalOwnerEvidence
+  });
+  try {
+    const result = requestControl?.onEffectiveRequest?.(effectiveSnapshot, budget);
+    if (result && typeof result.then === "function") result.catch?.(() => {});
+  } catch {}
+  assertUnchanged();
+  try {
+    const result = requestControl?.onEffectiveRequestDiagnostic?.(effectiveSnapshot, budget);
+    if (result && typeof result.then === "function") result.catch?.(() => {});
+  } catch {}
+  assertUnchanged();
+  return transport();
 }
 
 function isStrictlyComplete(response, provider) {
@@ -291,6 +374,7 @@ class OpenRouterProvider extends BaseProvider {
   }
   chatCompletion(request, config, requestControl = null) {
     requestControl = requestControlWithSignal(requestControl, request);
+    markAdapterInputMessages(requestControl, request.messages);
     const openAIClient = new OpenAI({
       maxRetries: 0,
       apiKey: this.getAPIKey(config),
@@ -324,10 +408,8 @@ class OpenRouterProvider extends BaseProvider {
   async _nonStreamChatCompletion(request, openAIClient, requestControl = null) {
     try {
       const data = await this.retryWithBackoff(
-        () => {
-          requestControl?.beforeSend?.();
-          return openAIClient.chat.completions.create(request, requestControl?.signal ? { signal: requestControl.signal } : void 0);
-        },
+        () => beforeProviderTransport(this, requestControl, "openai_chat_completions", "https://openrouter.ai/api/v1/chat/completions", request, request.stream === true,
+          () => openAIClient.chat.completions.create(request, requestControl?.signal ? { signal: requestControl.signal } : void 0)),
         3,
         1e3,
         this.shouldRetryOpenRouter.bind(this),
@@ -364,10 +446,8 @@ class OpenRouterProvider extends BaseProvider {
     let responseStarted = false;
     try {
       const stream = await this.retryWithBackoff(
-        () => {
-          requestControl?.beforeSend?.();
-          return openAIClient.chat.completions.create(request, signal ? { signal } : void 0);
-        },
+        () => beforeProviderTransport(this, requestControl, "openai_chat_completions", "https://openrouter.ai/api/v1/chat/completions", request, request.stream === true,
+          () => openAIClient.chat.completions.create(request, signal ? { signal } : void 0)),
         7,
         1e3,
         this.shouldRetryOpenRouter.bind(this),
@@ -579,6 +659,7 @@ class OpenAICompatibleProvider extends BaseProvider {
   }
   chatCompletion(request, config, requestControl = null) {
     requestControl = requestControlWithSignal(requestControl, request);
+    markAdapterInputMessages(requestControl, request.messages);
     const headers = {
       "Content-Type": "application/json",
       "X-Title": `Voices of the Court V${VOTC_CORE_VERSION}`,
@@ -593,19 +674,18 @@ class OpenAICompatibleProvider extends BaseProvider {
       maxRetries: 0
     });
     const requestParams = this.buildDiagnosticRequest(request, config);
+    const endpoint = `${this.getBaseUrl(config).replace(/\/$/, "")}/chat/completions`;
     if (requestParams.stream) {
-      return this._streamChatCompletion(requestParams, openAIClient, requestControl?.signal || request.signal, requestControl);
+      return this._streamChatCompletion(requestParams, openAIClient, requestControl?.signal || request.signal, requestControl, endpoint);
     } else {
-      return this._nonStreamChatCompletion(requestParams, openAIClient, requestControl);
+      return this._nonStreamChatCompletion(requestParams, openAIClient, requestControl, endpoint);
     }
   }
-  async _nonStreamChatCompletion(request, openAIClient, requestControl = null) {
+  async _nonStreamChatCompletion(request, openAIClient, requestControl = null, endpoint = null) {
     try {
       const data = await this.retryWithBackoff(
-        () => {
-          requestControl?.beforeSend?.();
-          return openAIClient.chat.completions.create(request, requestControl?.signal ? { signal: requestControl.signal } : void 0);
-        },
+        () => beforeProviderTransport(this, requestControl, "openai_chat_completions", endpoint, request, request.stream === true,
+          () => openAIClient.chat.completions.create(request, requestControl?.signal ? { signal: requestControl.signal } : void 0)),
         3,
         1e3,
         this.shouldRetry.bind(this),
@@ -615,7 +695,7 @@ class OpenAICompatibleProvider extends BaseProvider {
       if (!choice) {
         throw new Error(`OpenAI-Compatible SDK: No choices returned for model ${request.model}`);
       }
-      return {
+      const result = {
         id: data.id,
         content: choice.message?.content ?? null,
         tool_calls: choice.message?.tool_calls,
@@ -632,20 +712,22 @@ class OpenAICompatibleProvider extends BaseProvider {
           visible_completion_tokens: data.usage.visible_completion_tokens
         } : void 0
       };
+      if (this.providerId === "zhipu" && data.usage && typeof data.usage === "object") {
+        Object.defineProperty(result, NATIVE_USAGE_SOURCE, { value: data.usage });
+      }
+      return result;
     } catch (error) {
       const providerError = safeError(error, "openai-compatible", request.model);
       safeProviderConsole.error(providerError);
       throw providerError;
     }
   }
-  async *_streamChatCompletion(request, openAIClient, signal, requestControl = null) {
+  async *_streamChatCompletion(request, openAIClient, signal, requestControl = null, endpoint = null) {
     let responseStarted = false;
     try {
       const stream = await this.retryWithBackoff(
-        () => {
-          requestControl?.beforeSend?.();
-          return openAIClient.chat.completions.create(request, signal ? { signal } : void 0);
-        },
+        () => beforeProviderTransport(this, requestControl, "openai_chat_completions", endpoint, request, request.stream === true,
+          () => openAIClient.chat.completions.create(request, signal ? { signal } : void 0)),
         7,
         1e3,
         this.shouldRetry.bind(this),
@@ -764,11 +846,27 @@ class ZhipuProvider extends OpenAICompatibleProvider {
     const normalized = require("./usage-normalization").normalizeProviderUsage(usage);
     return { ...normalized, prompt_tokens_details: usage.prompt_tokens_details, completion_tokens_details: usage.completion_tokens_details, reasoning_tokens: normalized.reasoning_tokens ?? 0 };
   }
-  buildUsageDebug(rawUsage, normalizedUsage) {
+  buildUsageDebug(rawUsage, normalizedUsage, nativeUsage = rawUsage) {
     if (!rawUsage || typeof rawUsage !== "object") return null;
     const raw = {};
+    const native = {};
+    const nativeValue = (source, key) => {
+      if (!Object.prototype.hasOwnProperty.call(source, key)) return void 0;
+      const value = source[key];
+      if (value === null || typeof value === "number" || typeof value === "boolean") return { present: true, value };
+      if (typeof value === "string") return value.length <= 64
+        ? { present: true, value }
+        : { present: true, valueType: "string_oversized" };
+      return { present: true, valueType: value === void 0 ? "undefined" : Array.isArray(value) ? "array" : typeof value };
+    };
+    const evidenceSource = nativeUsage && typeof nativeUsage === "object" ? nativeUsage : rawUsage;
     for (const key of ["prompt_tokens", "completion_tokens", "total_tokens"]) {
-      if (Object.prototype.hasOwnProperty.call(rawUsage, key)) raw[key] = Number(rawUsage[key]) || 0;
+      if (Object.prototype.hasOwnProperty.call(rawUsage, key)) {
+        raw[key] = Number(rawUsage[key]) || 0;
+      }
+      if (Object.prototype.hasOwnProperty.call(evidenceSource, key)) {
+        native[key] = nativeValue(evidenceSource, key);
+      }
     }
     if (rawUsage.prompt_tokens_details && typeof rawUsage.prompt_tokens_details === "object" && Object.prototype.hasOwnProperty.call(rawUsage.prompt_tokens_details, "cached_tokens")) {
       raw.prompt_tokens_details = { cached_tokens: require("./usage-normalization").usageNumber(rawUsage.prompt_tokens_details.cached_tokens) };
@@ -776,9 +874,20 @@ class ZhipuProvider extends OpenAICompatibleProvider {
     if (rawUsage.completion_tokens_details && typeof rawUsage.completion_tokens_details === "object" && Object.prototype.hasOwnProperty.call(rawUsage.completion_tokens_details, "reasoning_tokens")) {
       raw.completion_tokens_details = { reasoning_tokens: Number(rawUsage.completion_tokens_details.reasoning_tokens) || 0 };
     }
+    for (const [containerKey, valueKey] of [["prompt_tokens_details", "cached_tokens"], ["completion_tokens_details", "reasoning_tokens"]]) {
+      if (!Object.prototype.hasOwnProperty.call(evidenceSource, containerKey)) continue;
+      const source = evidenceSource[containerKey];
+      if (source && typeof source === "object" && !Array.isArray(source)) {
+        const value = nativeValue(source, valueKey);
+        native[containerKey] = value ? { [valueKey]: value } : {};
+      } else {
+        native[containerKey] = nativeValue(evidenceSource, containerKey);
+      }
+    }
     return {
       provider: "zhipu",
       raw_usage: raw,
+      native_usage_evidence: deepFreezeUsageEvidence(native),
       normalized_usage: normalizedUsage || null
     };
   }
@@ -818,17 +927,19 @@ class ZhipuProvider extends OpenAICompatibleProvider {
   }
   chatCompletion(request, config, requestControl = null) {
     requestControl = requestControlWithSignal(requestControl, request);
+    markAdapterInputMessages(requestControl, request.messages);
     const requestParams = this.buildRequestParams(request, config);
     const openAIClient = this.createOpenAIClient(config);
-    return requestParams.stream ? this._streamZhipuChatCompletion(requestParams, openAIClient, requestControl?.signal || request.signal, requestControl) : this._nonStreamZhipuChatCompletion(requestParams, openAIClient, requestControl);
+    const endpoint = `${this.getBaseUrl(config).replace(/\/$/, "")}/chat/completions`;
+    return requestParams.stream ? this._streamZhipuChatCompletion(requestParams, openAIClient, requestControl?.signal || request.signal, requestControl, endpoint) : this._nonStreamZhipuChatCompletion(requestParams, openAIClient, requestControl, endpoint);
   }
-  async _nonStreamZhipuChatCompletion(request, openAIClient, requestControl = null) {
-    const response = await super._nonStreamChatCompletion(request, openAIClient, requestControl);
+  async _nonStreamZhipuChatCompletion(request, openAIClient, requestControl = null, endpoint = null) {
+    const response = await super._nonStreamChatCompletion(request, openAIClient, requestControl, endpoint);
     const normalizedUsage = this.normalizeUsage(response.usage);
-    return { ...response, usage: normalizedUsage, usage_debug: this.buildUsageDebug(response.usage, normalizedUsage) };
+    return { ...response, usage: normalizedUsage, usage_debug: this.buildUsageDebug(response.usage, normalizedUsage, response[NATIVE_USAGE_SOURCE]) };
   }
-  async *_streamZhipuChatCompletion(request, openAIClient, signal, requestControl = null) {
-    const iterator = super._streamChatCompletion(request, openAIClient, signal, requestControl)[Symbol.asyncIterator]();
+  async *_streamZhipuChatCompletion(request, openAIClient, signal, requestControl = null, endpoint = null) {
+    const iterator = super._streamChatCompletion(request, openAIClient, signal, requestControl, endpoint)[Symbol.asyncIterator]();
     try {
       while (true) {
       const step = await iterator.next();
@@ -931,6 +1042,7 @@ class OllamaProvider extends BaseProvider {
   // Implementation
   chatCompletion(request, config, requestControl = null) {
     requestControl = requestControlWithSignal(requestControl, request);
+    markAdapterInputMessages(requestControl, request.messages);
     const providerConfig = this.getConfig(config);
     const endpoint = `${providerConfig.baseUrl.replace(/\/$/, "")}/api/chat`;
     const ollamaMessages = request.messages.map((msg) => ({
@@ -972,14 +1084,14 @@ class OllamaProvider extends BaseProvider {
   async _nonStreamChatCompletion(request, endpoint, body, requestControl = null) {
     try {
       const response = await this.retryWithBackoff(async () => {
-        requestControl?.beforeSend?.();
-        const result = await fetch(endpoint, {
+        const requestBody = { ...body, stream: false };
+        const result = await beforeProviderTransport(this, requestControl, "ollama_api_chat", endpoint, requestBody, false, () => fetch(endpoint, {
           ...requestControl?.signal ? { signal: requestControl.signal } : {},
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...body, stream: false })
+          body: JSON.stringify(requestBody)
           // Ensure stream is false
-        });
+        }));
         if (!result.ok) {
           const error = new Error("provider_http_error");
           error.status = result.status;
@@ -1012,13 +1124,13 @@ class OllamaProvider extends BaseProvider {
     let response;
     try {
       response = await this.retryWithBackoff(async () => {
-        requestControl?.beforeSend?.();
-        const result = await fetch(endpoint, {
+        const requestBody = { ...body, stream: true };
+        const result = await beforeProviderTransport(this, requestControl, "ollama_api_chat", endpoint, requestBody, true, () => fetch(endpoint, {
           ...signal ? { signal } : {},
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...body, stream: true })
-        });
+          body: JSON.stringify(requestBody)
+        }));
         if (!result.ok || !result.body) {
           const error = new Error(result.body ? "provider_http_error" : "provider_invalid_response");
           error.status = result.status;
@@ -1157,6 +1269,7 @@ class Player2Provider extends BaseProvider {
   }
   chatCompletion(request, _config, requestControl = null) {
     requestControl = requestControlWithSignal(requestControl, request);
+    markAdapterInputMessages(requestControl, request.messages);
     const openAIClient = new OpenAI({
       maxRetries: 0,
       apiKey: "sk-dummy-key",
@@ -1185,10 +1298,8 @@ class Player2Provider extends BaseProvider {
   async _nonStreamChatCompletion(request, openAIClient, requestControl = null) {
     try {
       const data = await this.retryWithBackoff(
-        () => {
-          requestControl?.beforeSend?.();
-          return openAIClient.chat.completions.create(request, requestControl?.signal ? { signal: requestControl.signal } : void 0);
-        },
+        () => beforeProviderTransport(this, requestControl, "openai_chat_completions", `${this.player2BaseUrl}/chat/completions`, request, request.stream === true,
+          () => openAIClient.chat.completions.create(request, requestControl?.signal ? { signal: requestControl.signal } : void 0)),
         3,
         1e3,
         this.shouldRetryPlayer2.bind(this),
@@ -1221,10 +1332,8 @@ class Player2Provider extends BaseProvider {
     let responseStarted = false;
     try {
       const stream = await this.retryWithBackoff(
-        () => {
-          requestControl?.beforeSend?.();
-          return openAIClient.chat.completions.create(request, signal ? { signal } : void 0);
-        },
+        () => beforeProviderTransport(this, requestControl, "openai_chat_completions", `${this.player2BaseUrl}/chat/completions`, request, request.stream === true,
+          () => openAIClient.chat.completions.create(request, signal ? { signal } : void 0)),
         7,
         1e3,
         this.shouldRetryPlayer2.bind(this),
@@ -1428,6 +1537,7 @@ class DeepseekProvider extends BaseProvider {
   }
   chatCompletion(request, config, requestControl = null) {
     requestControl = requestControlWithSignal(requestControl, request);
+    markAdapterInputMessages(requestControl, request.messages);
     const baseUrl = this.getDeepseekBaseUrl(config);
     const openAIClient = new OpenAI({
       apiKey: this.getAPIKey(config),
@@ -1435,10 +1545,11 @@ class DeepseekProvider extends BaseProvider {
       maxRetries: 0
     });
     const requestParams = this.buildDiagnosticRequest(request, config);
+    const endpoint = `${baseUrl.replace(/\/$/, "")}/chat/completions`;
     if (requestParams.stream) {
-      return this._streamChatCompletion(requestParams, openAIClient, requestControl?.signal || request.signal, requestControl);
+      return this._streamChatCompletion(requestParams, openAIClient, requestControl?.signal || request.signal, requestControl, endpoint);
     } else {
-      return this._nonStreamChatCompletion(requestParams, openAIClient, requestControl);
+      return this._nonStreamChatCompletion(requestParams, openAIClient, requestControl, endpoint);
     }
   }
   /**
@@ -1571,13 +1682,11 @@ IMPORTANT: Your response must be ONLY valid JSON. No prose, no code fences, no e
     }
     return result;
   }
-  async _nonStreamChatCompletion(request, openAIClient, requestControl = null) {
+  async _nonStreamChatCompletion(request, openAIClient, requestControl = null, endpoint = null) {
     try {
       const data = await this.retryWithBackoff(
-        () => {
-          requestControl?.beforeSend?.();
-          return openAIClient.chat.completions.create(request, requestControl?.signal ? { signal: requestControl.signal } : void 0);
-        },
+        () => beforeProviderTransport(this, requestControl, "openai_chat_completions", endpoint, request, request.stream === true,
+          () => openAIClient.chat.completions.create(request, requestControl?.signal ? { signal: requestControl.signal } : void 0)),
         3,
         1e3,
         this.shouldRetry.bind(this),
@@ -1606,14 +1715,12 @@ IMPORTANT: Your response must be ONLY valid JSON. No prose, no code fences, no e
       throw providerError;
     }
   }
-  async *_streamChatCompletion(request, openAIClient, signal, requestControl = null) {
+  async *_streamChatCompletion(request, openAIClient, signal, requestControl = null, endpoint = null) {
     let responseStarted = false;
     try {
       const stream = await this.retryWithBackoff(
-        () => {
-          requestControl?.beforeSend?.();
-          return openAIClient.chat.completions.create(request, signal ? { signal } : void 0);
-        },
+        () => beforeProviderTransport(this, requestControl, "openai_chat_completions", endpoint, request, request.stream === true,
+          () => openAIClient.chat.completions.create(request, signal ? { signal } : void 0)),
         7,
         1e3,
         this.shouldRetry.bind(this),
@@ -1904,6 +2011,7 @@ class GeminiProvider extends BaseProvider {
   }
   chatCompletion(request, config, requestControl = null) {
     requestControl = requestControlWithSignal(requestControl, request);
+    markAdapterInputMessages(requestControl, request.messages);
     const baseUrl = this.getGeminiBaseUrl(config);
     const apiKey = this.getAPIKey(config);
     const modelName = request.model.startsWith("models/") ? request.model : `models/${request.model}`;
@@ -1915,18 +2023,17 @@ class GeminiProvider extends BaseProvider {
   }
   async _nonStreamChatCompletion(baseUrl, apiKey, modelName, request, requestControl = null) {
     const body = this.buildRequestBody(request);
+    const url = `${baseUrl}/${modelName}:generateContent?key=${apiKey}`;
     try {
       const response = await this.retryWithBackoff(
-        async () => {
-          requestControl?.beforeSend?.();
-          const res = await fetch(`${baseUrl}/${modelName}:generateContent?key=${apiKey}`, {
-            ...requestControl?.signal ? { signal: requestControl.signal } : {},
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify(body)
-          });
+        () => beforeProviderTransport(this, requestControl, "gemini_generate_content", url, body, false, () => fetch(url, {
+          ...requestControl?.signal ? { signal: requestControl.signal } : {},
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(body)
+        })).then((res) => {
           if (!res.ok) {
             const error = new Error("provider_http_error");
             error.status = res.status;
@@ -1934,7 +2041,7 @@ class GeminiProvider extends BaseProvider {
             throw error;
           }
           return res.json();
-        },
+        }),
         3,
         1e3,
         this.shouldRetry.bind(this),
@@ -1953,16 +2060,14 @@ class GeminiProvider extends BaseProvider {
     let response;
     try {
       response = await this.retryWithBackoff(
-        async () => {
-          requestControl?.beforeSend?.();
-          const res = await fetch(url, {
-            ...(requestControl?.signal || request.signal) ? { signal: requestControl?.signal || request.signal } : {},
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify(body)
-          });
+        () => beforeProviderTransport(this, requestControl, "gemini_generate_content", url, body, true, () => fetch(url, {
+          ...(requestControl?.signal || request.signal) ? { signal: requestControl?.signal || request.signal } : {},
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(body)
+        })).then((res) => {
           if (!res.ok) {
             const error = new Error("provider_http_error");
             error.status = res.status;
@@ -1971,7 +2076,7 @@ class GeminiProvider extends BaseProvider {
           }
           if (!res.body) throw Object.assign(new Error("provider_invalid_response"), { code: "provider_invalid_response" });
           return res;
-        },
+        }),
         3,
         1e3,
         this.shouldRetry.bind(this),

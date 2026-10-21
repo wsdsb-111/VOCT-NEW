@@ -522,6 +522,7 @@ function registerIpcHandlers(runtime) {
   electron.ipcMain.handle("providerDiagnostics:getStatus", () => providerDiagnostics?.getStatus() || { success: false, error: "provider_diagnostics_unavailable" });
   electron.ipcMain.handle("provider-diagnostics:get-real-request-diff", (_, limit) => providerDiagnostics?.getRealRequestDiffStatus(limit) || { success: false, error: "provider_diagnostics_unavailable" });
   electron.ipcMain.handle("provider-diagnostics:export-real-request-diff", (_, limit) => providerDiagnostics?.exportRealRequestDiff(limit) || { success: false, error: "provider_diagnostics_unavailable" });
+  electron.ipcMain.handle("provider-diagnostics:export-cache-diagnostics-v2", (_, limit) => providerDiagnostics?.exportCacheDiagnosticsV2(limit) || { success: false, error: "provider_diagnostics_unavailable" });
   electron.ipcMain.handle("providerDiagnostics:getRecent", (_, limit) => providerDiagnostics?.getRecent(limit) || []);
   electron.ipcMain.handle("providerDiagnostics:exportRecent", (_, limit) => providerDiagnostics?.exportRecent(limit) || { success: false, error: "provider_diagnostics_unavailable" });
   electron.ipcMain.handle("providerDiagnostics:getV89Settings", () => settingsRepository.getChatPromptV89Settings());

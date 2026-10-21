@@ -160,6 +160,10 @@ function createFixture({ campaignToken = "votc-v921-glm-campaign-A", date = "116
     createPromptFingerprint: fingerprint,
     defaultChatInstruction: "请依据本轮对话回应。"
   });
+  const buildMessagesWithTokenCount = sample.PromptBuilder.buildMessagesWithTokenCount.bind(sample.PromptBuilder);
+  sample.PromptBuilder.buildMessagesWithTokenCount = (...args) => buildMessagesWithTokenCount(
+    ...args.slice(0, 6), { ...(args[6] || {}), promptPlanMode: "legacy" }
+  );
   sample.engine = new MemoryEngine({
     baseDir: path.join(directory, "memory"),
     summaryFoldersDir: summariesDir,
@@ -316,7 +320,8 @@ function createFixture({ campaignToken = "votc-v921-glm-campaign-A", date = "116
       sample.gameData,
       conversation.getPromptSummaryForCharacter(Number(responderId)),
       memoryContext,
-      providerConfig
+      providerConfig,
+      { promptPlanMode: "legacy" }
     );
     const metadata = Conversation.buildPromptBlockMetadata(promptBuild);
     const options = {

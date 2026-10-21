@@ -295,6 +295,15 @@ async function settleWithin(promise, timeoutMs = 250) {
   return result;
 }
 
+async function waitForFetchState(getFetchState, label) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const state = getFetchState();
+    if (state) return state;
+    await new Promise(resolve => nativeSetTimeout(resolve, 0));
+  }
+  throw new Error(`${label}_fetch_state_not_created`);
+}
+
 async function trackCandidateAdapter({ provider, config, request, usageRecords, estimatedPromptTokens = 12 }) {
   const { createRequestControl } = candidatePlatformModules();
   const manager = makeManager({ config, provider, usageRecords });
@@ -1081,15 +1090,16 @@ async function testReaderCleanupAndCancelBeforeFirstNext() {
       const iterator = tracked.tracked[Symbol.asyncIterator]();
       let nextError = null;
       const nextSettled = iterator.next().then(() => "resolved", error => { nextError = error; return "rejected"; });
-      await getFetchState().readStarted;
+      const pendingFetchState = await waitForFetchState(getFetchState, `${type}_pending_reader`);
+      await pendingFetchState.readStarted;
       const returnSettled = iterator.return().then(() => "resolved", () => "rejected");
       const settled = await settleWithin(Promise.all([nextSettled, returnSettled]));
       failIfDifferent(`${type}_pending_reader_next_and_return_settle`, true, Array.isArray(settled));
       assertSafeProviderError(`${type}_pending_reader_abort_error`, nextError, "CANCELLED", "synthetic_pending_reader_abort");
-      const finalized = await settleWithin(getFetchState().readerFinalized);
+      const finalized = await settleWithin(pendingFetchState.readerFinalized);
       failIfDifferent(`${type}_pending_reader_finally_runs`, true, finalized !== null);
-      failIfDifferent(`${type}_pending_reader_cancel_once`, 1, getFetchState().cancelCalls);
-      failIfDifferent(`${type}_pending_reader_releases_lock`, true, getFetchState().released);
+      failIfDifferent(`${type}_pending_reader_cancel_once`, 1, pendingFetchState.cancelCalls);
+      failIfDifferent(`${type}_pending_reader_releases_lock`, true, pendingFetchState.released);
       failIfDifferent(`${type}_pending_reader_single_terminal_usage`, 1, records.length);
       failIfDifferent(`${type}_pending_reader_usage_cancelled`, "CANCELLED", records[0]?.metadata?.generationStatus);
       failIfDifferent(`${type}_pending_reader_native_usage_unknown`, "UNKNOWN", records[0]?.usage?.provenance?.status);
