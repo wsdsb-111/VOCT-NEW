@@ -128,6 +128,10 @@ async function trackRetiredAccess(sample, run, { unreadablePath = null } = {}) {
       return original.apply(this, args);
     };
     wrapped.push([target, method, original]);
+    if (typeof original.native === "function") {
+      target[method].native = original.native;
+      watch(target[method], "native", bucket);
+    }
   };
   try {
     readMethods.forEach(method => watch(fs, method, reads));

@@ -31,6 +31,8 @@ Node 22.23.3 x64 来自官方发行包，临时放在忽略的 `.build`；未全
 
 第二轮 [Windows CI 39543612831](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39543612831)，准确 SHA `b292c453d092160a730d0f197acc4503d9209390`：构建／部署通过；完整应用两次冷启动、界面／IPC、合成解码、分发目录 ffmpeg.dll 加载及正常退出 **PASS**。发布回归 **FAILED** 于 `v9.3.5-pair-ledger` 的路径别名拒绝。后续工作流将 TEMP／TMP 隔离到项目 `.build/ci-temp` 长路径，保持来源 junction 负向断言不变。当前路径守卫对无法证明为同一字面目录的短名别名采取拒绝；不增加 Win32 原生扩展来放宽此边界。
 
+第三轮 [Windows CI 39544193023](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39544193023)，准确 SHA `08bcb16f57f1ecd61b0b8940c5e16df22afe7808`：已确认 Runner 原 TEMP 为 `C:\Users\RUNNER~1\AppData\Local\Temp`；隔离后越过该问题。构建 payload 与本机完全一致，完整应用两次启动／媒体加载通过。发布回归 **FAILED** 于 `v9.3.4-independent-qa`：旧 fs 访问监视包装器丢失了 `realpathSync.native` 属性。已让包装器保留并同样监视 native 调用，未绕过旧存储访问断言；本机仅串行重跑该小型组，5/5 通过。
+
 ## Windows EXE
 
 重启前真实冷启动已执行，完整分发复制核验通过（6,359 文件、340,434,704 字节），但原安装目录和隔离副本均在主进程／Renderer 调试端点建立前退出，代码 `2147483651`／`0x80000003`。去除调试参数仍复现；stderr 无可用错误。故启动门禁为 **FAIL**，不是静态 PASS，也不能用旧 V9.3.9.3 的 UI 验证代替。
@@ -47,7 +49,7 @@ Node 22.23.3 x64 来自官方发行包，临时放在忽略的 `.build`；未全
 |---|---|
 | V9.4 离线专项 | 上述 14 个新增专项串行通过，后续三组历史回归／语法／主题合同通过；静态 package smoke 未在重启后重跑 |
 | 完整本机发布回归 | FAIL／中断，非完整 PASS |
-| 准确 SHA 的 Windows CI | 首轮 0f5d2fe／39543056777 与第二轮 b292c45／39543612831 FAILED；修订环境后待重跑 |
+| 准确 SHA 的 Windows CI | 0f5d2fe／39543056777、b292c45／39543612831、08bcb16／39544193023 均 FAILED；监视夹具修订后待重跑 |
 | Windows EXE 冷启动 | 本机 FAIL 历史保留；第二轮隔离 Windows Runner 两次完整启动及媒体加载 PASS |
 | 实际桌面键入／焦点／穿透 | NOT_RUN |
 | 真实付费 Provider | NOT_AUTHORIZED；没有调用 |
