@@ -2,6 +2,8 @@
 
 日期：2026-10-21。状态：**施工候选，未完成发布验收**。基线为 `2330bbcb6c068a4e42c19b26eba82f4034e6db63`；设计见 [V9.4 设计](V9_4_DESIGN.md)，结果见 [验证记录](V9_4_VERIFICATION.md)，后续工作见 [交接](V9_4_HANDOFF.md)。Core／App／UI 元数据为 9.4.0，表示同一 V9.4 候选，不拆分工作包版本。
 
+代码施工与自动化验收已完成：[0a42161 的 Windows CI](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39562096181) 通过 486 组完整回归、306 项构建部署及完整 EXE 冷启动／重启／媒体加载。仍未签署真实 CK3、付费 Provider、桌面输入及 Soak，不宣称正式发布或 Full Freeze。
+
 ## 用户确认的合同
 
 - 静态与已冻结内容排在 Prompt 前面；追加历史及动态内容在后面。新 V9 排序版本为 `v9_4_static_first_1`。这是用户在设计之后明确授权的顺序调整；legacy／shadow 保持原消息顺序，以 `v9_4_compat_1` 比较旧版 Golden。

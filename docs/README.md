@@ -1,6 +1,6 @@
 # VOTC 文档索引
 
-当前施工入口为 **V9.4 PromptPlan 与缓存诊断候选**：[设计](current/v9/V9_4_DESIGN.md)、[实施](current/v9/V9_4_IMPLEMENTATION.md)、[验证](current/v9/V9_4_VERIFICATION.md)、[交接](current/v9/V9_4_HANDOFF.md)。遵守静态／冻结在前、动态在后及时间／第三人来源成功后冻结复用的合同。当前完整回归未通过、EXE 冷启动失败，未签署发布；重启后本机只串行执行小型测试。
+当前入口为 **V9.4 PromptPlan 与缓存诊断候选**：[设计](current/v9/V9_4_DESIGN.md)、[实施](current/v9/V9_4_IMPLEMENTATION.md)、[验证](current/v9/V9_4_VERIFICATION.md)、[交接](current/v9/V9_4_HANDOFF.md)。遵守静态／冻结在前、动态在后及时间／第三人来源成功后冻结复用。[0a42161 的 Windows CI 39562096181](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39562096181) 已通过486组完整回归及完整 EXE 冷启动／重启／媒体加载；真实 CK3／Provider／桌面输入／Soak 仍待验收，未签署正式发布。重启后本机只串行执行小型测试，本机旧启动失败与远端 PASS 分开记录。
 
 以下 V9.3.9.3 及更早的通过记录均为历史证据，不替代 V9.4 验证。
 

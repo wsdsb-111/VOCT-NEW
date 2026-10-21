@@ -8,7 +8,7 @@ VOTC 是面向《Crusader Kings III》（CK3）的 Windows Electron 宫廷对话
 
 2026-10-21 当前源码为 **V9.4／9.4.0 PromptPlan 与缓存诊断施工候选**，尚未完成发布验收。静态及已冻结内容排在动态内容之前；时间／第三人召回全文成功使用后继续在当前对话内按回应者冻结复用，不重复召回。已接入最终 Adapter 请求预算及来源复核、匿名缓存诊断 V2。详见 [实施记录](docs/current/v9/V9_4_IMPLEMENTATION.md)、[验证记录](docs/current/v9/V9_4_VERIFICATION.md)和[交接](docs/current/v9/V9_4_HANDOFF.md)。
 
-本轮小型专项串行通过；完整发布回归尚未通过，Windows EXE 冷启动存在 `0x80000003` 失败，真实 CK3／付费 Provider／Soak 未验收。用户本机因此前并发测试死机，重启后一次仅运行一个测试进程，大型回归转隔离环境，不能将历史 CI 结果当作本版 PASS。
+本轮代码与自动化验收已完成：[0a42161 的 Windows CI 39562096181](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39562096181) 通过 **486 组完整发布回归、306 项构建部署，以及完整 EXE 冷启动／重启／实际媒体加载**，payload 与本机一致。真实 CK3／付费 Provider／桌面输入／Soak 未验收，保留候选。用户本机因此前并发测试死机，重启后一次仅运行一个测试进程，大型回归转隔离环境；本机原 `0x80000003` 失败仍作历史证据，重启后未重测，不用远端结果冒充本机通过。
 
 ### V9.3.9.3 及更早版本的历史证据
 

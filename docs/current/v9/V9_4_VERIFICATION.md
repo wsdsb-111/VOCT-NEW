@@ -1,6 +1,8 @@
 # V9.4 验证记录
 
-日期：2026-10-21。状态：**PARTIAL／停止发布验收**。本记录区分静态、离线模拟、真实 Windows 启动与外部实测；设计和历史版本 PASS 不作为当前候选 PASS。
+日期：2026-10-21。状态：**自动化门禁 PASS／外部验收未完成，保留候选**。本记录区分静态、离线模拟、真实 Windows 启动与外部实测；设计和历史版本 PASS 不作为当前候选 PASS。
+
+最新已签署自动化证据：[Windows CI 39562096181](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39562096181)，准确 SHA `0a42161f352c72739a58719bbc59975d89450311`。依赖核验、306 项构建／部署、**486 组完整发布回归、完整 EXE 冷启动与重启、界面／Preload／版本 IPC、实际媒体解码与分发目录 DLL 加载、正常退出均 PASS**。payload `759019e100cc0689868a0e0c540611e4eef75048ad73e4e57820c178dccbfc14` 与本机一致。以下前五轮失败保留原 SHA 历史归属，不改写为 PASS。
 
 ## 本机资源限制与重启恢复
 
@@ -57,8 +59,8 @@ Node 22.23.3 x64 来自官方发行包，临时放在忽略的 `.build`；未全
 |---|---|
 | V9.4 离线专项 | 上述 14 个新增专项串行通过，后续三组历史回归／语法／主题合同通过；静态 package smoke 未在重启后重跑 |
 | 完整本机发布回归 | FAIL／中断，非完整 PASS |
-| 准确 SHA 的 Windows CI | 前五轮 FAILED，具体 SHA／run／修复见上文；版本文字修订后待重跑 |
-| Windows EXE 冷启动 | 本机 FAIL 历史保留；第二轮隔离 Windows Runner 两次完整启动及媒体加载 PASS |
+| 准确 SHA 的 Windows CI | 0a42161／39562096181：486 组完整回归 PASS；前五轮 FAILED 历史保留 |
+| Windows EXE 冷启动／重启 | 0a42161 隔离 Windows Runner 完整启动、媒体加载与正常退出 PASS；本机先前 FAIL 保留、重启后未重测 |
 | 实际桌面键入／焦点／穿透 | NOT_RUN |
 | 真实付费 Provider | NOT_AUTHORIZED；没有调用 |
 | 真实 CK3／ACK／长时间 Soak | NOT_RUN |
