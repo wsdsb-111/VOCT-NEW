@@ -42,3 +42,5 @@ V2 诊断仅增加五种证据等级的区块计数；原生 cached Token、派�
 Core／App／Renderer／窗口／三主题预览统一 9.4.1。所有 Runtime 先改 src，再由既有 build／verify／deploy／verify --deployed 生成，仍为 306 项映射。新增两组测试登记发布清单，旧安全断言不降低。
 
 临时诊断可用进程级 `VOTC_PROMPT_PLAN_MODE=legacy|shadow`，保留原来源和最终预算门禁。整体回退应从 e6bdc71 源码重建部署，不单独修改 out、不回退 APPDATA 或游戏状态、不重放 Action／Letter／ACK。Memory4／Durable／Year／Life 不恢复。完整回归及 EXE 交隔离 Windows CI，本机继续单进程、384MB Node；本版不再调用付费 API。
+
+代码与自动化验收签署：`d1479db` 的 [CI 39579976545](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39579976545) 已通过 488 组完整发布、306 项构建部署与完整 EXE 冷启动／重启／媒体加载。payload 为 `89dd26ec7cac078d52f743c342947e1242acf9eb6a20b0c4ddf6f7127af8bc58`，与本机一致。真实 CK3、本机桌面输入、付费 Provider 与 Soak 未运行，继续保留候选。

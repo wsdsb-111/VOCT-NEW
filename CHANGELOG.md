@@ -4,7 +4,7 @@
 
 - 恢复 V813 可信静态模板的全局分类及物理前缀；防止自定义块伪造静态语义，保持旧模式消息与角色。
 - 来源诊断区分真实绑定、快照、模板、旧观察与未知；真实来源键仅进程内使用，不替代原授权或改变冻结提交。
-- [实施](docs/current/v9/V9_4_1_IMPLEMENTATION.md)／[验证](docs/current/v9/V9_4_1_VERIFICATION.md)单列本版专项、性能、构建、准确 SHA 的 CI 和未执行实机项目；仍是候选。
+- [实施](docs/current/v9/V9_4_1_IMPLEMENTATION.md)／[验证](docs/current/v9/V9_4_1_VERIFICATION.md)记录 d1479db 的 Windows CI 39579976545：488 组完整回归、306 项构建部署与完整 EXE 冷启动／重启／媒体加载通过。真实 CK3、本机输入、Provider 与 Soak 未执行，仍是候选。
 
 ## V9.4 施工候选（2026-10-21）
 

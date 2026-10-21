@@ -1,6 +1,6 @@
 # V9.4.1 验证记录
 
-2026-10-21。当前状态：**专项、对照与构建部署通过，完整 CI 待执行，候选**。基线为 `e6bdc711dc2624e1447a44a49e0041882a274d2a`；V9.4 的 486 组 CI 和六次 GLM 付费请求仅是历史证据，不能冒充本版通过。根因、来源等级与 UNKNOWN 债务见[实施记录](V9_4_1_IMPLEMENTATION.md)。
+2026-10-21。当前状态：**代码与自动化 Gate A／B／C 通过，真实环境 Gate D 未完成，候选**。基线为 `e6bdc711dc2624e1447a44a49e0041882a274d2a`；V9.4 的 486 组 CI 和六次 GLM 付费请求仅是历史证据，不能冒充本版通过。根因、来源等级与 UNKNOWN 债务见[实施记录](V9_4_1_IMPLEMENTATION.md)。
 
 ## 红绿与专项
 
@@ -30,15 +30,17 @@
 
 ## 工程与外部 Gate
 
-依赖核验通过 5981 文件／264 包；标准 build／verify／deploy／verify --deployed 已通过，306 项源码／生成物／部署哈希一致，App 9.4.1。payload 为 `89dd26ec7cac078d52f743c342947e1242acf9eb6a20b0c4ddf6f7127af8bc58`；receipt 位于 `.build/runtime-deploy-state/receipt.json`。首次沙箱构建曾在目录原子改名处遇到 EPERM，扩大执行范围后按原标准工具完成，不改 ACL 或防护。独立静态复核在两项对抗修复后未发现新源码阻断项。精确 SHA 的隔离 Windows CI 待执行，不预填 PASS。本机不再执行完整分发复制、大型目录故障套件或多套并发回归。
+依赖核验通过 5981 文件／264 包；标准 build／verify／deploy／verify --deployed 已通过，306 项源码／生成物／部署哈希一致，App 9.4.1。payload 为 `89dd26ec7cac078d52f743c342947e1242acf9eb6a20b0c4ddf6f7127af8bc58`；receipt 位于 `.build/runtime-deploy-state/receipt.json`。首次沙箱构建曾在目录原子改名处遇到 EPERM，扩大执行范围后按原标准工具完成，不改 ACL 或防护。独立静态复核在两项对抗修复后未发现新源码阻断项。准确 SHA `d1479dbba9b584ccc8d71787b430a29b068e243b` 的 [Windows CI 39579976545](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39579976545) 已全部通过：**488 组完整发布回归、306 项构建部署与完整 EXE 冒烟**。远端 payload 与本机 89dd26ec… 完全一致，日志已逐项复核。此后验收文档补记不改变生产 Runtime。本机不再执行完整分发复制、大型目录故障套件或多套并发回归。
+
+本轮完整分发复制核验为 6359 文件／340442415 字节；两次真实 Electron 35.1.5 启动均报告 App 9.4.1、Renderer ready、Preload 存在、版本 IPC 返回 9.4.1。合成 PCM 实际解码为 32 samples／8000 Hz／单声道；两次均观察到完整分发目录的 ffmpeg.dll 为 LOADED，locale pak 匹配。首次正常退出 code=0，重启使用同一隔离 profile、不同 PID，两个进程正常退出；不能将这些自动化结果等同用户桌面键入、焦点或空白穿透通过。匿名附件见 [CI artifact](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39579976545/artifacts/12336152273)。
 
 | Gate | 当前状态 |
 |---|---|
 | P1 专项、跨布局、旧 Golden | PASS，见上述实际结果 |
 | P2 来源／隐私／旧 verifier 与生命周期专项 | PASS；部分来源仍明确 UNKNOWN／快照级 |
 | 306 项构建部署一致性 | PASS，payload 89dd26ec…，App 9.4.1 |
-| 完整 Release Regression／精确 SHA Windows CI | PENDING |
-| 完整 EXE 冷启动、重启、IPC、媒体与 DLL | PENDING（隔离 Runner） |
+| 完整 Release Regression／精确 SHA Windows CI | PASS：d1479db／39579976545，488 组 |
+| 完整 EXE 冷启动、重启、IPC、媒体与 DLL | PASS：同 SHA 隔离 Windows Runner 两次启动；本机结果不据此改写 |
 | 用户本机新版启动／桌面输入 | NOT_RUN；保留 V9.4 历史环境失败，不假定已修复 |
 | 本版真实 CK3、动作 ACK、信件投递 | NOT_RUN |
 | 本版付费 Provider | NOT_RUN；本次施工不新增付费请求 |
