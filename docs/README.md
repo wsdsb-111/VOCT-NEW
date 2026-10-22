@@ -1,6 +1,6 @@
 # VOTC 文档索引
 
-当前入口 **V9.5.0 候选**：[实施](current/v9/V9_5_IMPLEMENTATION.md)、[异步/双语](current/v9/V9_5_ASYNC_I18N_VERIFICATION.md)、[DeepSeek 审查](current/v9/V9_5_DEEPSEEK_REVIEW.md)、[发布验证](current/v9/V9_5_RELEASE_VERIFICATION.md)、[通用展示契约](current/v9/V9_5_VIEW_CONTRACT_FREEZE.md)。用户反馈原功能页足够后，已移除独立工作区 UI 及其专用接线；通用契约与共享展示组件保留，旧功能页尚未全面迁移。主题视觉回到原页面并降低大面板遮罩不透明度。已推送 `31037d9`：343 项 build/deploy/verify 和原页面三主题／双语／透明背景／焦点／零副作用 Chrome 冒烟通过，完整原文 Canon 保存回读与状态反例通过；新 SHA CI 等待中。前次 CI `ff86656`／run 39822389302 在旧 `knowledge-ui` 源码断言处失败，断言已本地修正。346 项部署及 EXE 检查对应旧 Payload `1a800b12...e3c2`，不代表当前源码；本机 EXE 输入、真实游戏和 Soak 单列。下方“当前”为各历史批次记录。
+当前入口 **V9.5.0 候选**：[实施](current/v9/V9_5_IMPLEMENTATION.md)、[异步／双语](current/v9/V9_5_ASYNC_I18N_VERIFICATION.md)、[视觉审查](current/v9/V9_5_DEEPSEEK_REVIEW.md)、[发布验证](current/v9/V9_5_RELEASE_VERIFICATION.md)、[共享契约](current/v9/V9_5_VIEW_CONTRACT_FREEZE.md)。重复工作区已移除，原页面低遮罩背景已部署。`d8db0ee`／CI 39844302011 通过501组、343项构建部署与完整EXE冷启动／重启／媒体检查；Payload与本机一致。旧页迁移限制和人工Gate单列；下方“当前”属于各历史批次。
 
 当前入口为 **V9.4.2 缓存排查及 Action 前缀修复候选**：[实施](current/v9/V9_4_2_IMPLEMENTATION.md)、[验证](current/v9/V9_4_2_VERIFICATION.md)。聊天冻结指纹与服务商命中分开判断；Action 固定规则／示例在前、身份和当前可用动作在后。本机小型测试串行，完整门禁与 EXE 转隔离 Windows CI；无新增付费请求。下方 V9.4.1 为历史批次。
 

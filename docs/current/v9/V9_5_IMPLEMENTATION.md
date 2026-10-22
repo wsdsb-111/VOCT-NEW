@@ -4,12 +4,8 @@
 
 ## 当前修正验证
 
-2026-10-23 已提交推送 `31037d9`。本机 build、verify、deploy 和 deployed parity 通过：343 项映射，Payload SHA256 `ed5482336f61203ef5b62414bbf93a912a99c06d46f9533e866017a4a4735afd`。原功能页的三主题／双语、透明底色、保留主题图片、焦点和零业务副作用通过单 Chrome 匿名 Preload 冒烟；工作区 UI 未接入。历史世界记忆完整原文的 Canon 保存／回读与当前状态反例通过。旧 knowledge-ui 断言已按实际 `t` 与 `updateLanguage` 接线更新并在本地通过，原安全／作用域断言保留。最新提交的完整 Windows CI 等待中。
+2026-10-23，代码 SHA `d8db0eeb66bccb3b95712401f581dfce1e302e24` 的 [Windows CI 39844302011](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39844302011) **PASS**：343 项构建／部署一致性、完整 501 组回归，以及完整 EXE 冷启动／重启／媒体加载均通过。629 个测试文件已分类，127 项历史检查归档。Payload SHA256 `ed5482336f61203ef5b62414bbf93a912a99c06d46f9533e866017a4a4735afd` 与本机已部署资源一致。后续若仅更新本文等记录，不将文档提交冒充重新运行的代码 SHA。
 
-
-补充：`31037d9` 的 [CI run 39830857582](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39830857582) 在 `v9.3.8-context-usage` 的旧中文源码断言处失败，完整 EXE 冷启动／重启检查通过。该失败已修正：七项受 UI 本地化影响的旧检查改为核验翻译键和中英文原义，预算、人物状态、信件 IPC 及摘要绑定业务断言保留，七项本机串行 PASS。最新完整 CI 以随后提交的精确 SHA 为准。
-
-本轮补齐换分支保存的明确双语提示，仍由 Main 拒绝旧 token，零写入且不自动重放；`test-v8.15.2-world-summary-date-qa.js`、Canon 原文回读和 725 键字典一致性专项通过。该调整替换了 3 项部署资源，保持 343 映射。
 ## 范围
 
 用户反馈原有功能页已足够，并指出新增白色大面板遮挡了主题背景。已移除独立“V9.5 工作区”UI 和其专用生产接线；浏览、编辑、来源查看及审批继续使用原有功能页面与业务容器。`v95-view-v1` revision 1 通用契约和共享展示组件保留，供通用适配使用；独立工作区不再接入当前 UI。
@@ -36,4 +32,4 @@ Renderer runtime 通过 `i18next.changeLanguage('zh'|'en')` 切换 UI 字典，�
 
 Prompt bytes、Official Action、Legacy Summary 的现有业务与存储合同、Main 权限门槛及现有编辑／审批／来源流程不因 UI 语言变化而改变。翻译只作用于固定 UI 标签，不翻译姓名、摘要正文、人物事实、信件内容、世界线事实或动作结果；移除工作区不改变这些业务边界。
 
-此前含独立工作区的构建部署批次有 346 项映射通过，Payload SHA256 为 `1a800b12bda2e750174a7bdf0452d0dd0451cf351ca5637a50655f364958e3c2`；该旧批次 EXE 检查通过，但不代表当前源码。前次 SHA `ff86656` 的 [CI run 39822389302](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39822389302) 因旧 `knowledge-ui` 源码断言停止，该 SHA 全量验证失败；断言现已修正且本地通过。当前已推送 SHA `31037d9` 的 343 项 build/deploy/verify 及本地 Chrome、Canon 回归见上方；最新 SHA 的完整 CI 等待中。V9.5 继续保持候选，不签署 Full Freeze。验证细节见 [异步与双语验证记录](V9_5_ASYNC_I18N_VERIFICATION.md) 和[发布验证记录](V9_5_RELEASE_VERIFICATION.md)。
+旧含工作区批次和各失败 SHA 作为历史证据保留，当前完整验证以 39844302011 为准。旧功能页仍分阶段迁移；官方追忆诊断旧读取未迁入新 scoped boundary，复杂历史文案未全部翻译。真实 CK3／Provider、本机手动输入和 Soak 未验收，不签署 Full Freeze。见[异步与双语](V9_5_ASYNC_I18N_VERIFICATION.md)与[发布验证](V9_5_RELEASE_VERIFICATION.md)。

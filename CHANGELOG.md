@@ -3,8 +3,8 @@
 - 按用户反馈移除重复的八域只读工作区及专用模块，保留原有功能页面；主题视觉回归原页面并降低大面板遮罩不透明度。
 - UI 中英文设置与旧动作语言、Prompt 和游戏语言隔离；修复异步乱序、来源定位、Provider 模型列表归属及弹窗焦点。
 - 收紧历史事件“战事仍在持续”与人物当前状态的分类边界；完整历史原文 Canon 保存回读及当前状态反例通过，保留 CK3 结构化核验。
-- 已推送 `31037d9`，343 项 build/deploy/verify 和原页面三主题、双语、透明背景、主题图、焦点及零副作用 Chrome 冒烟通过；新 SHA CI 等待中。
-- 前次 SHA `ff86656` 的 [CI run 39822389302](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39822389302) 因旧 `knowledge-ui` 源码断言停止，该 SHA 全量失败，断言已修正并本地通过；旧 Payload `1a800b12...e3c2` 的 EXE 检查通过但不代表当前源码。
+- 已部署343项资源，原页面三主题／双语／透明背景与历史世界记忆原文回读通过；换分支保存显示明确安全提示，旧 token 拒写且不自动重放。
+- 代码 `d8db0ee` 的 [Windows CI 39844302011](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39844302011) 通过501组及完整EXE冷启动／重启／媒体检查；旧失败保留于发布验证，真实CK3／Provider／本机输入／Soak仍单列。
 - [实施与限制](docs/current/v9/V9_5_IMPLEMENTATION.md)、[发布验证](docs/current/v9/V9_5_RELEASE_VERIFICATION.md)。
 
 # V9.4.2（2026-10-22）
