@@ -177,7 +177,6 @@ const archivedChecks = [
 
 const releaseChecks = [
   { group: "v9.5-canon-state-context", script: "test-v9.5-canon-state-context.js" },
-  { group: "v9.5-workspace-controller", script: "test-v9.5-workspace-controller.js" },
   { group: "v9.5-renderer-reads", script: "test-v9.5-renderer-reads.js" },
   { group: "v9.4.1-v813-static-classification", script: "test-v9.4.1-v813-static-classification.js" },
   { group: "v9.4.1-source-provenance", script: "test-v9.4.1-source-provenance.js" },

@@ -5,17 +5,6 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const root = path.resolve(__dirname, "..");
-const workspaceKinds = [
-  "memory-list",
-  "knowledge-facts",
-  "worldline-timeline",
-  "letter-list",
-  "action-activity",
-  "provider-diagnostics",
-  "settings-section",
-  "conversation-feed"
-];
-
 function mockPreloadSource() {
   return `(() => {
     const state = {
@@ -344,32 +333,16 @@ async function selectTheme(browser, theme) {
   await browser.waitFor(`document.documentElement.getAttribute('data-votc-theme') === ${JSON.stringify(theme)}`);
 }
 
-async function selectWorkspaceKind(browser, kind) {
-  const result = await browser.evaluate(`(() => {
-    const select = document.querySelector(".v95-workspace-toolbar select");
-    if (!select) return false;
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, ${JSON.stringify(kind)});
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-    return true;
-  })()`);
-  assert.equal(result, true, "expected the real V9.5 workspace view selector");
-  await browser.waitFor(`Boolean(document.querySelector('.v95-workspace-slot .v95-view[data-kind="${kind}"]') && document.querySelector('.v95-workspace-slot .v95-view[data-kind="${kind}"] .v95-row[data-kind="${kind}"]'))`);
-}
-
 async function assertNoHorizontalOverflow(browser, label) {
   const metrics = await browser.evaluate(`(() => {
-    const workspace = document.querySelector(".v95-workspace");
     return {
       viewport: window.innerWidth,
       document: document.documentElement.scrollWidth,
-      body: document.body.scrollWidth,
-      workspaceClient: workspace?.clientWidth ?? 0,
-      workspaceScroll: workspace?.scrollWidth ?? 0
+      body: document.body.scrollWidth
     };
   })()`);
   assert(metrics.document <= metrics.viewport, `${label}: document overflows horizontally (${JSON.stringify(metrics)})`);
   assert(metrics.body <= metrics.viewport, `${label}: body overflows horizontally (${JSON.stringify(metrics)})`);
-  assert(metrics.workspaceScroll <= metrics.workspaceClient, `${label}: workspace overflows horizontally (${JSON.stringify(metrics)})`);
 }
 
 async function main() {
@@ -416,41 +389,32 @@ async function main() {
     await selectLanguage(browser, "ZH");
     assert.equal(await browser.evaluate("window.__v95RendererUiFixture.presentationEnabled"), true);
 
-    await clickHeaderButton(browser, ["V9.5 工作区", "V9.5 Workspace"]);
-    await browser.waitFor("document.querySelector('.v95-workspace-heading h3')");
+    assert.equal(await browser.evaluate("document.querySelector('.v95-workspace') !== null"), false, "no duplicate workspace is added");
+    assert.equal(await browser.evaluate("document.querySelector('.config-header').innerText.includes('V9.5 工作区')"), false);
     await selectTheme(browser, "knight");
-    assert.match(await browser.evaluate("document.querySelector('.v95-workspace-heading h3').textContent"), /V9\.5 工作区/);
+    await browser.evaluate("new Promise(resolve => setTimeout(resolve, 220))");
     await browser.screenshot(path.join(root, ".build", "v9.5-construction", "visual", "knight-zh.png"));
-
-    const visitedKinds = [];
-    for (const kind of workspaceKinds) {
-      await selectWorkspaceKind(browser, kind);
-      const view = await browser.evaluate(`(() => {
-        const root = document.querySelector('.v95-workspace-slot .v95-view[data-kind="${kind}"]');
-        return { kind: root?.dataset.kind || null, rows: root?.querySelectorAll('.v95-row').length || 0 };
-      })()`);
-      assert.equal(view.kind, kind, `the production DOM should mount the ${kind} view`);
-      assert(view.rows > 0, `the ${kind} view should render its safe fixture row`);
-      visitedKinds.push(view.kind);
-    }
-    assert.deepEqual([...new Set(visitedKinds)].sort(), [...workspaceKinds].sort(), "all eight production workspace kinds should render");
-
     await selectLanguage(browser, "EN");
-    await browser.waitFor("document.querySelector('.v95-workspace')?.getAttribute('lang') === 'en-US' && document.querySelector('.v95-workspace-heading h3')?.textContent.includes('V9.5 Workspace')");
-    await selectWorkspaceKind(browser, "conversation-feed");
-    await assertNoHorizontalOverflow(browser, "1024px production workspace");
+    await browser.waitFor("document.querySelector('.v95-language-settings')?.innerText.includes('Interface language')");
+    await assertNoHorizontalOverflow(browser, "1024px original settings");
     await selectTheme(browser, "parchment");
-    const englishWorkspace = await browser.evaluate("document.querySelector('.v95-workspace').innerText");
-    assert.match(englishWorkspace, /V9\.5 Workspace/);
-    assert.match(englishWorkspace, /Mock courtier/);
+    await browser.evaluate("new Promise(resolve => setTimeout(resolve, 220))");
     await browser.screenshot(path.join(root, ".build", "v9.5-construction", "visual", "parchment-en.png"));
-
     await selectTheme(browser, "ink");
     await selectTheme(browser, "knight");
     await selectLanguage(browser, "ZH");
-    await browser.waitFor("document.querySelector('.v95-workspace')?.getAttribute('lang') === 'zh-CN' && document.querySelector('.v95-workspace-heading h3')?.textContent.includes('V9.5 工作区')");
-    await assertNoHorizontalOverflow(browser, "Chinese production workspace");
-
+    await browser.waitFor("document.querySelector('.v95-language-settings')?.innerText.includes('界面语言')");
+    await assertNoHorizontalOverflow(browser, "Chinese original settings");
+    const panelStyle = await browser.evaluate(`(() => {
+      const style = getComputedStyle(document.querySelector('.config-main-content'));
+      return { background: style.backgroundColor, image: style.backgroundImage, shadow: style.boxShadow };
+    })()`);
+    assert.equal(panelStyle.background, "rgba(0, 0, 0, 0)", "the large panel should have no opaque base color");
+    assert.equal(panelStyle.shadow, "none", "the large panel should have no added shadow frame");
+    assert(panelStyle.image.includes("url("), "the existing theme artwork should remain visible behind the light veil");
+    await selectTheme(browser, "ink");
+    await browser.evaluate("new Promise(resolve => setTimeout(resolve, 220))");
+    await browser.screenshot(path.join(root, ".build", "v9.5-construction", "visual", "ink-zh.png"));
     const fixtureState = await browser.evaluate(`(() => ({
       effects: window.__v95RendererUiFixture.effectApiCalls,
       providerWrites: window.__v95RendererUiFixture.providerConfigWrites,
@@ -463,17 +427,12 @@ async function main() {
       protectedSnapshot: window.__v95RendererUiFixture.protectedSnapshot(),
       providerSelections: window.__v95RendererUiFixture.providerSelectionCalls
     }))()`);
-    assert.deepEqual(fixtureState.effects, [], "read-only workspace browsing must not call game/action/letter effect APIs");
+    assert.deepEqual(fixtureState.effects, [], "theme and settings browsing must not call game/action/letter effect APIs");
     assert.deepEqual(fixtureState.providerWrites, [], "UI language changes must not save provider configuration");
     assert.deepEqual(fixtureState.promptWrites, [], "UI language changes must not write prompt settings");
     assert.deepEqual(fixtureState.legacyCalls, [], "the new UI language control must not call the legacy language API");
-    for (const method of [
-      "conversationAPI.getUiContext", "conversationAPI.getConversationEntries", "conversationAPI.getSummariesDashboardData",
-      "characterKnowledgeAPI.getConversationView", "characterKnowledgeAPI.getOwnerView", "characterKnowledgeAPI.getTargetView",
-      "worldlineAPI.getAnnualDelta", "lettersAPI.getStatuses", "usageAPI.getReport"
-    ]) assert(fixtureState.reads.includes(method), `the production workspace should use its read API: ${method}`);
     assert(fixtureState.uiWrites.some(write => write.method === "saveUiPresentationEnabled" && write.value === true),
-      "the workspace presentation preference should use its dedicated setting API");
+      "the presentation preference should use its dedicated setting API");
     assert(fixtureState.uiWrites.some(write => write.method === "saveUiLanguage" && write.value === "en-US")
       && fixtureState.uiWrites.some(write => write.method === "saveUiLanguage" && write.value === "zh-CN"),
     "both UI locales should use the isolated UI-language setting API");

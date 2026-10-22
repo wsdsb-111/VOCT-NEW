@@ -329,8 +329,10 @@ async function testManagerMountPoint() {
   assert.ok(mount >= 0 && mount < emptyList, "knowledge panel should mount at manager level before the empty/list branch");
   assert.equal((bundleSource.match(/CharacterKnowledgeUiMount/g) || []).length, 2,
     "the component should have one definition and one manager-level mount, with no owner-group mount");
-  assert.match(bundleSource, /return mount\(hostRef\.current\);\s*\}, \[\]\);/,
-    "the manager-level mount should not depend on summary owner props");
+  assert.match(bundleSource, /const cleanup = mount\(hostRef\.current, \{ t: v95Runtime\?\.t \}\);[\s\S]*?return \(\) => \{ cleanupRef\.current = null; cleanup\?\.\(\); \};\s*\}, \[\]\);/,
+    "the manager-level mount should pass the translator and return its cleanup without summary owner props");
+  assert.match(bundleSource, /reactExports\.useEffect\(\(\) => cleanupRef\.current\?\.updateLanguage\?\.\(v95Runtime\?\.t\), \[uiPreferences\.uiLanguage\]\);/,
+    "the mounted knowledge UI should refresh labels when the UI language changes");
 }
 
 async function testNewDisclosureRefreshesSelectedPair() {

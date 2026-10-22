@@ -1366,18 +1366,6 @@
       "target": "out/renderer/v95/icons/icon-registry.js"
     },
     {
-      "source": "renderer/v95/containers/workspace-view.js",
-      "target": "out/renderer/v95/containers/workspace-view.js"
-    },
-    {
-      "source": "renderer/v95/containers/workspace-controller.js",
-      "target": "out/renderer/v95/containers/workspace-controller.js"
-    },
-    {
-      "source": "renderer/v95/containers/snapshot-presentation.js",
-      "target": "out/renderer/v95/containers/snapshot-presentation.js"
-    },
-    {
       "source": "renderer/v95/containers/renderer-runtime.js",
       "target": "out/renderer/v95/containers/renderer-runtime.js"
     },

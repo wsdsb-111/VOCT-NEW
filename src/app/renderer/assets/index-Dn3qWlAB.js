@@ -2,9 +2,15 @@ import { WorldMemoryEditor } from "../world-memory-editor.js";
 import { getLegacySummaryPage, getSummaryDisplayEntries, getSummaryImportantMatters } from "../summary-date-order.js";
 import { createRendererRuntime } from "../v95/containers/renderer-runtime.js";
 import { createReadBoundary } from "../v95/state/read-boundary.js";
-import { createWorkspaceView } from "../v95/containers/workspace-view.js";
+import { defaultIconRegistry } from "../v95/icons/icon-registry.js";
 let v95Runtime = null;
-let V95WorkspaceView = null;
+function V95TabIcon({ name }) {
+  const host = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    host.current?.replaceChildren(defaultIconRegistry.renderIcon(name, { size: 16, decorative: true }));
+  }, [name]);
+  return jsxRuntimeExports.jsx("span", { ref: host, className: "v95-tab-icon", "aria-hidden": "true" });
+}
 function useV95Preferences() {
   const [value, setValue] = reactExports.useState(() => v95Runtime?.getPreferences() || { uiLanguage: "zh-CN", presentationEnabled: false });
   reactExports.useEffect(() => v95Runtime?.subscribe(({ preferences }) => setValue(previous =>
@@ -23742,9 +23748,6 @@ function ConfigPanel({ onClose }) {
   const loadSettings = useConfigStore((state) => state.loadSettings);
   const appSettings = useConfigStore((state) => state.appSettings);
   const [currentTab, setCurrentTab] = reactExports.useState("connection");
-  reactExports.useEffect(() => {
-    if (!v95Preferences.presentationEnabled && currentTab === "workspace") setCurrentTab("settings");
-  }, [v95Preferences.presentationEnabled, currentTab]);
   const [appVersion, setAppVersion] = reactExports.useState("");
   const [courtTheme, setCourtTheme] = reactExports.useState(() => {
     const savedTheme = window.localStorage.getItem("votc-ui-theme");
@@ -23997,21 +24000,16 @@ function ConfigPanel({ onClose }) {
               onClick: () => setCurrentTab("connection"),
               className: currentTab === "connection" ? "active" : "",
               style: { zIndex: 12 },
-              children: t("config.connection")
+              children: jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [v95Preferences.presentationEnabled && jsxRuntimeExports.jsx(V95TabIcon, { name: "provider" }), t("config.connection") ] })
             }
           ),
-          v95Preferences.presentationEnabled && jsxRuntimeExports.jsx("button", {
-            type: "button", onClick: () => setCurrentTab("workspace"),
-            className: currentTab === "workspace" ? "active" : "", style: { zIndex: 12 },
-            children: v95Runtime.t("workspace.title")
-          }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
               onClick: () => setCurrentTab("settings"),
               className: currentTab === "settings" ? "active" : "",
               style: { zIndex: 12 },
-              children: t("config.settings")
+              children: jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [v95Preferences.presentationEnabled && jsxRuntimeExports.jsx(V95TabIcon, { name: "settings" }), t("config.settings") ] })
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -24021,7 +24019,7 @@ function ConfigPanel({ onClose }) {
               className: currentTab === "actions" ? "active" : "",
               title: t("config.manageActions"),
               style: { zIndex: 12 },
-              children: t("config.actions")
+              children: jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [v95Preferences.presentationEnabled && jsxRuntimeExports.jsx(V95TabIcon, { name: "action" }), t("config.actions") ] })
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -24030,7 +24028,7 @@ function ConfigPanel({ onClose }) {
               onClick: () => setCurrentTab("prompts"),
               className: currentTab === "prompts" ? "active" : "",
               style: { zIndex: 12 },
-              children: t("config.prompts")
+              children: jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [v95Preferences.presentationEnabled && jsxRuntimeExports.jsx(V95TabIcon, { name: "edit" }), t("config.prompts") ] })
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -24039,7 +24037,7 @@ function ConfigPanel({ onClose }) {
               onClick: () => setCurrentTab("summaries"),
               className: currentTab === "summaries" ? "active" : "",
               style: { zIndex: 12 },
-              children: t("config.summaries")
+              children: jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [v95Preferences.presentationEnabled && jsxRuntimeExports.jsx(V95TabIcon, { name: "memory" }), t("config.summaries") ] })
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -24108,13 +24106,6 @@ function ConfigPanel({ onClose }) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "config-close-button", onClick: onClose, children: "✕" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "config-main-content", children: [
-          currentTab === "workspace" && v95Preferences.presentationEnabled && jsxRuntimeExports.jsx(V95WorkspaceView, {
-            onOpenControls: kind => {
-              if (kind === "conversation-feed" || kind === "action-activity") { onClose(); return; }
-              setCurrentTab(({ "memory-list": "summaries", "knowledge-facts": "summaries", "worldline-timeline": "worldline",
-                "letter-list": "settings", "provider-diagnostics": "providerDiagnostics", "settings-section": "settings" })[kind] || "settings");
-            }
-          }),
           currentTab === "connection" && /* @__PURE__ */ jsxRuntimeExports.jsx(ConnectionView, {}),
           currentTab === "settings" && /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsView, {}),
           currentTab === "actions" && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionsView, {}),
@@ -24926,10 +24917,6 @@ await instance.use(initReactI18next).init({
 v95Runtime = await createRendererRuntime({ i18n: instance, apis: { llmConfigAPI: window.llmConfigAPI, conversationAPI: window.conversationAPI } });
 v95Runtime.subscribe(({ preferences }) => {
   document.documentElement.setAttribute("data-v95-presentation", String(preferences.presentationEnabled));
-});
-V95WorkspaceView = createWorkspaceView(reactExports, jsxRuntimeExports, v95Runtime, {
-  conversationAPI: window.conversationAPI, worldlineAPI: window.worldlineAPI, lettersAPI: window.lettersAPI,
-  characterKnowledgeAPI: window.characterKnowledgeAPI, providerDiagnosticsAPI: window.providerDiagnosticsAPI, usageAPI: window.usageAPI
 });
 window.addEventListener("beforeunload", () => v95Runtime.dispose(), { once: true });
 const container = document.getElementById("root");

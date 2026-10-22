@@ -1,6 +1,6 @@
 # VOTC 文档索引
 
-当前入口 **V9.5.0 候选**：[实施](current/v9/V9_5_IMPLEMENTATION.md)、[异步/双语](current/v9/V9_5_ASYNC_I18N_VERIFICATION.md)、[DeepSeek 审查](current/v9/V9_5_DEEPSEEK_REVIEW.md)、[发布验证](current/v9/V9_5_RELEASE_VERIFICATION.md)、[冻结合同](current/v9/V9_5_VIEW_CONTRACT_FREEZE.md)。346 项构建部署一致；真实游戏、本机 EXE 输入和 Soak 单列。下方“当前”为各历史批次记录。
+当前入口 **V9.5.0 候选**：[实施](current/v9/V9_5_IMPLEMENTATION.md)、[异步/双语](current/v9/V9_5_ASYNC_I18N_VERIFICATION.md)、[DeepSeek 审查](current/v9/V9_5_DEEPSEEK_REVIEW.md)、[发布验证](current/v9/V9_5_RELEASE_VERIFICATION.md)、[历史展示契约](current/v9/V9_5_VIEW_CONTRACT_FREEZE.md)。用户反馈原功能页足够后，已移除重复工作区 UI 和专用模块；主题视觉回到原页面并降低大面板遮罩不透明度。前次 CI `ff86656`／run 39822389302 在旧 `knowledge-ui` 源码断言处停止，该 SHA 全量失败，旧断言已修正，新提交 CI 待运行。346 项部署及 EXE 检查对应旧 Payload `1a800b12...e3c2`，不代表当前源码；本机 EXE 输入、真实游戏和 Soak 单列。下方“当前”为各历史批次记录。
 
 当前入口为 **V9.4.2 缓存排查及 Action 前缀修复候选**：[实施](current/v9/V9_4_2_IMPLEMENTATION.md)、[验证](current/v9/V9_4_2_VERIFICATION.md)。聊天冻结指纹与服务商命中分开判断；Action 固定规则／示例在前、身份和当前可用动作在后。本机小型测试串行，完整门禁与 EXE 转隔离 Windows CI；无新增付费请求。下方 V9.4.1 为历史批次。
 

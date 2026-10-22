@@ -10,7 +10,6 @@ export default {
   provider: { title: "服务商", unavailable: "服务商暂不可用" },
   diagnostics: { title: "服务商诊断", empty: "暂无用量报告。", native: "服务商原生报告", estimated: "估算", unknown: "未报告", cacheRate: "缓存命中率" },
   settings: { title: "设置", empty: "暂无可用设置。", uiLanguage: "界面语言", promptLanguage: "既有动作语言", gameLanguage: "游戏语言", languageHelp: "切换界面语言不会改变提示词或游戏语言。", chinese: "简体中文", english: "English", presentation: "V9.5 展示层" },
-  workspace: { title: "V9.5 工作区", readOnly: "只读快照；编辑、审批和来源操作仍在原页面进行。", openControls: "打开原页面控件", section: "工作区视图", worldlineEvent: "世界线事件", knowledgeDirection: "{{owner}} → {{target}}", events: { warStarted: "战争开始", warNoLongerActive: "战争不再活跃", importantCharacterDied: "重要人物去世", titleHolderChanged: "头衔持有人变更" } },
   status: { IDLE: "空闲", LOADING: "加载中", REFRESHING: "刷新中", READY: "就绪", EMPTY: "暂无内容", ERROR: "错误", STALE: "已过期", QUEUED: "已排队", DISPATCHED: "已派发", ACKNOWLEDGED: "已收到回执", CONFIRMED: "已由游戏回读确认", UNCONFIRMED: "效果未确认", UNKNOWN: "未知", SOURCE_BOUND: "来源已核验", BLOCKED: "已阻止", STALLED: "等待可靠确认" },
   errors: { STALE_CONTEXT: "上下文已改变，请刷新此视图。", CAMPAIGN_CHANGED: "战役已改变，请重新加载。", CONVERSATION_CHANGED: "对话已改变，请重新加载。", REVISION_CONFLICT: "来源已变化，请刷新后编辑。", SOURCE_REVOKED: "此来源已不再可用。", PERMISSION_DENIED: "未获授权查看此信息。", PROVIDER_UNAVAILABLE: "服务商不可用，请检查配置。", REQUEST_CANCELLED: "请求已取消。", EFFECT_UNKNOWN: "效果未知，请先回读后端状态。", IPC_UNAVAILABLE: "应用连接暂不可用。", VALIDATION_ERROR: "提交的值无效。", UNKNOWN_ERROR: "请求失败，请刷新或查看诊断。" },
   legacyKnowledge: {
