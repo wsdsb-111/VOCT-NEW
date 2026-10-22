@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh-CN" data-votc-theme="knight">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>V9.5 Visual Review · DeepSeek Harness</title>
+  <link rel="stylesheet" href="../../src/app/renderer/ui-comfort.css">
+  <link rel="stylesheet" href="../../src/app/renderer/v95/visual/design-tokens.css">
+  <link rel="stylesheet" href="../../src/app/renderer/v95/visual/v95-ui.css">
+  <link rel="stylesheet" href="showcase.css">
+  <script type="module" src="showcase.js"></script>
+</head>
+<body>
+  <a class="demo-skip" href="#showcase-main">Skip to showcase</a>
+  <div class="demo-shell v95-ui" id="demo-shell">
+    <header class="demo-toolbar" aria-label="Showcase controls">
+      <div class="demo-brand">
+        <span class="demo-brand-mark" aria-hidden="true">V9.5</span>
+        <span>
+          <strong>DeepSeek Visual Layer</strong>
+          <small>Offline synthetic showcase · v95-view-v1 rev 1</small>
+        </span>
+      </div>
+      <div class="demo-controls">
+        <div class="demo-control-group" role="group" aria-label="Theme">
+          <span class="demo-control-label">Theme</span>
+          <button type="button" class="demo-segment" data-demo-theme="parchment" aria-pressed="false">Parchment</button>
+          <button type="button" class="demo-segment" data-demo-theme="knight" aria-pressed="true">Knight</button>
+          <button type="button" class="demo-segment" data-demo-theme="ink" aria-pressed="false">Ink</button>
+        </div>
+        <div class="demo-control-group" role="group" aria-label="Language">
+          <span class="demo-control-label">UI</span>
+          <button type="button" class="demo-segment" data-demo-language="zh-CN" aria-pressed="true">中文</button>
+          <button type="button" class="demo-segment" data-demo-language="en-US" aria-pressed="false">English</button>
+        </div>
+        <label class="demo-control-group demo-select-group">
+          <span class="demo-control-label">State</span>
+          <select id="demo-state" aria-label="Async state">
+            <option value="ready">ready</option>
+            <option value="refreshing">refreshing</option>
+            <option value="empty">empty</option>
+            <option value="loading">loading</option>
+            <option value="error">error</option>
+            <option value="stale">stale</option>
+            <option value="idle">idle</option>
+          </select>
+        </label>
+        <label class="demo-control-group demo-check">
+          <input type="checkbox" id="demo-density">
+          <span>Compact</span>
+        </label>
+        <button type="button" class="demo-button" id="demo-open-detail">Open detail</button>
+        <button type="button" class="demo-button demo-button-danger" id="demo-open-confirm">Review dialog</button>
+      </div>
+    </header>
+
+    <main id="showcase-main">
+      <section class="demo-hero">
+        <p class="demo-eyebrow">VOCT · V9.5 · UI Visual Design</p>
+        <h1>Quieter surfaces, clearer states.</h1>
+        <p class="demo-lede">
+          A pure presentation layer for the court: keyed rows, explicit async states,
+          readable long text, and dialogs that stay out of the way. Synthetic data only;
+          no IPC, storage, network or game data is used.
+        </p>
+        <div class="demo-chips">
+          <span>parchment / knight / ink</span>
+          <span>zh-CN / en-US</span>
+          <span>8 view kinds</span>
+          <span>keyboard + reduced motion</span>
+        </div>
+      </section>
+
+
+
+
+
+
+
+
+
+
+
+
+<section class="demo-section" aria-labelledby="page-title">
+        <div class="demo-section-head">
+          <div>
+            <span class="demo-section-index">01</span>
+            <h2 id="page-title">Page switch</h2>
+          </div>
+          <p>A short fade swap preserves the host container; prefer real container state over remounting.</p>
+        </div>
+        <div class="demo-panel demo-page-switch">
+          <div class="demo-page-tabs" role="tablist" aria-label="Preview a view">
+            <button type="button" role="tab" aria-selected="true" data-page-kind="conversation-feed">Conversation</button>
+            <button type="button" role="tab" aria-selected="false" data-page-kind="memory-list">Memory</button>
+            <button type="button" role="tab" aria-selected="false" data-page-kind="provider-diagnostics">Diagnostics</button>
+          </div>
+          <div class="demo-page-stage" id="demo-page-stage"></div>
+        </div>
+      </section>
+<section class="demo-section" aria-labelledby="views-title">
+        <div class="demo-section-head">
+          <div>
+            <span class="demo-section-index">02</span>
+            <h2 id="views-title">Eight view kinds</h2>
+          </div>
+          <p>One lane per kind; switch state above to inspect all five async surfaces at once.</p>
+        </div>
+        <div class="demo-grid" id="demo-grid"></div>
+      </section>
+<section class="demo-section" aria-labelledby="primitives-title">
+        <div class="demo-section-head">
+          <div>
+            <span class="demo-section-index">03</span>
+            <h2 id="primitives-title">Icon language & controls</h2>
+          </div>
+          <p>Original inline SVG. Unknown names resolve to the neutral unknown symbol.</p>
+        </div>
+        <div class="demo-panel demo-primitives">
+          <div class="demo-primitive-group">
+            <h3>Canonical icons</h3>
+            <div class="demo-icon-grid" id="demo-icon-grid"></div>
+          </div>
+          <div class="demo-primitive-group">
+            <h3>Status & actions</h3>
+            <div class="demo-status-row" id="demo-status-row"></div>
+            <div class="demo-button-row" id="demo-button-row"></div>
+            <p class="demo-note">Queued, ACK and UNKNOWN never borrow the confirmed check.</p>
+          </div>
+          <div class="demo-primitive-group">
+            <h3>Unknown icon fallback</h3>
+            <div class="demo-fallback" id="demo-fallback"></div>
+            <p class="demo-note">Unknown IDs stay valid at the display boundary and fall back offline.</p>
+          </div>
+        </div>
+      </section>
+<section class="demo-section" aria-labelledby="notes-title">
+        <div class="demo-section-head">
+          <div>
+            <span class="demo-section-index">04</span>
+            <h2 id="notes-title">Review log</h2>
+          </div>
+          <p>UI intents are displayed only. No business execution happens in this page.</p>
+        </div>
+        <div class="demo-panel demo-log-panel">
+          <ol class="demo-log" id="demo-log" aria-live="polite"></ol>
+        </div>
+      </section>
+    </main>
+
+    <footer class="demo-footer">
+      <span>DeepSeek Harness · V9.5 visual layer</span>
+      <span>Review-only delivery · Codex integrates &amp; verifies Electron</span>
+    </footer>
+  </div>
+</body>
+</html>

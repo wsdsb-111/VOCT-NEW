@@ -1,5 +1,7 @@
 # VOTC 文档索引
 
+当前入口 **V9.5.0 候选**：[实施](current/v9/V9_5_IMPLEMENTATION.md)、[异步/双语](current/v9/V9_5_ASYNC_I18N_VERIFICATION.md)、[DeepSeek 审查](current/v9/V9_5_DEEPSEEK_REVIEW.md)、[发布验证](current/v9/V9_5_RELEASE_VERIFICATION.md)、[冻结合同](current/v9/V9_5_VIEW_CONTRACT_FREEZE.md)。346 项构建部署一致；真实游戏、本机 EXE 输入和 Soak 单列。下方“当前”为各历史批次记录。
+
 当前入口为 **V9.4.2 缓存排查及 Action 前缀修复候选**：[实施](current/v9/V9_4_2_IMPLEMENTATION.md)、[验证](current/v9/V9_4_2_VERIFICATION.md)。聊天冻结指纹与服务商命中分开判断；Action 固定规则／示例在前、身份和当前可用动作在后。本机小型测试串行，完整门禁与 EXE 转隔离 Windows CI；无新增付费请求。下方 V9.4.1 为历史批次。
 
 本版代码 `e9d7d6f` 的 [CI 39651824091](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39651824091) 已通过488组发布、306项构建部署及完整EXE冷启动／重启／媒体加载。真实CK3、Provider新请求命中率与Soak仍未签署。

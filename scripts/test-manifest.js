@@ -176,8 +176,22 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.5-canon-state-context", script: "test-v9.5-canon-state-context.js" },
+  { group: "v9.5-workspace-controller", script: "test-v9.5-workspace-controller.js" },
+  { group: "v9.5-renderer-reads", script: "test-v9.5-renderer-reads.js" },
   { group: "v9.4.1-v813-static-classification", script: "test-v9.4.1-v813-static-classification.js" },
   { group: "v9.4.1-source-provenance", script: "test-v9.4.1-source-provenance.js" },
+  { group: "v9.5-view-contract", script: "test-v9.5-view-contract.js" },
+  { group: "v9.5-language-settings", script: "test-v9.5-language-settings.js" },
+  { group: "v9.5-async-state", script: "test-v9.5-async-state.js" },
+  { group: "v9.5-main-scope", script: "test-v9.5-main-scope.js" },
+  { group: "v9.5-provider-model-scope", script: "test-v9.5-provider-model-scope.js" },
+  { group: "v9.5-domain-containers", script: "test-v9.5-domain-containers.js" },
+  { group: "v9.5-legacy-i18n", script: "test-v9.5-legacy-i18n.js" },
+  { group: "v9.5-renderer-runtime", script: "test-v9.5-renderer-runtime.js" },
+  { group: "v9.5-legacy-async", script: "test-v9.5-legacy-async.js" },
+  { group: "v9.5-visual-lifecycle", script: "test-v9.5-visual-lifecycle.js" },
+  { group: "v9.5-renderer-ui", script: "test-v9.5-renderer-ui.js" },
   { group: "v9.4-deferred-main-span-source", script: "test-v9.4-deferred-main-span-source.js" },
   { group: "v9.4-static-first-order", script: "test-v9.4-static-first-order.js" },
   { group: "v9.4-source-path-boundary", script: "test-v9.4-source-path-boundary.js" },

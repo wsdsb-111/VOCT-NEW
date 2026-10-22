@@ -296,8 +296,33 @@ function createSettingsRepository({ Store, schema, SecureProviderSecrets, electr
       this.store.set("language", language);
       console.log("Language setting saved:", language);
     }
+    getUiLanguage() {
+      const language = this.store.get("uiLanguage", "zh-CN");
+      return language === "zh-CN" || language === "en-US" ? language : "zh-CN";
+    }
+    saveUiLanguage(language) {
+      if (language !== "zh-CN" && language !== "en-US") throw new Error("ui_language_invalid");
+      this.store.set("uiLanguage", language);
+      console.log("UI language setting saved:", language);
+    }
+    getLanguagePreferences() {
+      return {
+        uiLanguage: this.getUiLanguage(),
+        // The legacy language drives Action localization and updater text, not general chat Prompt language.
+        promptLanguage: this.getLanguage(),
+        gameLanguage: "unknown",
+        promptLanguageSource: "legacy-action-language"
+      };
+    }
     getAllowPrerelease() {
       return this.store.get("allowPrerelease", false);
+    }
+    getUiPresentationEnabled() {
+      return this.store.get("v95PresentationEnabled", true) === true;
+    }
+    saveUiPresentationEnabled(enabled) {
+      if (typeof enabled !== "boolean") throw new Error("ui_presentation_invalid");
+      this.store.set("v95PresentationEnabled", enabled);
     }
     saveAllowPrerelease(allow) {
       this.store.set("allowPrerelease", allow);

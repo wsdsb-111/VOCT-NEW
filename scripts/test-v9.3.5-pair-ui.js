@@ -9,6 +9,13 @@ const root = path.resolve(__dirname, "..");
 const ui = require(path.join(root, "src", "app", "renderer", "pair-long-term-ui.js"));
 const parser = require(path.join(root, "src", "app", "shared", "pair-important-matters.js"));
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => { resolve = resolvePromise; reject = rejectPromise; });
+  return { promise, resolve, reject };
+}
+
 function createHarness(api, options = {}) {
   const changes = [];
   const controller = ui.createController(api, {
@@ -339,6 +346,111 @@ async function testVerifiedSourceBodyIsOpened() {
   controller.dispose();
 }
 
+async function testRefreshLatestWins() {
+  const first = deferred();
+  const second = deferred();
+  const late = deferred();
+  const latest = deferred();
+  const responses = new Map([[0, first], [2, second], [3, late], [4, latest]]);
+  const { controller } = createHarness({ getPairMemoryIndex: payload => responses.get(payload.page).promise });
+  const older = controller.refresh(0, "newest");
+  const newer = controller.refresh(2, "oldest");
+  first.resolve({ success: true, page: 0, sort: "newest", items: [{ text: "旧结果" }] });
+  await older;
+  assert.strictEqual(controller.state.busy, true, "an older page response cannot clear the latest request's loading state");
+  second.resolve({ success: true, page: 2, sort: "oldest", items: [{ text: "最新结果" }] });
+  await newer;
+  assert.strictEqual(controller.state.ledger.items[0].text, "最新结果");
+
+  const pendingOld = controller.refresh(3, "newest");
+  const pendingNew = controller.refresh(4, "oldest");
+  latest.resolve({ success: true, page: 4, sort: "oldest", items: [{ text: "最后结果" }] });
+  await pendingNew;
+  late.resolve({ success: true, page: 3, sort: "newest", items: [{ text: "迟到结果" }] });
+  await pendingOld;
+  assert.strictEqual(controller.state.ledger.items[0].text, "最后结果", "a late older page cannot overwrite the latest successful refresh");
+  controller.dispose();
+}
+
+async function testSourceLatestCloseAndDispose() {
+  const first = deferred();
+  const second = deferred();
+  const closed = deferred();
+  const disposed = deferred();
+  const { controller, changes } = createHarness({
+    openPairMemorySource: payload => ({
+      first: first.promise,
+      second: second.promise,
+      closed: closed.promise,
+      disposed: disposed.promise
+    })[payload.sourceSummaryKey]
+  });
+  const sourceItem = sourceSummaryKey => ({ source: { sourceSummaryKey, sourceRevision: `rev-${sourceSummaryKey}` } });
+  const older = controller.openSource(sourceItem("first"));
+  const newer = controller.openSource(sourceItem("second"));
+  second.resolve({ success: true, summary: { content: "最新来源" } });
+  await newer;
+  first.resolve({ success: true, summary: { content: "过期来源" } });
+  await older;
+  assert.strictEqual(controller.state.sourceModal.content, "最新来源", "late source reads cannot replace the latest modal content");
+
+  const pendingClose = controller.openSource(sourceItem("closed"));
+  controller.closeSource();
+  closed.resolve({ success: true, summary: { content: "关闭后的来源" } });
+  await pendingClose;
+  assert.strictEqual(controller.state.sourceModal, null, "closing the modal invalidates its pending source read");
+  assert.strictEqual(controller.state.busy, false, "closing a pending source read releases its loading state");
+
+  const pendingDispose = controller.openSource(sourceItem("disposed"));
+  const changesBeforeDispose = changes.length;
+  controller.dispose();
+  disposed.resolve({ success: true, summary: { content: "卸载后的来源" } });
+  await pendingDispose;
+  assert.strictEqual(changes.length, changesBeforeDispose, "a disposed source read cannot emit into an unmounted panel");
+}
+
+async function testDisposeStopsBatchAfterInflightPair() {
+  const firstWrite = deferred();
+  const writes = [];
+  const { controller } = createHarness({
+    previewPairMemoryBackfill: async () => ({ success: true, writable: true, pairs: [
+      { counterpartId: 101, previewRevision: "rev-101" },
+      { counterpartId: 202, previewRevision: "rev-202" }
+    ] }),
+    applyPairMemoryBackfill: payload => { writes.push(payload); return firstWrite.promise; }
+  }, { mode: "owner", counterpartId: undefined });
+  await controller.preview();
+  const applying = controller.applyBatch();
+  assert.deepStrictEqual(writes.map(item => item.counterpartId), [101]);
+  controller.dispose();
+  firstWrite.resolve({ success: true, totalCount: 1 });
+  const result = await applying;
+  assert.deepStrictEqual(writes.map(item => item.counterpartId), [101], "dispose stops before issuing a later Pair write");
+  assert.strictEqual(result.pairs.length, 1, "the already in-flight Pair write is retained in the result");
+  assert.strictEqual(result.cancelled, true);
+}
+
+async function testSingleSuccessRefreshesOnce() {
+  await withMiniDom({}, async ({ makeHost }) => {
+    let indexReads = 0;
+    globalThis.conversationAPI = {
+      getPairMemoryIndex: async payload => { indexReads++; return { success: true, ...payload, totalCount: 0, items: [] }; },
+      previewPairMemoryBackfill: async () => ({ success: true, writable: true, previewRevision: "pair-rev", items: [] }),
+      applyPairMemoryBackfill: async () => ({ success: true, totalCount: 0 })
+    };
+    const host = makeHost();
+    const dispose = ui.mount(host, { mode: "pair", ownerId: 77754, counterpartId: 12345, ownerName: "保罗", counterpartName: "甲" });
+    await flushDomEvents();
+    assert.strictEqual(indexReads, 1, "mount performs the initial index read once");
+    findButton(host, "自动提取长期事项").click();
+    await flushDomEvents();
+    findButton(host, "确认生成此关系的长期事项簿").click();
+    await flushDomEvents();
+    assert.strictEqual(indexReads, 2, "a successful single write triggers exactly one follow-up index read");
+    dispose();
+  });
+}
+
 async function testOwnerCatalogIsolationPagingSourceAndDispose() {
   await withMiniDom({}, async ({ listeners, makeHost }) => {
     const calls = [];
@@ -621,6 +733,10 @@ async function main() {
   await testOwnerBatchUsesPerPairRevisionsAndStopsBetweenPairs();
   await testSourceRevalidationAndFilterPayload();
   await testVerifiedSourceBodyIsOpened();
+  await testRefreshLatestWins();
+  await testSourceLatestCloseAndDispose();
+  await testDisposeStopsBatchAfterInflightPair();
+  await testSingleSuccessRefreshesOnce();
   await testOwnerCatalogIsolationPagingSourceAndDispose();
   await testOwnerSuccessFoldsAndFailureRemainsVisible();
   await testClosedRelationshipStillSurfacesLoadError();

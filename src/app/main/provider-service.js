@@ -305,10 +305,17 @@ class LLMManager {
   }
   // --- Core Functionality ---
   async listModelsForProvider(signal, options = {}) {
-    const config = this.settingsRepository.getActiveProviderConfig();
-    if (!config) {
-      throw new Error("No active and enabled LLM provider configured.");
+    const hasInstanceId = options.instanceId !== undefined;
+    const selectedConfig = hasInstanceId
+      ? this.settingsRepository.getProviderConfigById(options.instanceId)
+      : this.settingsRepository.getActiveProviderConfig();
+    if (!selectedConfig) {
+      const code = hasInstanceId ? "provider_instance_unavailable" : "provider_not_configured";
+      const error = new Error(code);
+      error.code = code;
+      throw error;
     }
+    const config = hasInstanceId ? JSON.parse(JSON.stringify(selectedConfig)) : selectedConfig;
     try {
       const provider = this.getProviderInstance(config);
       if (provider.listModels) {

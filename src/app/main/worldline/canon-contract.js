@@ -7,10 +7,22 @@ const { normalizeGameDate } = require("./character-temporal-facts");
 const TEMPORAL_MODES = new Set(["CURRENT_DATE", "SPECIFIC_DATE", "TIMELESS", "PLANNED"]);
 const TEMPORAL_SEMANTICS = new Set(["PAST_EVENT", "DURABLE_WORLD_RULE", "CURRENT_STRUCTURED_CLAIM", "PLANNED"]);
 const CURRENT_CLAIM_FIELDS = CURRENT_CLAIM_FIELD_SET;
-const CURRENT_STATE_PATTERN = /(?:现在|目前|当前|如今|现居|仍在|已经迁往|现任|currently|now)\s*(?:在|位于|居于|活着|已死|信仰|文化|领主|担任|为)?/i;
+const EXPLICIT_CURRENT_STATE_PATTERN = /(?:现在|目前|当前|如今|现居|现任|currently|\bnow\b)/iu;
+const AMBIGUOUS_CURRENT_STATE_PATTERN = /(?:仍在|仍然在|依旧在|已经迁往)/giu;
+const EVENT_SUBJECT_PATTERN = /(?:战事|战争|战斗|冲突|战役|谈判|对峙)\s*$/u;
+const EVENT_CONTINUATION_PATTERN = /^\s*(?:持续|进行|延续)/u;
 
 function isPotentialCurrentState(text) {
-  return CURRENT_STATE_PATTERN.test(String(text || ""));
+  const content = String(text || "");
+  if (EXPLICIT_CURRENT_STATE_PATTERN.test(content)) return true;
+  for (const sentence of content.split(/[。！？；\n]/u)) {
+    for (const match of sentence.matchAll(AMBIGUOUS_CURRENT_STATE_PATTERN)) {
+      const before = sentence.slice(0, match.index);
+      const after = sentence.slice(match.index + match[0].length);
+      if (match[0] === "已经迁往" || !EVENT_SUBJECT_PATTERN.test(before) || !EVENT_CONTINUATION_PATTERN.test(after)) return true;
+    }
+  }
+  return false;
 }
 
 function normalizedSubject(value) {

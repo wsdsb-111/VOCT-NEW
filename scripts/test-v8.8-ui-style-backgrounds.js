@@ -13,13 +13,22 @@ const styles = normalizeLf(fs.readFileSync(stylePath, "utf8"));
 const preview = normalizeLf(fs.readFileSync(path.join(root, "ui-theme-preview.html"), "utf8"));
 const rendererHtml = fs.readFileSync(path.join(root, "resources/app/out/renderer/index.html"), "utf8");
 const comfort = normalizeLf(fs.readFileSync(path.join(root, "resources/app/out/renderer/ui-comfort.css"), "utf8"));
+const zhLocale = normalizeLf(fs.readFileSync(path.join(root, "src", "app", "renderer", "v95", "i18n", "locales", "zh-CN.js"), "utf8"));
+const enLocale = normalizeLf(fs.readFileSync(path.join(root, "src", "app", "renderer", "v95", "i18n", "locales", "en-US.js"), "utf8"));
+const localeLegacyNav = locale => {
+  const match = locale.match(/legacyUi:\s*\{\s*nav:\s*\{([^}]*)\}/);
+  assert.ok(match, "Legacy UI dictionaries must expose legacyUi.nav");
+  return match[1];
+};
+const zhLegacyNav = localeLegacyNav(zhLocale);
+const enLegacyNav = localeLegacyNav(enLocale);
 assert.equal(normalizeLf("color: #263b37;\r\n  text-shadow: none;"), "color: #263b37;\n  text-shadow: none;", "CRLF checkouts must use the same assertion text");
 const finalThemeBlock = styles.slice(styles.lastIndexOf("/* V8.8 visual theme backgrounds"));
 
 const themes = [
-  { key: "parchment", label: "游牧", image: "草原游牧.png" },
-  { key: "knight", label: "骑士", image: "中世纪骑士.png" },
-  { key: "ink", label: "水墨", image: "中国古典.png" }
+  { key: "parchment", label: "游牧", localeKey: "themeParchment", zhTitle: "游牧风格", enTitle: "Nomadic parchment style", image: "草原游牧.png" },
+  { key: "knight", label: "骑士", localeKey: "themeKnight", zhTitle: "骑士纹章风格", enTitle: "Knight heraldry style", image: "中世纪骑士.png" },
+  { key: "ink", label: "水墨", localeKey: "themeInk", zhTitle: "水墨画卷风格", enTitle: "Ink scroll style", image: "中国古典.png" }
 ];
 
 for (const theme of themes) {
@@ -32,6 +41,17 @@ for (const theme of themes) {
   assert.ok(finalThemeBlock.includes(`--votc-style-image: url("${cssImage}")`), `${theme.label} CSS image mapping is missing`);
   assert.ok(renderer.includes(`src: "${buttonImage}"`), `${theme.label} theme control icon must keep its stable renderer reference`);
 }
+
+for (const theme of themes) {
+  const translationKey = `legacyUi.nav.${theme.localeKey}`;
+  assert.ok(renderer.includes(`title: v95Runtime.t("${translationKey}")`), `${theme.label} theme title must use ${translationKey}`);
+  assert.ok(renderer.includes(`"aria-label": v95Runtime.t("${translationKey}")`), `${theme.label} theme aria-label must use ${translationKey}`);
+  assert.ok(zhLegacyNav.includes(`${theme.localeKey}: "${theme.zhTitle}"`), `${theme.label} Chinese theme label must match ${theme.localeKey}`);
+  assert.ok(enLegacyNav.includes(`${theme.localeKey}: "${theme.enTitle}"`), `${theme.label} English theme label must match ${theme.localeKey}`);
+}
+assert.ok(renderer.includes('"aria-label": v95Runtime.t("legacyUi.nav.themeGroup")'), "Theme switcher group aria-label must use its translation key");
+assert.ok(zhLegacyNav.includes('themeGroup: "界面风格"'), "Chinese theme switcher group label must match themeGroup");
+assert.ok(enLegacyNav.includes('themeGroup: "Interface style"'), "English theme switcher group label must match themeGroup");
 
 const nomadIconPath = path.join(root, "resources", "app", "out", "renderer", "assets", "theme-parchment-v1.png");
 const nomadIcon = fs.readFileSync(nomadIconPath);
@@ -98,9 +118,9 @@ assert.match(finalThemeBlock, /url\("\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/image\/草原
 assert.match(finalThemeBlock, /url\("\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/image\/中世纪骑士\.png"\)/);
 assert.match(finalThemeBlock, /url\("\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/image\/中国古典\.png"\)/);
 assert.match(styles, /content: "游牧"/);
-assert.match(renderer, /title: "游牧风格"/);
-assert.match(renderer, /children: "世界书"/);
-assert.ok(!renderer.includes('children: "世界线"'), "配置导航不能继续显示旧称世界线");
+assert.ok(renderer.includes('children: v95Runtime.t("legacyUi.nav.worldline")'), "Worldline navigation must use its translation key");
+assert.ok(zhLegacyNav.includes('worldline: "世界书"'), "Chinese Worldline navigation label must match its dictionary");
+assert.ok(enLegacyNav.includes('worldline: "Worldline"'), "English Worldline navigation label must match its dictionary");
 
 assert.ok(preview.includes('href="resources/app/out/renderer/ui-comfort.css"'), "Preview must load the delivered reading layer");
 assert.match(comfort, /--ui-font: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif/);

@@ -1,6 +1,56 @@
 import { WorldMemoryEditor } from "../world-memory-editor.js";
 import { getLegacySummaryPage, getSummaryDisplayEntries, getSummaryImportantMatters } from "../summary-date-order.js";
-const VOTC_FEATURE_VERSION = "V9.4.2";
+import { createRendererRuntime } from "../v95/containers/renderer-runtime.js";
+import { createReadBoundary } from "../v95/state/read-boundary.js";
+import { createWorkspaceView } from "../v95/containers/workspace-view.js";
+let v95Runtime = null;
+let V95WorkspaceView = null;
+function useV95Preferences() {
+  const [value, setValue] = reactExports.useState(() => v95Runtime?.getPreferences() || { uiLanguage: "zh-CN", presentationEnabled: false });
+  reactExports.useEffect(() => v95Runtime?.subscribe(({ preferences }) => setValue(previous =>
+    previous.uiLanguage === preferences.uiLanguage && previous.presentationEnabled === preferences.presentationEnabled
+      && previous.promptLanguage === preferences.promptLanguage && previous.gameLanguage === preferences.gameLanguage ? previous : preferences)), []);
+  return value;
+}
+function useV95ReadBoundary(viewKey) {
+  const boundary = reactExports.useRef(null);
+  const [contextVersion, setContextVersion] = reactExports.useState(() => JSON.stringify(v95Runtime?.getContext()));
+  reactExports.useEffect(() => {
+    boundary.current = createReadBoundary(v95Runtime, viewKey);
+    const unsubscribe = v95Runtime.subscribeContext(value => setContextVersion(JSON.stringify(value)));
+    return () => { unsubscribe(); boundary.current?.dispose(); boundary.current = null; };
+  }, [viewKey]);
+  return { contextVersion, cancel: resourceKey => boundary.current?.cancel(resourceKey),
+    capture: () => boundary.current?.capture() || (() => false), run: (resourceKey, load) => boundary.current
+    ? boundary.current.run(resourceKey, load)
+    : Promise.resolve({ committed: false, errorCode: "REQUEST_CANCELLED" }) };
+}
+function V95UiSettings() {
+  const preferences = useV95Preferences();
+  const [busy, setBusy] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState("");
+  const update = async enabled => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try { const result = await v95Runtime.setPresentationEnabled(enabled);
+      if (!result.success) setError(v95Runtime.t(`errors.${result.errorCode || "EFFECT_UNKNOWN"}`)); }
+    catch (_error) { setError(v95Runtime.t("errors.IPC_UNAVAILABLE")); }
+    finally { setBusy(false); }
+  };
+  return jsxRuntimeExports.jsxs("section", { className: "v95-language-settings", children: [
+    jsxRuntimeExports.jsxs("p", { children: [v95Runtime.t("settings.uiLanguage"), ": ", preferences.uiLanguage] }),
+    jsxRuntimeExports.jsxs("p", { children: [v95Runtime.t("settings.promptLanguage"), ": ", preferences.promptLanguage || v95Runtime.t("common.unknown")] }),
+    jsxRuntimeExports.jsxs("p", { children: [v95Runtime.t("settings.gameLanguage"), ": ", preferences.gameLanguage === "unknown" ? v95Runtime.t("common.unknown") : preferences.gameLanguage] }),
+    jsxRuntimeExports.jsx("p", { className: "form-help", children: v95Runtime.t("settings.languageHelp") }),
+    jsxRuntimeExports.jsxs("label", { className: "form-group", children: [
+      jsxRuntimeExports.jsx("input", { type: "checkbox", checked: preferences.presentationEnabled === true, disabled: busy,
+        onChange: event => update(event.target.checked) }), v95Runtime.t("settings.presentation")
+    ] }),
+    error && jsxRuntimeExports.jsx("p", { role: "status", children: error })
+  ] });
+}
+const VOTC_FEATURE_VERSION = "V9.5.0";
 const VOTC_WORKSHOP_MOD_VERSION = "2.0.5";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -15940,7 +15990,7 @@ const MessageItem = ({ entry }) => {
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: entry.content }),
         entry.memoryBudgetDetails && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-budget-overflow-details", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `预算分项 · 需要 ${formatContextTokens(entry.memoryBudgetDetails.requiredTokens)} Token · 可用 ${formatContextTokens(entry.memoryBudgetDetails.availableTokens)} Token` }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memory-budget-overflow-grid", children: CONTEXT_USAGE_BREAKDOWN_LABELS.map(([label, key]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [label, " ", formatContextTokens(entry.memoryBudgetDetails.breakdown?.[key])] }, key)) })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memory-budget-overflow-grid", children: CONTEXT_USAGE_BREAKDOWN_LABELS.map(([labelKey, key]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [v95Runtime.t(labelKey), " ", formatContextTokens(entry.memoryBudgetDetails.breakdown?.[key])] }, key)) })
         ] }),
         entry.details && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "error-details", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: t("chat.details") }),
@@ -15986,7 +16036,7 @@ const MessageItem = ({ entry }) => {
           isAnimating: message.isStreaming ? true : false
         }
       ),
-      message.isStreaming && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "stream-status", children: message.streamStatus === "generating" ? "正在生成回复" : "正在思考" }),
+      message.isStreaming && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "stream-status", children: message.streamStatus === "generating" ? v95Runtime.t("legacyUi.conversation.generating") : v95Runtime.t("legacyUi.conversation.thinking") }),
       message.isStreaming && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "loading-dots", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "." }),
@@ -16620,10 +16670,14 @@ const useAutoScroll = () => {
 };
 const useConversationEntries = () => {
   const [entries, setEntries] = reactExports.useState([]);
+  const entriesRequest = reactExports.useRef(0);
   reactExports.useEffect(() => {
+    let disposed = false;
+    const requestId = ++entriesRequest.current;
     const loadInitialEntries = async () => {
       try {
         const backendEntries = await window.conversationAPI.getConversationEntries();
+        if (disposed || requestId !== entriesRequest.current) return;
         const convertedEntries = backendEntries.map((entry) => {
           if (entry.type === "message") {
             return {
@@ -16675,9 +16729,11 @@ const useConversationEntries = () => {
       }
     };
     loadInitialEntries();
+    return () => { disposed = true; entriesRequest.current++; };
   }, []);
   reactExports.useEffect(() => {
     const cleanup = window.conversationAPI.onConversationUpdate((backendEntries) => {
+      entriesRequest.current++;
       const convertedEntries = backendEntries.map((entry) => {
         if (entry.type === "message") {
           return {
@@ -16741,20 +16797,20 @@ const useConversationEntries = () => {
   };
 };
 const CONTEXT_USAGE_BREAKDOWN_LABELS = [
-  ["最近记忆", "recent"], ["官方追忆", "official"], ["玩家关系事项簿", "ledger"],
-  ["稳定记忆", "stable"], ["时间记忆", "temporal"], ["第三人记忆", "thirdPerson"]
+  ["legacyUi.conversation.usage.recentMemory", "recent"], ["legacyUi.conversation.usage.officialRecollections", "official"], ["legacyUi.conversation.usage.playerLedger", "ledger"],
+  ["legacyUi.conversation.usage.stableMemory", "stable"], ["legacyUi.conversation.usage.timeMemory", "temporal"], ["legacyUi.conversation.usage.thirdPartyMemory", "thirdPerson"]
 ];
 const CONTEXT_WINDOW_SOURCE_LABELS = {
-  provider_native: "服务商提供",
-  provider_metadata: "服务商模型信息",
-  provider_native_cap: "受服务商上限限制",
-  user_provided: "用户设置",
-  user_provided_unverified: "用户设置，未经服务商确认",
-  safe_fallback: "保守回退",
-  invalid_configuration_fallback: "配置无效，保守回退"
+  get provider_native() { return v95Runtime.t("legacyUi.conversation.usage.provider"); },
+  get provider_metadata() { return v95Runtime.t("legacyUi.conversation.usage.providerModel"); },
+  get provider_native_cap() { return v95Runtime.t("legacyUi.conversation.usage.providerCapped"); },
+  get user_provided() { return v95Runtime.t("legacyUi.conversation.usage.userSetting"); },
+  get user_provided_unverified() { return v95Runtime.t("legacyUi.conversation.usage.userUnverified"); },
+  get safe_fallback() { return v95Runtime.t("legacyUi.conversation.usage.safeFallback"); },
+  get invalid_configuration_fallback() { return v95Runtime.t("legacyUi.conversation.usage.invalidFallback"); }
 };
 const formatContextTokens = (value) => typeof value === "number" && Number.isSafeInteger(value)
-  ? value.toLocaleString("zh-CN") : "未知";
+  ? value.toLocaleString("zh-CN") : v95Runtime.t("legacyUi.conversation.usage.unknown");
 const useConversationContextUsage = () => {
   const [snapshot, setSnapshot] = reactExports.useState(null);
   reactExports.useEffect(() => {
@@ -16804,37 +16860,37 @@ const ContextUsageIndicator = ({ snapshot }) => {
   const sceneRemainingTokens = typeof sceneCapacityTokens === "number" && Number.isSafeInteger(row.usedTokens)
     ? sceneCapacityTokens - row.usedTokens : null;
   const hasUnknownUsage = responders.some(responder => typeof responder.usedTokens !== "number" || !Number.isSafeInteger(responder.usedTokens));
-  const phaseLabels = { request_snapshot: "请求快照", streaming: "生成中", completed: "已完成", cancelled: "已停止", failed: "请求失败" };
-  const inputSource = row.inputTokensSource === "provider_usage" ? "服务商用量" : "估算（含 1.1 系数）";
-  const outputSource = row.outputTokensSource === "provider_usage" ? "服务商用量"
-    : row.outputTokensSource === "provisional_estimate" ? "生成中暂估" : "估算";
-  const totalSource = row.usageSource === "provider_usage" ? "服务商用量"
-    : row.usageSource === "provider_usage_partial_estimate" ? "混合估算" : "估算";
+  const phaseLabels = { request_snapshot: v95Runtime.t("legacyUi.conversation.usage.requestSnapshot"), streaming: v95Runtime.t("legacyUi.conversation.usage.generatingPhase"), completed: v95Runtime.t("legacyUi.conversation.usage.completed"), cancelled: v95Runtime.t("legacyUi.conversation.usage.stopped"), failed: v95Runtime.t("legacyUi.conversation.usage.failed") };
+  const inputSource = row.inputTokensSource === "provider_usage" ? v95Runtime.t("legacyUi.conversation.usage.inputProvider") : v95Runtime.t("legacyUi.conversation.usage.inputEstimate");
+  const outputSource = row.outputTokensSource === "provider_usage" ? v95Runtime.t("legacyUi.conversation.usage.inputProvider")
+    : row.outputTokensSource === "provisional_estimate" ? v95Runtime.t("legacyUi.conversation.usage.outputProvisional") : v95Runtime.t("legacyUi.conversation.usage.estimate");
+  const totalSource = row.usageSource === "provider_usage" ? v95Runtime.t("legacyUi.conversation.usage.inputProvider")
+    : row.usageSource === "provider_usage_partial_estimate" ? v95Runtime.t("legacyUi.conversation.usage.mixedEstimate") : v95Runtime.t("legacyUi.conversation.usage.estimate");
   const tooltip = [
-    `本场场景容量：${formatContextTokens(sceneCapacityTokens)} Token（${snapshot?.sceneCapacitySource === "configured" ? "已配置上下文长度" : CONTEXT_WINDOW_SOURCE_LABELS[snapshot?.sceneCapacitySource] || "有效服务商窗口"}）`,
-    `${hasUnknownUsage ? "已知最大占用" : "最大占用"}：${row.responderName || "姓名未载入"} · ${formatContextTokens(row.usedTokens)} Token · ${phaseLabels[row.phase] || "请求快照"}`,
-    `本场配置窗口余量：${formatContextTokens(sceneRemainingTokens)} Token`,
-    `峰值请求 Provider：${row.provider || "未知"} · 模型：${row.model || "未知"}`,
-    `该请求服务商有效窗口：${formatContextTokens(row.contextWindowTokens)} Token（${CONTEXT_WINDOW_SOURCE_LABELS[row.contextWindowSource] || "来源未知"}）`,
-    `本次请求输入（完整 Prompt）：${inputSource} ${formatContextTokens(row.inputTokens)} Token · 本次输出：${outputSource} ${formatContextTokens(row.outputTokens)} Token`,
-    `该请求 Provider 窗口余量：${formatContextTokens(row.remainingContextTokens)} Token`,
-    `该请求发送前可追加输入估算：${formatContextTokens(row.inputHeadroomBeforeSendTokens)} Token（有效输入预算 ${formatContextTokens(row.effectiveInputBudget)}，已扣输出预留 ${formatContextTokens(row.reservedOutputTokens)}、协议开销 ${formatContextTokens(row.protocolOverheadTokens)}、安全余量 ${formatContextTokens(row.safetyMarginTokens)}）`,
-    `各 NPC 最近请求：${responders.map(responder => `${responder.responderName || "姓名未载入"}：${formatContextTokens(responder.usedTokens)} Token · ${phaseLabels[responder.phase] || "请求快照"} · Provider 窗口 ${formatContextTokens(responder.contextWindowTokens)} Token`).join("\n")}`,
-    "本场占用取各 NPC 最近请求中的最大单次用量，不把不同 NPC 的请求相加。",
-    hasUnknownUsage ? "部分 NPC 的最近请求用量未知，因此峰值只覆盖已知用量。" : null
+    v95Runtime.t("legacyUi.conversation.usage.sceneCapacity", { capacity: formatContextTokens(sceneCapacityTokens), source: snapshot?.sceneCapacitySource === "configured" ? v95Runtime.t("legacyUi.conversation.usage.configuredContextLength") : CONTEXT_WINDOW_SOURCE_LABELS[snapshot?.sceneCapacitySource] || v95Runtime.t("legacyUi.conversation.usage.unknown") }),
+    v95Runtime.t(hasUnknownUsage ? "legacyUi.conversation.usage.knownMaxUsage" : "legacyUi.conversation.usage.maxUsage") + ": " + v95Runtime.t("legacyUi.conversation.usage.usedByResponder", { name: row.responderName || v95Runtime.t("legacyUi.conversation.usage.nameUnavailable"), tokens: formatContextTokens(row.usedTokens), phase: phaseLabels[row.phase] || v95Runtime.t("legacyUi.conversation.usage.requestSnapshot") }),
+    v95Runtime.t("legacyUi.conversation.usage.sceneRemaining", { tokens: formatContextTokens(sceneRemainingTokens) }),
+    v95Runtime.t("legacyUi.conversation.usage.peakProvider", { provider: row.provider || v95Runtime.t("legacyUi.conversation.usage.unknown"), model: row.model || v95Runtime.t("legacyUi.conversation.usage.unknown") }),
+    v95Runtime.t("legacyUi.conversation.usage.providerWindow", { tokens: formatContextTokens(row.contextWindowTokens), source: CONTEXT_WINDOW_SOURCE_LABELS[row.contextWindowSource] || v95Runtime.t("legacyUi.conversation.usage.sourceUnknown") }),
+    v95Runtime.t("legacyUi.conversation.usage.inputOutput", { inputSource, inputTokens: formatContextTokens(row.inputTokens), outputSource, outputTokens: formatContextTokens(row.outputTokens) }),
+    v95Runtime.t("legacyUi.conversation.usage.providerRemaining", { tokens: formatContextTokens(row.remainingContextTokens) }),
+    v95Runtime.t("legacyUi.conversation.usage.headroom", { headroom: formatContextTokens(row.inputHeadroomBeforeSendTokens), budget: formatContextTokens(row.effectiveInputBudget), reserved: formatContextTokens(row.reservedOutputTokens), overhead: formatContextTokens(row.protocolOverheadTokens), margin: formatContextTokens(row.safetyMarginTokens) }),
+    v95Runtime.t("legacyUi.conversation.usage.responderRecent", { rows: responders.map(responder => v95Runtime.t("legacyUi.conversation.usage.responderRow", { name: responder.responderName || v95Runtime.t("legacyUi.conversation.usage.nameUnavailable"), tokens: formatContextTokens(responder.usedTokens), phase: phaseLabels[responder.phase] || v95Runtime.t("legacyUi.conversation.usage.requestSnapshot"), window: formatContextTokens(responder.contextWindowTokens) })).join("\n") }),
+    v95Runtime.t("legacyUi.conversation.usage.sceneMaxExplanation"),
+    hasUnknownUsage ? v95Runtime.t("legacyUi.conversation.usage.unknownUsageWarning") : null
   ].filter(Boolean).join("\n");
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "context-usage-indicator", "aria-label": "上下文用量", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "context-usage-indicator", "aria-label": v95Runtime.t("legacyUi.conversation.usage.ariaLabel"), children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "context-usage-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "本场对话上下文" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "各 NPC 最近请求的最大占用" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: v95Runtime.t("legacyUi.conversation.usage.heading") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: v95Runtime.t("legacyUi.conversation.usage.subtitle") })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "context-usage-row", title: tooltip, children:
-      `${hasUnknownUsage ? "已知最大" : "最大"} · ${totalSource} ${formatContextTokens(row.usedTokens)} / ${formatContextTokens(sceneCapacityTokens)} Token · 场景余量 ${formatContextTokens(sceneRemainingTokens)}`
+      v95Runtime.t("legacyUi.conversation.usage.rowSummary", { maxLabel: v95Runtime.t(hasUnknownUsage ? "legacyUi.conversation.usage.knownMax" : "legacyUi.conversation.usage.max"), source: totalSource, used: formatContextTokens(row.usedTokens), capacity: formatContextTokens(sceneCapacityTokens), remaining: formatContextTokens(sceneRemainingTokens) })
     }, `${row.responderId}:${row.requestId}`)
   ] });
 };
 function syncOverlayMouseCapture() {
-  const overPanel = document.querySelector(".chat-box:hover, .minimize-button:hover, .config-panel-container:hover");
+  const overPanel = document.querySelector(".chat-box:hover, .minimize-button:hover, .config-panel-container:hover, .v95-dialog-layer:hover");
   window.electronAPI?.setIgnoreMouseEvents(!overPanel);
 }
 const useWindowEvents = () => {
@@ -17347,8 +17403,8 @@ function Chat({ onToggleConfig }) {
             }
           ),
           conversationState.presence?.participants?.length > 1 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "conversation-presence-panel", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "conversation-presence-title", children: conversationState.presence.beforeFirstMessage ? "选择入场人物" : "会话人物" }),
-            (!conversationState.presence.canManage || presenceOperationPending) && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "conversation-presence-busy", children: presenceOperationPending ? "正在更新在场名单…" : "正在生成回复或处理队列，人物切换暂不可用。" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "conversation-presence-title", children: conversationState.presence.beforeFirstMessage ? v95Runtime.t("legacyUi.conversation.presence.titleBefore") : v95Runtime.t("legacyUi.conversation.presence.titleAfter") }),
+            (!conversationState.presence.canManage || presenceOperationPending) && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "conversation-presence-busy", children: presenceOperationPending ? v95Runtime.t("legacyUi.conversation.presence.busyUpdating") : v95Runtime.t("legacyUi.conversation.presence.busyLocked") }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "conversation-presence-list", children: conversationState.presence.participants.map((participant) => {
               const isWaiting = participant.status === "waiting";
               const isPresent = participant.status === "present";
@@ -17356,27 +17412,27 @@ function Chat({ onToggleConfig }) {
               const disabled = presenceOperationPending || !conversationState.presence.canManage;
               let controls;
               if (conversationState.presence.beforeFirstMessage) {
-                const buttonText = isWaiting ? "请入内" : isPresent ? conversationState.presence.canLeave ? "设为候场" : "已在场" : participant.status === "dead" ? "已故" : "已离场";
+                const buttonText = isWaiting ? v95Runtime.t("legacyUi.conversation.presence.join") : isPresent ? conversationState.presence.canLeave ? v95Runtime.t("legacyUi.conversation.presence.setWaiting") : v95Runtime.t("legacyUi.conversation.presence.alreadyPresent") : participant.status === "dead" ? v95Runtime.t("legacyUi.conversation.presence.deceased") : v95Runtime.t("legacyUi.conversation.presence.left");
                 controls = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "conversation-presence-button", disabled: disabled || !isWaiting && (!isPresent || !conversationState.presence.canLeave), onClick: () => handlePresenceChange(participant.id, isWaiting ? "join" : "leave"), children: buttonText });
               } else if (isPresent) {
                 controls = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "conversation-presence-actions", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { className: "conversation-presence-select", value: "", disabled: disabled || !conversationState.presence.canTemporarilyLeave, onChange: (event) => event.target.value && handlePresenceChange(participant.id, "temporary_leave", event.target.value), children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", disabled: true, children: "暂时离场…" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "unconscious", children: "昏迷" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "asleep", children: "睡着" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "away", children: "暂时离开" })
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", disabled: true, children: v95Runtime.t("legacyUi.conversation.presence.temporaryLeave") }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "unconscious", children: v95Runtime.t("legacyUi.conversation.presence.unconscious") }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "asleep", children: v95Runtime.t("legacyUi.conversation.presence.asleep") }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "away", children: v95Runtime.t("legacyUi.conversation.presence.temporarilyAway") })
                   ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "conversation-presence-button", disabled: disabled || !conversationState.presence.canLeave, onClick: () => handlePresenceChange(participant.id, "leave"), children: conversationState.presence.canLeave ? "请离场" : "须保留一人" })
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "conversation-presence-button", disabled: disabled || !conversationState.presence.canLeave, onClick: () => handlePresenceChange(participant.id, "leave"), children: conversationState.presence.canLeave ? v95Runtime.t("legacyUi.conversation.presence.leave") : v95Runtime.t("legacyUi.conversation.presence.mustKeepOne") })
                 ] });
               } else if (isWaiting) {
-                controls = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "conversation-presence-button", disabled, onClick: () => handlePresenceChange(participant.id, "join"), children: "请入内" });
+                controls = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "conversation-presence-button", disabled, onClick: () => handlePresenceChange(participant.id, "join"), children: v95Runtime.t("legacyUi.conversation.presence.join") });
               } else if (isTemporarilyAbsent) {
                 controls = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "conversation-presence-actions", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "conversation-presence-status", children: participant.temporaryAbsenceLabel }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "conversation-presence-button", disabled, onClick: () => handlePresenceChange(participant.id, "temporary_return"), children: participant.returnLabel || "请回来" })
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "conversation-presence-button", disabled, onClick: () => handlePresenceChange(participant.id, "temporary_return"), children: participant.returnLabel || v95Runtime.t("legacyUi.conversation.presence.inviteBack") })
                 ] });
               } else {
-                controls = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "conversation-presence-button", disabled: true, children: participant.status === "dead" ? "已故" : "已离场" });
+                controls = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "conversation-presence-button", disabled: true, children: participant.status === "dead" ? v95Runtime.t("legacyUi.conversation.presence.deceased") : v95Runtime.t("legacyUi.conversation.presence.left") });
               }
               return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `conversation-presence-person presence-${participant.status}`, children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "conversation-presence-name", children: participant.name }),
@@ -17766,6 +17822,8 @@ const useConfigStore = create()(
       appSettings: null,
       modelCache: /* @__PURE__ */ new Map(),
       isLoadingModels: false,
+      modelRequestSequence: 0,
+      providerSelectionSequence: 0,
       selectedProviderType: null,
       selectedPresetId: null,
       editingConfig: {},
@@ -17823,6 +17881,8 @@ const useConfigStore = create()(
         if (!config2.providerType) return;
         const cacheKey = getCacheKey$2(config2);
         const { modelCache } = get2();
+        const sequence = get2().modelRequestSequence + 1;
+        set({ modelRequestSequence: sequence, isLoadingModels: false });
         if (modelCache.has(cacheKey)) {
           console.log(`Using cached models for ${cacheKey}`);
           return;
@@ -17835,11 +17895,12 @@ const useConfigStore = create()(
         }
         set({ isLoadingModels: true });
         try {
-          const result = await window.llmConfigAPI.listModels();
+          const result = await window.llmConfigAPI.listModels(config2.instanceId);
+          if (sequence !== get2().modelRequestSequence) return;
           if ("error" in result) {
             console.error("Error listing models:", result.error);
           } else {
-            const newCache = new Map(modelCache);
+            const newCache = new Map(get2().modelCache);
             newCache.set(cacheKey, result);
             set({ modelCache: newCache });
             console.log(`Cached ${result.length} models for ${cacheKey}`);
@@ -17847,7 +17908,7 @@ const useConfigStore = create()(
         } catch (error) {
           console.error("Failed to fetch models:", error);
         } finally {
-          set({ isLoadingModels: false });
+          if (sequence === get2().modelRequestSequence) set({ isLoadingModels: false });
         }
       },
       getCachedModels: (cacheKey) => {
@@ -17857,6 +17918,8 @@ const useConfigStore = create()(
       selectProvider: async (type) => {
         const { appSettings } = get2();
         if (!appSettings) return;
+        const sequence = get2().providerSelectionSequence + 1;
+        set({ providerSelectionSequence: sequence, modelRequestSequence: get2().modelRequestSequence + 1, isLoadingModels: false });
         const config2 = appSettings.llmSettings.providers.find((p) => p.providerType === type) || {
           instanceId: type,
           providerType: type,
@@ -17871,11 +17934,12 @@ const useConfigStore = create()(
           player2Health: type === "player2" ? state.player2Health ?? { status: "checking" } : null
         }));
         await window.llmConfigAPI.setActiveProvider(type);
+        if (sequence !== get2().providerSelectionSequence) return;
         set({
           appSettings: {
-            ...appSettings,
+            ...get2().appSettings,
             llmSettings: {
-              ...appSettings.llmSettings,
+              ...get2().appSettings.llmSettings,
               activeProviderInstanceId: type
             }
           }
@@ -17888,6 +17952,8 @@ const useConfigStore = create()(
         if (!appSettings) return;
         const preset = appSettings.llmSettings.presets.find((p) => p.instanceId === id);
         if (!preset) return;
+        const sequence = get2().providerSelectionSequence + 1;
+        set({ providerSelectionSequence: sequence, modelRequestSequence: get2().modelRequestSequence + 1, isLoadingModels: false });
         set((state) => ({
           selectedProviderType: null,
           selectedPresetId: id,
@@ -17897,11 +17963,12 @@ const useConfigStore = create()(
           player2Health: preset.providerType === "player2" ? state.player2Health ?? { status: "checking" } : null
         }));
         await window.llmConfigAPI.setActiveProvider(id);
+        if (sequence !== get2().providerSelectionSequence) return;
         set({
           appSettings: {
-            ...appSettings,
+            ...get2().appSettings,
             llmSettings: {
-              ...appSettings.llmSettings,
+              ...get2().appSettings.llmSettings,
               activeProviderInstanceId: id
             }
           }
@@ -18664,37 +18731,33 @@ const ContextLengthField = ({
           required: true
         }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "context-length-status", children: modelContext !== null
-          ? `User-provided limit; provider-reported context: ${modelContext.toLocaleString()} tokens.`
-          : "User-provided limit; provider context is unverified." })
+          ? v95Runtime.t("legacyUi.provider.userLimitVerified", { context: modelContext.toLocaleString() })
+          : v95Runtime.t("legacyUi.provider.userLimitUnverified") })
       ] }),
     glmAutoUnknown && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "context-length-warning", children: [
-      "当前 GLM 未提供经验证的上下文窗口。Auto 按 8,192 Token 保守回退；此前兼容设置为 90,000 Token，未经原生验证。",
+      v95Runtime.t("legacyUi.provider.glmUnknownContext"),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "context-length-input-container", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => chooseContextMode("custom", 90000), children: "使用 90K 兼容设置" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => chooseContextMode("auto"), children: "保持 Auto" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => chooseContextMode("custom"), children: "自定义" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => chooseContextMode("custom", 90000), children: v95Runtime.t("legacyUi.provider.useCompatibility") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => chooseContextMode("auto"), children: v95Runtime.t("legacyUi.provider.keepAuto") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => chooseContextMode("custom"), children: v95Runtime.t("legacyUi.provider.custom") })
       ] })
     ] }),
-    contextModeInvalid && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "context-length-warning", children: "Saved context mode is invalid; the request budget safely falls back to 8,192 tokens until corrected." }),
+    contextModeInvalid && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "context-length-warning", children: v95Runtime.t("legacyUi.provider.savedModeInvalid") }),
     configuredContext === 90000 && contextWindowSource === "user_provided_unverified" && config2.providerType === "zhipu"
       && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "context-length-status", children: "90K compatibility setting; the provider's native context window has not been verified." }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "context-length-status", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: ["Mode: ", contextModeInvalid ? "invalid" : contextMode] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: ["Source: ", contextWindowSource] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: ["Configured: ", configuredContextDisplay] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: ["Verified Native: ", verifiedNativeContext === null ? "Unknown / Unverified" : `${verifiedNativeContext.toLocaleString()} tokens`] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: ["Effective: ", effectiveContext.toLocaleString(), " tokens"] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: ["可用输入（空消息预算估算）: ", effectiveInputBudget.toLocaleString(), " tokens"] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: ["输出预留: ", outputReserveTokens.toLocaleString(), " tokens"] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: "实际消息仍会由完整请求预算守卫复核。" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: [v95Runtime.t("legacyUi.provider.mode"), " ", contextModeInvalid ? v95Runtime.t("legacyUi.provider.invalid") : contextMode === "auto" ? v95Runtime.t("legacyUi.provider.keepAuto") : contextMode === "custom" ? v95Runtime.t("legacyUi.provider.custom") : contextMode] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: [v95Runtime.t("legacyUi.provider.source"), " ", CONTEXT_WINDOW_SOURCE_LABELS[contextWindowSource] || v95Runtime.t("legacyUi.conversation.usage.unknown")] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: [v95Runtime.t("legacyUi.provider.configured"), " ", configuredContextDisplay] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: [v95Runtime.t("legacyUi.provider.verifiedNative"), " ", verifiedNativeContext === null ? v95Runtime.t("legacyUi.provider.unknownUnverified") : `${verifiedNativeContext.toLocaleString()} tokens`] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: [v95Runtime.t("legacyUi.provider.effective"), " ", effectiveContext.toLocaleString(), " tokens"] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: [v95Runtime.t("legacyUi.provider.availableInput"), effectiveInputBudget.toLocaleString(), " tokens"] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: [v95Runtime.t("legacyUi.provider.outputReserve"), outputReserveTokens.toLocaleString(), " tokens"] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: v95Runtime.t("legacyUi.provider.budgetRecheck") })
     ] }),
-    contextMode === "custom" && !validCustom && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "context-length-warning", children: "Enter a whole number from 256 to 2,000,000." }),
-    unavailableInput && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "context-length-warning", children: "此设置无法为当前输出预留、安全余量和协议开销留下可用输入；请提高 Custom 值或降低输出上限。发送时仍会由预算守卫阻止不合适的请求。" }),
-    exceedsMax && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "context-length-warning", children: [
-      "⚠️ Requested context exceeds the provider-reported model context (",
-      modelContext.toLocaleString(),
-      "); the effective limit will be capped."
-    ] })
+    contextMode === "custom" && !validCustom && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "context-length-warning", children: v95Runtime.t("legacyUi.provider.enterWholeNumber") }),
+    unavailableInput && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "context-length-warning", children: v95Runtime.t("legacyUi.provider.noAvailableInput") }),
+    exceedsMax && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "context-length-warning", children: v95Runtime.t("legacyUi.provider.exceedsNative", { context: modelContext.toLocaleString() }) })
   ] });
 };
 const FormGroupInput = ({ id, label, type = "text", ...rest }) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
@@ -19303,6 +19366,7 @@ const ConnectionView = () => {
 };
 function LettersStatusModal({ onClose }) {
   const { t } = useTranslation();
+  const { run: readTask, contextVersion } = useV95ReadBoundary("letters");
   const [snapshot, setSnapshot] = reactExports.useState(null);
   const [isLoading, setIsLoading] = reactExports.useState(false);
   const [expandedLetters, setExpandedLetters] = reactExports.useState(/* @__PURE__ */ new Set());
@@ -19313,21 +19377,27 @@ function LettersStatusModal({ onClose }) {
   const [handlingRunCommandId, setHandlingRunCommandId] = reactExports.useState(null);
   const [retryingLetterId, setRetryingLetterId] = reactExports.useState(null);
   const [isClearingPending, setIsClearingPending] = reactExports.useState(false);
+  const statusReadSequence = reactExports.useRef(0);
   const loadStatuses = async () => {
+    const sequence = ++statusReadSequence.current;
     setIsLoading(true);
     try {
-      const data = await window.lettersAPI.getStatuses();
+      const result = await readTask("statuses", () => window.lettersAPI.getStatuses());
+      if (!result.committed || !result.isCurrent()) return;
+      if (result.errorCode) return;
+      const data = result.value;
       setSnapshot(data);
       setDiagnosticLetterId((current) => data.knownDiagnosticLetters?.some((letter) => letter.letterId === current) ? current : data.knownDiagnosticLetters?.[0]?.letterId || "");
     } catch (error) {
       console.error("Failed to load letter statuses:", error);
     } finally {
-      setIsLoading(false);
+      if (sequence === statusReadSequence.current) setIsLoading(false);
     }
   };
   reactExports.useEffect(() => {
+    setSnapshot(null);
     loadStatuses();
-  }, []);
+  }, [contextVersion]);
   reactExports.useEffect(() => {
     if (!["WAITING_FOR_CK3_EXECUTION", "A3_PRE_WAIT", "A3_EFFECT_ENTERED", "A3_POST_WAIT", "A3_SCOPE_CONFIRMED"].includes(snapshot?.lastEffectDiagnostic?.result)) return void 0;
     const timer = setTimeout(loadStatuses, 1e3);
@@ -19614,7 +19684,7 @@ function LettersStatusModal({ onClose }) {
     if (letter.responseStatus === "sent") {
       return t("lettersModal.delivered");
     }
-    if (letter.responseStatus === "cancelled") return "已清除";
+    if (letter.responseStatus === "cancelled") return v95Runtime.t("legacyUi.letters.cleared");
     if (!Number.isFinite(letter.daysUntilDelivery)) return "日期数据异常";
     if (letter.isLate) {
       return t("lettersModal.lateByDays", { days: Math.abs(letter.daysUntilDelivery) });
@@ -19973,8 +20043,8 @@ function LetterItem({
           " ",
           letter.responseError
         ] }),
-        letter.responseStatus === "generation_failed" && onRetry && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => onRetry(letter.letterId), disabled: retryingLetterId === letter.letterId, children: retryingLetterId === letter.letterId ? "重试中…" : "手动重试回复生成" }),
-        letter.payloadErrorCode === "PAYLOAD_INCOMPLETE_TIMEOUT" && onPayloadReread && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => onPayloadReread(letter.letterId), disabled: retryingLetterId === letter.letterId || letter.payloadRereadInProgress, children: retryingLetterId === letter.letterId || letter.payloadRereadInProgress ? "重新读取中…" : "重新读取信件数据" }),
+        letter.responseStatus === "generation_failed" && onRetry && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => onRetry(letter.letterId), disabled: retryingLetterId === letter.letterId, children: retryingLetterId === letter.letterId ? v95Runtime.t("legacyUi.letters.retrying") : v95Runtime.t("legacyUi.letters.retryGeneration") }),
+        letter.payloadErrorCode === "PAYLOAD_INCOMPLETE_TIMEOUT" && onPayloadReread && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => onPayloadReread(letter.letterId), disabled: retryingLetterId === letter.letterId || letter.payloadRereadInProgress, children: retryingLetterId === letter.letterId || letter.payloadRereadInProgress ? v95Runtime.t("legacyUi.letters.rereading") : v95Runtime.t("legacyUi.letters.rereadData") }),
         letter.responseContent && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "content-preview", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("h6", { children: [
             t("lettersModal.responseContent"),
@@ -20136,6 +20206,7 @@ const SettingsView = () => {
   };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "settings-view", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: t("settings.globalApplicationSettings") }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(V95UiSettings, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "globalStreamEnabled", children: [
         t("settings.enableStreamingGlobally"),
@@ -21285,29 +21356,41 @@ const summaryPersonName = (value) => {
 };
 const PairLongTermUiMount = (props) => {
   const hostRef = reactExports.useRef(null);
+  const cleanupRef = reactExports.useRef(null);
+  const uiPreferences = useV95Preferences();
   const latestProps = reactExports.useRef(props);
   latestProps.current = props;
   reactExports.useEffect(() => {
     const mount = window.VOTCPairLongTermUi?.mount;
     if (!hostRef.current || typeof mount !== "function") return void 0;
-    return mount(hostRef.current, {
+    const cleanup = mount(hostRef.current, {
       ...latestProps.current,
+      t: v95Runtime?.t,
       onLocateSource: (response, item) => latestProps.current.onLocateSource?.(response, item)
     });
+    cleanupRef.current = cleanup;
+    return () => { cleanupRef.current = null; cleanup?.(); };
   }, [props.mode, props.ownerId, props.counterpartId, props.refreshToken]);
+  reactExports.useEffect(() => cleanupRef.current?.updateLanguage?.(v95Runtime?.t), [uiPreferences.uiLanguage]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pair-long-term-ui-host", ref: hostRef });
 };
 const CharacterKnowledgeUiMount = () => {
   const hostRef = reactExports.useRef(null);
+  const cleanupRef = reactExports.useRef(null);
+  const uiPreferences = useV95Preferences();
   reactExports.useEffect(() => {
     const mount = window.VOTCCharacterKnowledgeUi?.mount;
     if (!hostRef.current || typeof mount !== "function") return void 0;
-    return mount(hostRef.current);
+    const cleanup = mount(hostRef.current, { t: v95Runtime?.t });
+    cleanupRef.current = cleanup;
+    return () => { cleanupRef.current = null; cleanup?.(); };
   }, []);
+  reactExports.useEffect(() => cleanupRef.current?.updateLanguage?.(v95Runtime?.t), [uiPreferences.uiLanguage]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "character-knowledge-ui-host", ref: hostRef });
 };
 const SummariesManager = () => {
   const { t } = useTranslation();
+  const { run: readTask, contextVersion } = useV95ReadBoundary("memory");
   const getSummariesDashboardData = useConfigStore((state) => state.getSummariesDashboardData);
   const updateSummary = useConfigStore((state) => state.updateSummary);
   const deleteSummary = useConfigStore((state) => state.deleteSummary);
@@ -21333,13 +21416,19 @@ const SummariesManager = () => {
   const [summaryPages, setSummaryPages] = reactExports.useState({});
   const [ledgerRefreshRevision, setLedgerRefreshRevision] = reactExports.useState(0);
   const [clearResult, setClearResult] = reactExports.useState(null);
+  const summaryReadSequence = reactExports.useRef(0);
   reactExports.useEffect(() => {
+    setSummaries([]);
     loadSummaries();
-  }, []);
+  }, [contextVersion]);
   const loadSummaries = async (refresh = false) => {
+    const sequence = ++summaryReadSequence.current;
     setIsLoadingSummaries(true);
     try {
-      const dashboardData = await getSummariesDashboardData({ refresh });
+      const result = await readTask("dashboard", () => getSummariesDashboardData({ refresh }));
+      if (!result.committed || !result.isCurrent()) return;
+      if (result.errorCode) return;
+      const dashboardData = result.value;
       setSummaries(dashboardData.summaries || []);
       setLedgerRefreshRevision((revision) => revision + 1);
       setRecoveryStatus(dashboardData.recoveryStatus || { pending: 0, running: false });
@@ -21347,10 +21436,12 @@ const SummariesManager = () => {
     } catch (error) {
       console.error("Failed to load summaries:", error);
     } finally {
-      setIsLoadingSummaries(false);
+      if (sequence === summaryReadSequence.current) setIsLoadingSummaries(false);
     }
   };
   const handleLocateResolvedSource = async (resolvedSource, matchedItem) => {
+    ++summaryReadSequence.current;
+    setIsLoadingSummaries(false);
     const ownerId = Number(resolvedSource?.ownerId ?? resolvedSource?.scope?.ownerId);
     const counterpartId = Number(resolvedSource?.counterpartId ?? resolvedSource?.scope?.counterpartId);
     const index = Number(resolvedSource?.summaryIndex ?? resolvedSource?.locator?.summaryIndex ?? resolvedSource?.summary?.summaryIndex);
@@ -21359,7 +21450,9 @@ const SummariesManager = () => {
       return { success: false, error: "source_locator_incomplete", message: "已验证来源未提供可定位的当前摘要记录。" };
     }
     try {
-      const dashboardData = await getSummariesDashboardData({ refresh: true });
+      const result = await readTask("dashboard", () => getSummariesDashboardData({ refresh: true }));
+      if (!result.committed || !result.isCurrent() || result.errorCode) return { success: false, error: "source_unavailable_or_stale", message: v95Runtime.t("errors.STALE_CONTEXT") };
+      const dashboardData = result.value;
       const refreshed = dashboardData.summaries || [];
       setSummaries(refreshed);
       setLedgerRefreshRevision((revision) => revision + 1);
@@ -21380,6 +21473,7 @@ const SummariesManager = () => {
       setSummaryPages((previous) => ({ ...previous, [`${ownerId}:${counterpartId}`]: Math.floor(position / 10) }));
       setExpandedCharacters((previous) => new Set([...previous, ownerKey, pairKey]));
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      if (!result.isCurrent()) return { success: false, error: "source_unavailable_or_stale", message: v95Runtime.t("errors.STALE_CONTEXT") };
       const target = document.querySelector(`[data-pair-source-id="${ownerId}:${counterpartId}:${index}"]`);
       if (!target) return { success: false, error: "source_row_not_rendered", message: "源摘要已验证，但当前页面未能展开对应记录；请刷新列表后重试。" };
       const importantMatters = target.querySelector(".summary-important-matters");
@@ -21413,7 +21507,7 @@ const SummariesManager = () => {
     }
   };
   const handleRetrySummaries = async () => {
-    if (!window.confirm("将使用当前摘要模型重试失败的对话摘要或信件归档，可能产生 API 费用。不会重新发送信件。请先确认模型配置和余额可用。继续？")) return;
+    if (!window.confirm(v95Runtime.t("legacyUi.summary.retryConfirmation"))) return;
     setIsRetryingSummaries(true);
     setRetryResult(null);
     try {
@@ -21494,7 +21588,7 @@ const SummariesManager = () => {
     const ownerId = Number(metadata.ownerId ?? metadata.playerId);
     const counterpartId = Number(metadata.counterpartId ?? metadata.characterId);
     const key = `${ownerId}:${counterpartId}:${index}`;
-    if (!window.confirm(`将把“${summaryPersonName(metadata.ownerName || metadata.playerName)} ↔ ${summaryPersonName(metadata.counterpartName || metadata.characterName)}”的 ${summary.date || "无日期"} 摘要正文发送给当前摘要模型整理，可能产生 API 费用。手工版本保留，其他人物摘要不变；正文生成失败时保留原文。继续？`)) return;
+    if (!window.confirm(v95Runtime.t("legacyUi.summary.regenerateConfirmation", { owner: summaryPersonName(metadata.ownerName || metadata.playerName), counterpart: summaryPersonName(metadata.counterpartName || metadata.characterName), date: summary.date || v95Runtime.t("legacyUi.summary.noDate") }))) return;
     setRegeneratingSummaryKey(key);
     setRetryResult(null);
     try {
@@ -21672,8 +21766,8 @@ const SummariesManager = () => {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => loadSummaries(true), disabled: isLoadingSummaries, children: isLoadingSummaries ? t("summaries.loadingSummaries") : t("summariesManager.refresh") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleRetrySummaries, disabled: isRetryingSummaries || isClearing || recoveryStatus.running || !recoveryStatus.pending, children: isRetryingSummaries ? "正在重试摘要…" : "重试失败摘要/信件归档" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: sortByDate ? "primary-button" : "", "aria-pressed": sortByDate, title: sortByDate ? "最近日期在上；点击切换为原文件顺序" : "点击按日期排序，最近日期在上", onClick: () => setSortByDate(value => !value), disabled: isLoadingSummaries || isClearing, children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": true, children: "↓ " }), "按日期排序"] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleRetrySummaries, disabled: isRetryingSummaries || isClearing || recoveryStatus.running || !recoveryStatus.pending, children: isRetryingSummaries ? v95Runtime.t("legacyUi.summary.retrying") : v95Runtime.t("legacyUi.summary.retryFailed") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: sortByDate ? "primary-button" : "", "aria-pressed": sortByDate, title: v95Runtime.t(sortByDate ? "legacyUi.summary.sortTitleRecent" : "legacyUi.summary.sortTitleFile"), onClick: () => setSortByDate(value => !value), disabled: isLoadingSummaries || isClearing, children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": true, children: "↓ " }), v95Runtime.t("legacyUi.summary.sortByDate")] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleOpenSummariesFolder, children: t("summaries.openSummariesFolder") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleClearSummaries, disabled: isLoadingSummaries || isClearing || summaryGroups.length === 0, className: "danger-button", children: isClearing ? t("summaries.clearing") : t("summaries.clearAllSummaries") })
       ] })
@@ -21682,7 +21776,7 @@ const SummariesManager = () => {
     clearResult && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `clear-result ${clearResult.success ? "success" : "error"}`, children: clearResult.message }),
     retryResult && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: retryResult }),
     (recoveryStatus.pending > 0 || recoveryStatus.running) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: `待恢复：对话摘要 ${recoveryStatus.narrativePending || 0} 场，信件归档 ${recoveryStatus.letterPending || 0} 封。${recoveryStatus.running ? "后台正在生成，完成后请刷新。" : recoveryStatus.balanceBlocked ? "服务商报告余额不足；充值或更换摘要模型后重试。" : "可点击“重试失败摘要/信件归档”；已提交结果不重生成，已接受信件不重发。"}` }),
-    ...[["记忆召回诊断（最近实际请求）", "recall"], ["摘要恢复诊断", "recovery"], ["Provider 缓存诊断", "providerCache"]].map(([label, key]) =>
+    ...[[v95Runtime.t("legacyUi.summary.recallDiagnostics"), "recall"], [v95Runtime.t("legacyUi.summary.recoveryDiagnostics"), "recovery"], [v95Runtime.t("legacyUi.summary.providerCacheDiagnostics"), "providerCache"]].map(([label, key]) =>
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: label }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: "400px", overflow: "auto" },
@@ -21692,14 +21786,14 @@ const SummariesManager = () => {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-engine-title", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: `Legacy Summary · ${VOTC_FEATURE_VERSION}` }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "查看、筛选、编辑和删除本地人物摘要；CK3 官方追忆保持只读同步。" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: v95Runtime.t("legacyUi.summary.overviewHelp") })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memory-engine-status", children: "本地摘要" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memory-engine-status", children: v95Runtime.t("legacyUi.summary.localSummaries") })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-health-grid", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-health-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: legacySummaryFolderCount }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "人物摘要目录" })] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-health-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: summaries2.length }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "对话摘要文件" })] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-health-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: legacySummaryRecordCount }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "摘要记录" })] })
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-health-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: legacySummaryFolderCount }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: v95Runtime.t("legacyUi.summary.characterDirectories") })] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-health-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: summaries2.length }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: v95Runtime.t("legacyUi.summary.conversationFiles") })] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-health-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: legacySummaryRecordCount }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: v95Runtime.t("legacyUi.summary.summaryRecords") })] })
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "search-box summary-search-shell", children: [
@@ -21708,7 +21802,7 @@ const SummariesManager = () => {
         "input",
         {
           type: "search",
-          placeholder: "输入人物姓名：定位本人目录，并列出其他人涉及此人的摘要",
+          placeholder: v95Runtime.t("legacyUi.summary.searchPlaceholder"),
           value: searchQuery,
           onChange: (e) => {
             setSearchQuery(e.target.value);
@@ -21721,16 +21815,16 @@ const SummariesManager = () => {
           autoComplete: "off"
         }
       ),
-      searchQuery && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "summary-search-clear", onClick: clearSummarySearch, children: "清除" })
+      searchQuery && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "summary-search-clear", onClick: clearSummarySearch, children: v95Runtime.t("legacyUi.summary.clear") })
     ] }),
     normalizedSearchQuery && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "search-result-stats", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: ["“", deferredSearchQuery.trim(), "”"] }),
       "：本人目录 ", searchCounts.owner, " 个文件；他人直接对话 ", searchCounts.counterpart, " 个；其他相关摘要 ", searchCounts.related, " 个。目录已定位，仅首条正文自动展开。"
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-date-filter", role: "group", "aria-label": "摘要日期筛选", style: { display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", margin: "12px 0" }, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { style: { display: "flex", alignItems: "center", gap: "6px" }, children: ["开始日期", /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "date", value: summaryDateFrom, onChange: (event) => { setSummaryDateFrom(event.target.value); setSummaryPages({}); } })] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { style: { display: "flex", alignItems: "center", gap: "6px" }, children: ["结束日期", /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "date", value: summaryDateTo, onChange: (event) => { setSummaryDateTo(event.target.value); setSummaryPages({}); } })] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: !summaryDateFrom && !summaryDateTo, onClick: () => { setSummaryDateFrom(""); setSummaryDateTo(""); setSummaryPages({}); }, children: "清除日期筛选" })
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-date-filter", role: "group", "aria-label": v95Runtime.t("legacyUi.summary.dateFilterAria"), style: { display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", margin: "12px 0" }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { style: { display: "flex", alignItems: "center", gap: "6px" }, children: [v95Runtime.t("legacyUi.summary.startDate"), /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "date", value: summaryDateFrom, onChange: (event) => { setSummaryDateFrom(event.target.value); setSummaryPages({}); } })] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { style: { display: "flex", alignItems: "center", gap: "6px" }, children: [v95Runtime.t("legacyUi.summary.endDate"), /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "date", value: summaryDateTo, onChange: (event) => { setSummaryDateTo(event.target.value); setSummaryPages({}); } })] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: !summaryDateFrom && !summaryDateTo, onClick: () => { setSummaryDateFrom(""); setSummaryDateTo(""); setSummaryPages({}); }, children: v95Runtime.t("legacyUi.summary.clearDateFilter") })
     ] }),
     summaryGroups.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "empty-state", children: searchQuery ? t("summariesManager.noSearchResults") : t("summariesManager.noSummariesFound") }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "summaries-list", children: summaryGroups.map(({ playerId, playerSummaries }) => {
       const playerKey = `player-${playerId}`;
@@ -21768,7 +21862,7 @@ const SummariesManager = () => {
                   e.stopPropagation();
                   handleBulkLegacyBinding("owner", playerSummaries[0]);
                 },
-                children: bulkBindingKey === `owner-${Number(playerId)}` ? "预扫描/绑定中…" : `绑定此人物全部旧摘要（${ownerUnboundCount}）`
+                children: bulkBindingKey === `owner-${Number(playerId)}` ? v95Runtime.t("legacyUi.summary.bindingScan") : v95Runtime.t("legacyUi.summary.bindOwner", { count: ownerUnboundCount })
               })
             ]
           }
@@ -21820,7 +21914,7 @@ const SummariesManager = () => {
                           e.stopPropagation();
                           handleBulkLegacyBinding("conversation", metadata);
                         },
-                        children: bulkBindingKey === `conversation-${ownerId}-${counterpartId}` ? "预扫描/绑定中…" : `绑定本对话全部旧摘要（${unresolvedCount}）`
+                        children: bulkBindingKey === `conversation-${ownerId}-${counterpartId}` ? v95Runtime.t("legacyUi.summary.bindingScan") : v95Runtime.t("legacyUi.summary.bindConversation", { count: unresolvedCount })
                       })
                       : null;
                   })(),
@@ -21862,7 +21956,7 @@ const SummariesManager = () => {
               summaryPage.entries.map(({ summary, index }) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-item", "data-pair-source-id": `${Number(metadata.ownerId ?? metadata.playerId)}:${Number(metadata.counterpartId ?? metadata.characterId)}:${index}`, children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-header", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "summary-date", children: [
-                  summary.sourceType === "CK3_OFFICIAL_RECOLLECTION" ? "官方追忆摘要（随新对话更新）" : "📅 ",
+                  summary.sourceType === "CK3_OFFICIAL_RECOLLECTION" ? v95Runtime.t("legacyUi.summary.officialTag") : "📅 ",
                   summary.sourceType === "CK3_OFFICIAL_RECOLLECTION" ? null : summary.date
                 ] }),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-actions", children: [
@@ -21871,20 +21965,20 @@ const SummariesManager = () => {
                     {
                       disabled: bindingLegacySummaryId === summary.legacyBindingId,
                       onClick: () => handleBindLegacySummary(metadata, summary),
-                      children: bindingLegacySummaryId === summary.legacyBindingId ? "绑定中…" : "绑定当前战役"
+                      children: bindingLegacySummaryId === summary.legacyBindingId ? v95Runtime.t("legacyUi.summary.binding") : v95Runtime.t("legacyUi.summary.bindCurrentCampaign")
                     }
                   ),
                   summary.sourceType !== "CK3_OFFICIAL_RECOLLECTION" && summary.type !== "official_recollection" && summary.subtype !== "official_recollection" && /* @__PURE__ */ jsxRuntimeExports.jsx(
                     "button",
                     {
                       type: "button",
-                      title: "通过当前摘要模型重新整理本篇摘要",
+                      title: v95Runtime.t("legacyUi.summary.regenerateTitle"),
                       disabled: !!regeneratingSummaryKey || isClearing,
                       onClick: (e) => {
                         e.stopPropagation();
                         handleRegenerateSummary(metadata, index, summary);
                       },
-                      children: regeneratingSummaryKey === `${Number(metadata.ownerId ?? metadata.playerId)}:${Number(metadata.counterpartId ?? metadata.characterId)}:${index}` ? "模型整理中…" : "模型整理"
+                      children: regeneratingSummaryKey === `${Number(metadata.ownerId ?? metadata.playerId)}:${Number(metadata.counterpartId ?? metadata.characterId)}:${index}` ? v95Runtime.t("legacyUi.summary.regenerating") : v95Runtime.t("legacyUi.summary.regenerate")
                     }
                   ),
                   summary.sourceType !== "CK3_OFFICIAL_RECOLLECTION" && summary.type !== "official_recollection" && summary.subtype !== "official_recollection" && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -21913,18 +22007,18 @@ const SummariesManager = () => {
                 summary.content.length > 150 ? "..." : ""
               ] }),
               summary.content.length > 150 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "summary-full-content", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "查看全文" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: v95Runtime.t("legacyUi.summary.showFullText") }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "summary-content", style: { whiteSpace: "pre-wrap" }, children: summary.content })
               ] }),
               getSummaryImportantMatters(summary.content) && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "summary-important-matters", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "重要事项" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: v95Runtime.t("legacyUi.summary.importantMatters") }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "summary-content", style: { whiteSpace: "pre-wrap" }, children: getSummaryImportantMatters(summary.content) })
               ] })
               ] }, index)),
-            summaryPage.pageCount > 1 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-pagination", role: "navigation", "aria-label": "摘要分页", style: { display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", margin: "12px 0" }, children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: summaryPage.page === 0, onClick: () => setSummaryPages(previous => ({ ...previous, [summaryPageKey]: summaryPage.page - 1 })), children: "上一页" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: ["第 ", summaryPage.page + 1, " / ", summaryPage.pageCount, " 页 · ", summaryPage.totalCount, " 篇"] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: summaryPage.page + 1 >= summaryPage.pageCount, onClick: () => setSummaryPages(previous => ({ ...previous, [summaryPageKey]: summaryPage.page + 1 })), children: "下一页" })
+            summaryPage.pageCount > 1 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-pagination", role: "navigation", "aria-label": v95Runtime.t("legacyUi.summary.paginationAria"), style: { display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", margin: "12px 0" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: summaryPage.page === 0, onClick: () => setSummaryPages(previous => ({ ...previous, [summaryPageKey]: summaryPage.page - 1 })), children: v95Runtime.t("legacyUi.summary.previous") }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: v95Runtime.t("legacyUi.summary.pageStatus", { page: summaryPage.page + 1, total: summaryPage.pageCount, count: summaryPage.totalCount }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: summaryPage.page + 1 >= summaryPage.pageCount, onClick: () => setSummaryPages(previous => ({ ...previous, [summaryPageKey]: summaryPage.page + 1 })), children: v95Runtime.t("legacyUi.summary.next") })
             ] })
           ] });
             })()
@@ -22406,14 +22500,7 @@ const logsIcon = "data:image/svg+xml,%3csvg%20class='svg-icon'%20style='width:%2
 const languageIcon = "data:image/svg+xml,%3csvg%20width='512'%20height='512'%20viewBox='0%200%20512%20512'%20fill='none'%20xmlns='http://www.w3.org/2000/svg'%3e%3cg%20clip-path='url(%23clip0_78_5)'%3e%3cpath%20d='M256%200C397.385%200%20512%20114.615%20512%20256C512%20397.385%20397.385%20512%20256%20512C114.615%20512%200%20397.385%200%20256C0%20114.615%20114.615%200%20256%200ZM350.315%20193.31C346.63%20193.31%20343.027%20194.404%20339.964%20196.453C336.901%20198.502%20334.515%20201.415%20333.108%20204.821L256.951%20389.291C256.004%20391.553%20255.514%20393.98%20255.508%20396.433C255.502%20398.885%20255.98%20401.314%20256.915%20403.581C257.851%20405.848%20259.225%20407.908%20260.959%20409.643C262.693%20411.377%20264.753%20412.751%20267.02%20413.687C269.286%20414.622%20271.717%20415.102%20274.169%20415.096C276.621%20415.09%20279.048%20414.599%20281.311%20413.652C283.573%20412.706%20285.626%20411.322%20287.352%20409.579C289.077%20407.837%20290.442%20405.769%20291.366%20403.498L306.877%20365.937H393.755L409.266%20403.498C410.672%20406.906%20413.058%20409.821%20416.122%20411.871C419.186%20413.921%20422.79%20415.015%20426.477%20415.015C429.536%20415.013%20432.548%20414.258%20435.245%20412.815C437.943%20411.373%20440.242%20409.287%20441.942%20406.744C443.642%20404.201%20444.69%20401.278%20444.991%20398.233C445.293%20395.189%20444.84%20392.118%20443.672%20389.291H443.68L367.523%20204.821C366.117%20201.415%20363.73%20198.502%20360.667%20196.453C357.604%20194.404%20354.001%20193.31%20350.315%20193.31ZM201.391%2063C196.453%2063%20191.718%2064.961%20188.227%2068.4521C184.735%2071.9434%20182.774%2076.6789%20182.774%2081.6162V98.54H84.6162C79.6789%2098.54%2074.9434%20100.501%2071.4521%20103.992C67.961%20107.483%2066%20112.219%2066%20117.156C66%20122.093%2067.9612%20126.828%2071.4521%20130.319C74.9434%20133.811%2079.6789%20135.772%2084.6162%20135.772H251.527C243.472%20158.577%20228.638%20194.582%20206.011%20227.465C179.44%20192.206%20169.562%20169.388%20169.48%20169.188C167.535%20164.692%20163.895%20161.143%20159.35%20159.312C154.805%20157.482%20149.721%20157.518%20145.202%20159.411C140.683%20161.304%20137.092%20164.903%20135.209%20169.426C133.326%20173.949%20133.302%20179.032%20135.143%20183.573C135.633%20184.741%20147.455%20212.538%20179.872%20254.594C180.651%20255.601%20181.42%20256.583%20182.19%20257.564C148.986%20295.093%20116.407%20318.372%20102.775%20325.886C98.4407%20328.25%2095.2224%20332.24%2093.8291%20336.977C92.4359%20341.713%2092.9815%20346.81%2095.3457%20351.145C97.71%20355.479%20101.7%20358.698%20106.437%20360.091C111.173%20361.484%20116.27%20360.938%20120.604%20358.574C122.432%20357.576%20161.729%20335.82%20206.603%20286.148C225.659%20306.525%20238.758%20316.138%20239.545%20316.696C241.525%20318.134%20243.77%20319.168%20246.149%20319.738C248.529%20320.308%20250.998%20320.403%20253.415%20320.018C255.832%20319.632%20258.149%20318.775%20260.233%20317.493C262.318%20316.212%20264.13%20314.532%20265.565%20312.55V312.559C268.458%20308.564%20269.646%20303.583%20268.87%20298.713C268.094%20293.842%20265.418%20289.479%20261.428%20286.58C261.258%20286.453%20248.734%20277.162%20230.55%20257.192C264.101%20211.769%20283.106%20160.092%20290.857%20135.772H318.164C323.101%20135.772%20327.837%20133.811%20331.328%20130.319C334.819%20126.828%20336.78%20122.093%20336.78%20117.156C336.78%20112.219%20334.819%20107.483%20331.328%20103.992C327.837%20100.501%20323.101%2098.54%20318.164%2098.54H220.007V81.6162C220.007%2076.6789%20218.045%2071.9434%20214.554%2068.4521C211.063%2064.9612%20206.328%2063.0001%20201.391%2063ZM378.388%20328.704H322.252L350.32%20260.713L378.388%20328.704Z'%20fill='%23D9D9D9'/%3e%3c/g%3e%3cdefs%3e%3cclipPath%20id='clip0_78_5'%3e%3crect%20width='512'%20height='512'%20fill='white'/%3e%3c/clipPath%3e%3c/defs%3e%3c/svg%3e";
 const languages = [
   { code: "en", name: "English", nativeName: "English" },
-  { code: "ru", name: "Russian", nativeName: "Русский" },
-  { code: "fr", name: "French", nativeName: "Français" },
-  { code: "de", name: "German", nativeName: "Deutsch" },
-  { code: "es", name: "Spanish", nativeName: "Español" },
-  { code: "pl", name: "Polish", nativeName: "Polski" },
-  { code: "zh", name: "Chinese", nativeName: "中文" },
-  { code: "ko", name: "Korean", nativeName: "한국어" },
-  { code: "ja", name: "Japanese", nativeName: "日本語" }
+  { code: "zh", name: "Chinese", nativeName: "简体中文" }
 ];
 function LanguageSelector() {
   const { i18n } = useTranslation();
@@ -22455,9 +22542,14 @@ function LanguageSelector() {
       });
     }
   }, [isOpen]);
-  const handleLanguageChange = (langCode) => {
-    i18n.changeLanguage(langCode);
-    setIsOpen(false);
+  const handleLanguageChange = async (langCode) => {
+    try {
+      const result = await v95Runtime.setUiLanguage(langCode === "en" ? "en-US" : "zh-CN");
+      if (!result.success) { window.alert(v95Runtime.t(`errors.${result.errorCode || "EFFECT_UNKNOWN"}`)); return; }
+      setIsOpen(false);
+    } catch (_error) {
+      window.alert(v95Runtime.t("errors.IPC_UNAVAILABLE"));
+    }
   };
   const currentLanguage = languages.find((lang) => lang.code === i18n.language) || languages[0];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "language-selector", children: [
@@ -22509,6 +22601,7 @@ function LanguageSelector() {
 }
 const ProviderDiagnosticsView = () => {
   const { i18n } = useTranslation();
+  const { run: readTask, contextVersion } = useV95ReadBoundary("provider-diagnostics");
   const [status, setStatus] = reactExports.useState(null);
   const [report, setReport] = reactExports.useState(null);
   const [exportResult, setExportResult] = reactExports.useState(null);
@@ -22546,7 +22639,10 @@ const ProviderDiagnosticsView = () => {
     }
     try {
       setError(null);
-      const [nextStatus, nextReport, nextSettings] = await Promise.all([api.getStatus(), api.getRealRequestDiff?.(300), api.getV89Settings?.()]);
+      const result = await readTask("report", () => Promise.all([api.getStatus(), api.getRealRequestDiff?.(300), api.getV89Settings?.()]));
+      if (!result.committed || !result.isCurrent()) return;
+      if (result.errorCode) { setError(v95Runtime.t("errors.IPC_UNAVAILABLE")); return; }
+      const [nextStatus, nextReport, nextSettings] = result.value;
       setStatus(nextStatus);
       if (nextReport) setReport(nextReport);
       if (nextSettings) setV89Settings(nextSettings);
@@ -22556,8 +22652,10 @@ const ProviderDiagnosticsView = () => {
     }
   };
   reactExports.useEffect(() => {
+    setReport(null);
+    setStatus(null);
     load();
-  }, []);
+  }, [contextVersion]);
   const updateSetting = async (key, value) => {
     try {
       setBusy(key);
@@ -22824,6 +22922,7 @@ const ProviderDiagnosticsView = () => {
 
 function WorldlineView() {
   const { i18n } = useTranslation();
+  const { run: readTask, cancel: cancelRead, contextVersion } = useV95ReadBoundary("worldline");
   const isChinese = (i18n.language || "").startsWith("zh");
   const text = (zh, en) => isChinese ? zh : en;
   const developerMode = window.localStorage?.getItem("votc-developer-mode") === "true";
@@ -22910,7 +23009,7 @@ function WorldlineView() {
     try {
       return await api[method](...args);
     } catch (invokeError) {
-      setError(invokeError?.message || text("Terra 接口调用失败。", "Terra IPC call failed."));
+      setError(v95Runtime.t("errors.IPC_UNAVAILABLE"));
       return null;
     }
   };
@@ -22918,6 +23017,7 @@ function WorldlineView() {
     const api = getApi();
     return !!api && typeof api[method] === "function";
   };
+  const readInvoke = (method, ...args) => canInvoke(method) ? getApi()[method](...args) : Promise.resolve(null);
   const loadUsageReport = async () => {
     const usageApi = typeof window !== "undefined" ? window.usageAPI : null;
     if (!usageApi || typeof usageApi.getReport !== "function") {
@@ -22927,9 +23027,12 @@ function WorldlineView() {
     setUsageReportLoading(true);
     setUsageReportError("");
     try {
-      setUsageReport(await usageApi.getReport());
+      const result = await readTask("usage", () => usageApi.getReport());
+      if (!result.committed || !result.isCurrent()) return;
+      if (result.errorCode) setUsageReportError(v95Runtime.t("errors.IPC_UNAVAILABLE"));
+      else setUsageReport(result.value);
     } catch (usageError) {
-      setUsageReportError(usageError?.message || text("无法读取本地用量观测。", "Failed to read local usage observability."));
+      setUsageReportError(v95Runtime.t("errors.IPC_UNAVAILABLE"));
     } finally {
       setUsageReportLoading(false);
     }
@@ -22942,14 +23045,14 @@ function WorldlineView() {
     }
     setLoadState("loading");
     setError("");
-    const [settingsResult, checkpointResult, overviewResult, deltaResult, knowledgeResult, diagnosticsResult] = await Promise.all([
-      invoke("getSettings"),
-      invoke("getCheckpointStatus"),
-      invoke("getOverview"),
-      invoke("getAnnualDelta"),
-      invoke("getWorldKnowledge"),
-      developerMode ? invoke("getDiagnostics") : Promise.resolve(null)
-    ]);
+    const response = await readTask("checkpoint", () => Promise.all([
+      readInvoke("getSettings"), readInvoke("getCheckpointStatus"), readInvoke("getOverview"),
+      readInvoke("getAnnualDelta"), readInvoke("getWorldKnowledge"),
+      developerMode ? readInvoke("getDiagnostics") : Promise.resolve(null)
+    ]));
+    if (!response.committed || !response.isCurrent()) return;
+    if (response.errorCode) { setLoadState("error"); setError(v95Runtime.t("errors.IPC_UNAVAILABLE")); return; }
+    const [settingsResult, checkpointResult, overviewResult, deltaResult, knowledgeResult, diagnosticsResult] = response.value;
     const settings = settingsResult?.settings ?? settingsResult?.worldlineSettings ?? settingsResult?.data ?? settingsResult;
     const nextCheckpoint = unwrap(checkpointResult, "checkpoint");
     if (!settings && !nextCheckpoint) {
@@ -22968,8 +23071,9 @@ function WorldlineView() {
     if (!canInvoke("getHistoricalBindings")) return;
     const requestId = historicalBindingRequestRef.current + 1;
     historicalBindingRequestRef.current = requestId;
-    const result = await invoke("getHistoricalBindings", { query: bindingSearch.trim().slice(0, 120), status: bindingStatusFilter });
-    if (requestId !== historicalBindingRequestRef.current) return;
+    const response = await readTask("bindings", () => readInvoke("getHistoricalBindings", { query: bindingSearch.trim().slice(0, 120), status: bindingStatusFilter }));
+    if (!response.committed || !response.isCurrent() || response.errorCode || requestId !== historicalBindingRequestRef.current) return;
+    const result = response.value;
     const payload = result?.data && typeof result.data === "object" ? result.data : result;
     if (Array.isArray(unwrap(payload, "bindings"))) setHistoricalBindings(unwrap(payload, "bindings"));
     setHistoricalCoverageStatus(payload?.coverageStatus || null);
@@ -22985,8 +23089,9 @@ function WorldlineView() {
     setError("");
     try {
       const paging = Number.isInteger(page);
-      const result = await invoke("getPromptDiagnostics", { query: paging ? promptDiagnostics?.query || promptQuery : promptQuery, trimmedPage: paging ? page : 0 });
-      const next = unwrap(result, "promptDiagnostics");
+      const result = await readTask("prompt", () => readInvoke("getPromptDiagnostics", { query: paging ? promptDiagnostics?.query || promptQuery : promptQuery, trimmedPage: paging ? page : 0 }));
+      if (!result.committed || !result.isCurrent() || result.errorCode) return;
+      const next = unwrap(result.value, "promptDiagnostics");
       if (next && typeof next === "object") setPromptDiagnostics(next);
     } finally {
       setPromptDiagnosticsLoading(false);
@@ -22996,8 +23101,9 @@ function WorldlineView() {
     if (!canInvoke("getSubjectiveResponderOptions")) return;
     const requestId = subjectiveResponderRequestRef.current + 1;
     subjectiveResponderRequestRef.current = requestId;
-    const result = await invoke("getSubjectiveResponderOptions", { query: subjectiveResponderSearch.trim().slice(0, 120) });
-    if (requestId !== subjectiveResponderRequestRef.current) return;
+    const response = await readTask("responders", () => readInvoke("getSubjectiveResponderOptions", { query: subjectiveResponderSearch.trim().slice(0, 120) }));
+    if (!response.committed || !response.isCurrent() || response.errorCode || requestId !== subjectiveResponderRequestRef.current) return;
+    const result = response.value;
     const payload = result?.data && typeof result.data === "object" ? result.data : result;
     if (!payload || typeof payload !== "object") return;
     if (Array.isArray(payload.responders)) setSubjectiveResponders(payload.responders.slice(0, 50));
@@ -23023,10 +23129,12 @@ function WorldlineView() {
     setError("");
     try {
       const request = { responderId, query: subjectiveQuery.slice(0, 1000) };
-      const [primaryResult, compareResult] = await Promise.all([
-        invoke("getSubjectiveWorldView", request),
-        subjectiveCompareResponderId && subjectiveCompareResponderId !== responderId ? invoke("getSubjectiveWorldView", { ...request, responderId: subjectiveCompareResponderId }) : Promise.resolve(null)
-      ]);
+      const response = await readTask("subjective", () => Promise.all([
+        readInvoke("getSubjectiveWorldView", request),
+        subjectiveCompareResponderId && subjectiveCompareResponderId !== responderId ? readInvoke("getSubjectiveWorldView", { ...request, responderId: subjectiveCompareResponderId }) : Promise.resolve(null)
+      ]));
+      if (!response.committed || !response.isCurrent() || response.errorCode) return;
+      const [primaryResult, compareResult] = response.value;
       setSubjectiveView(primaryResult && typeof primaryResult === "object" ? primaryResult : null);
       setSubjectiveCompareView(compareResult && typeof compareResult === "object" ? compareResult : null);
     } finally {
@@ -23047,33 +23155,41 @@ function WorldlineView() {
     setEntityInspectorLoading(true);
     setError("");
     try {
-      const result = await invoke("getEntityKinshipInspector", { query: inspectorQuery.slice(0, 240), responderId, targetId });
-      setEntityInspector(result && typeof result === "object" ? result : null);
+      const result = await readTask("inspector", () => readInvoke("getEntityKinshipInspector", { query: inspectorQuery.slice(0, 240), responderId, targetId }));
+      if (!result.committed || !result.isCurrent() || result.errorCode) return;
+      setEntityInspector(result.value && typeof result.value === "object" ? result.value : null);
     } finally {
       setEntityInspectorLoading(false);
     }
   };
   reactExports.useEffect(() => {
+    setSource(emptySource); setCheckpoint(emptyCheckpoint); setOverview(null); setAnnualDelta([]); setWorldKnowledge([]);
     refresh();
     const unsubscribe = getApi()?.onUpdated?.(() => refresh());
       return () => unsubscribe?.();
-  }, []);
+  }, [contextVersion]);
+  reactExports.useEffect(() => {
+    setPromptDiagnostics(null); setSubjectiveView(null); setSubjectiveCompareView(null); setEntityInspector(null);
+    setPromptDiagnosticsLoading(false); setSubjectiveLoading(false); setEntityInspectorLoading(false);
+    return () => { cancelRead("prompt"); cancelRead("subjective"); cancelRead("inspector"); };
+  }, [source.checkpointId, promptQuery, subjectiveQuery, subjectiveResponderId, subjectiveCompareResponderId,
+    inspectorQuery, inspectorResponderId, inspectorTargetId, contextVersion]);
   reactExports.useEffect(() => {
     if (activeTab !== "diagnostics") return;
     const timer = setTimeout(() => loadSubjectiveResponders(), 120);
-    return () => clearTimeout(timer);
+    return () => { clearTimeout(timer); ++subjectiveResponderRequestRef.current; cancelRead("responders"); };
   }, [activeTab, subjectiveResponderSearch, source.checkpointId]);
   reactExports.useEffect(() => {
     if (activeTab !== "diagnostics") return;
     const timer = setTimeout(() => loadUsageReport(), 120);
-    return () => clearTimeout(timer);
+    return () => { clearTimeout(timer); cancelRead("usage"); };
   }, [activeTab]);
   reactExports.useEffect(() => {
     if (activeTab !== "historical") return;
     historicalBindingInitializedRef.current = true;
     const timer = setTimeout(() => loadHistoricalBindings(), 150);
-    return () => clearTimeout(timer);
-  }, [activeTab, bindingSearch, bindingStatusFilter]);
+    return () => { clearTimeout(timer); ++historicalBindingRequestRef.current; cancelRead("bindings"); setHistoricalBindings([]); };
+  }, [activeTab, bindingSearch, bindingStatusFilter, source.checkpointId, contextVersion]);
   const handleSelect = async () => {
     if (!getApi()) {
       setError(text("等待 Terra IPC 接入后才能选择存档。", "File selection is waiting for Terra IPC."));
@@ -23606,7 +23722,7 @@ function WorldlineView() {
         subjectiveCompareView && subjectiveViewPanel(subjectiveCompareView, text("对比角色：", "Compared responder: ") + subjectiveResponderLabel(subjectiveCompareView.responderId), "compare-subjective")
       ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: text("选择回应角色并运行只读诊断。", "Select a responder and run the read-only diagnostic.") })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(WorldMemoryEditor, { react: reactExports }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(WorldMemoryEditor, { react: reactExports, t: v95Runtime?.t }),
     false && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-editor", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-section-heading", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("补充知识", "Supplemental Knowledge") }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-scope-note", children: text("范围：当前会话 / 当前检查点", "Scope: current session / current checkpoint") })] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-note worldline-supplemental-scope-note", children: text("补充知识只在当前会话和当前检查点有效。Personal / Secret 内容必须填写可验证的 CK3 Runtime ID 作为角色范围；不填写时不会自动共享给其他角色。", "Supplemental knowledge is limited to the current session and checkpoint. Personal / Secret content needs verifiable CK3 Runtime IDs as the audience; without them it is not shared automatically with other responders.") }),
@@ -23621,10 +23737,14 @@ function WorldlineView() {
   ] });
 }
 function ConfigPanel({ onClose }) {
+  const v95Preferences = useV95Preferences();
   const { t } = useTranslation();
   const loadSettings = useConfigStore((state) => state.loadSettings);
   const appSettings = useConfigStore((state) => state.appSettings);
   const [currentTab, setCurrentTab] = reactExports.useState("connection");
+  reactExports.useEffect(() => {
+    if (!v95Preferences.presentationEnabled && currentTab === "workspace") setCurrentTab("settings");
+  }, [v95Preferences.presentationEnabled, currentTab]);
   const [appVersion, setAppVersion] = reactExports.useState("");
   const [courtTheme, setCourtTheme] = reactExports.useState(() => {
     const savedTheme = window.localStorage.getItem("votc-ui-theme");
@@ -23880,6 +24000,11 @@ function ConfigPanel({ onClose }) {
               children: t("config.connection")
             }
           ),
+          v95Preferences.presentationEnabled && jsxRuntimeExports.jsx("button", {
+            type: "button", onClick: () => setCurrentTab("workspace"),
+            className: currentTab === "workspace" ? "active" : "", style: { zIndex: 12 },
+            children: v95Runtime.t("workspace.title")
+          }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
@@ -23923,7 +24048,7 @@ function ConfigPanel({ onClose }) {
               onClick: () => setCurrentTab("optimization"),
               className: currentTab === "optimization" ? "active" : "",
               style: { zIndex: 12 },
-              children: "优化"
+              children: v95Runtime.t("legacyUi.nav.optimization")
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -23932,7 +24057,7 @@ function ConfigPanel({ onClose }) {
               onClick: () => setCurrentTab("worldline"),
               className: currentTab === "worldline" ? "active" : "",
               style: { zIndex: 12 },
-              children: "世界书"
+              children: v95Runtime.t("legacyUi.nav.worldline")
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -23941,17 +24066,18 @@ function ConfigPanel({ onClose }) {
               onClick: () => setCurrentTab("providerDiagnostics"),
               className: currentTab === "providerDiagnostics" ? "active" : "",
               style: { zIndex: 12 },
-              children: "诊断"
+              children: v95Runtime.t("legacyUi.nav.providerDiagnostics")
             }
           ),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "court-theme-switcher", role: "group", "aria-label": "界面风格", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "court-theme-switcher", role: "group", "aria-label": v95Runtime.t("legacyUi.nav.themeGroup"),
+            "data-theme-label": v95Runtime.t(({ parchment: "legacyUi.nav.themeParchment", knight: "legacyUi.nav.themeKnight", ink: "legacyUi.nav.themeInk" })[courtTheme]), children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
               {
                 className: `court-theme-button ${courtTheme === "parchment" ? "active" : ""}`,
                 onClick: () => setCourtTheme("parchment"),
-                title: "游牧风格",
-                "aria-label": "切换为游牧风格",
+                title: v95Runtime.t("legacyUi.nav.themeParchment"),
+                "aria-label": v95Runtime.t("legacyUi.nav.themeParchment"),
                 "aria-pressed": courtTheme === "parchment",
                 children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "./assets/theme-parchment-v1.png", alt: "" })
               }
@@ -23961,8 +24087,8 @@ function ConfigPanel({ onClose }) {
               {
                 className: `court-theme-button ${courtTheme === "knight" ? "active" : ""}`,
                 onClick: () => setCourtTheme("knight"),
-                title: "骑士纹章风格",
-                "aria-label": "切换为骑士纹章风格",
+                title: v95Runtime.t("legacyUi.nav.themeKnight"),
+                "aria-label": v95Runtime.t("legacyUi.nav.themeKnight"),
                 "aria-pressed": courtTheme === "knight",
                 children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "./assets/theme-knight-v1.png", alt: "" })
               }
@@ -23972,8 +24098,8 @@ function ConfigPanel({ onClose }) {
               {
                 className: `court-theme-button ${courtTheme === "ink" ? "active" : ""}`,
                 onClick: () => setCourtTheme("ink"),
-                title: "水墨画卷风格",
-                "aria-label": "切换为水墨画卷风格",
+                title: v95Runtime.t("legacyUi.nav.themeInk"),
+                "aria-label": v95Runtime.t("legacyUi.nav.themeInk"),
                 "aria-pressed": courtTheme === "ink",
                 children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "./assets/theme-ink-v1.png", alt: "" })
               }
@@ -23982,6 +24108,13 @@ function ConfigPanel({ onClose }) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "config-close-button", onClick: onClose, children: "✕" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "config-main-content", children: [
+          currentTab === "workspace" && v95Preferences.presentationEnabled && jsxRuntimeExports.jsx(V95WorkspaceView, {
+            onOpenControls: kind => {
+              if (kind === "conversation-feed" || kind === "action-activity") { onClose(); return; }
+              setCurrentTab(({ "memory-list": "summaries", "knowledge-facts": "summaries", "worldline-timeline": "worldline",
+                "letter-list": "settings", "provider-diagnostics": "providerDiagnostics", "settings-section": "settings" })[kind] || "settings");
+            }
+          }),
           currentTab === "connection" && /* @__PURE__ */ jsxRuntimeExports.jsx(ConnectionView, {}),
           currentTab === "settings" && /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsView, {}),
           currentTab === "actions" && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionsView, {}),
@@ -24753,7 +24886,8 @@ const ja = {
   summaries,
   summariesManager
 };
-instance.use(Browser).use(initReactI18next).init({
+await instance.use(initReactI18next).init({
+  lng: "zh",
   resources: {
     en: {
       translation: en
@@ -24788,27 +24922,16 @@ instance.use(Browser).use(initReactI18next).init({
   interpolation: {
     escapeValue: false
   },
-  detection: {
-    order: ["localStorage", "navigator"],
-    caches: ["localStorage"]
-  }
 });
-instance.on("languageChanged", (lng) => {
-  if (window.llmConfigAPI?.saveLanguage) {
-    window.llmConfigAPI.saveLanguage(lng).catch((err) => {
-      console.error("Failed to sync language to main process:", err);
-    });
-  }
+v95Runtime = await createRendererRuntime({ i18n: instance, apis: { llmConfigAPI: window.llmConfigAPI, conversationAPI: window.conversationAPI } });
+v95Runtime.subscribe(({ preferences }) => {
+  document.documentElement.setAttribute("data-v95-presentation", String(preferences.presentationEnabled));
 });
-if (window.llmConfigAPI?.getLanguage) {
-  window.llmConfigAPI.getLanguage().then((lang) => {
-    if (lang && lang !== instance.language) {
-      instance.changeLanguage(lang);
-    }
-  }).catch((err) => {
-    console.error("Failed to load language from main process:", err);
-  });
-}
+V95WorkspaceView = createWorkspaceView(reactExports, jsxRuntimeExports, v95Runtime, {
+  conversationAPI: window.conversationAPI, worldlineAPI: window.worldlineAPI, lettersAPI: window.lettersAPI,
+  characterKnowledgeAPI: window.characterKnowledgeAPI, providerDiagnosticsAPI: window.providerDiagnosticsAPI, usageAPI: window.usageAPI
+});
+window.addEventListener("beforeunload", () => v95Runtime.dispose(), { once: true });
 const container = document.getElementById("root");
 if (container) {
   const root = clientExports.createRoot(container);

@@ -34,6 +34,15 @@ jobs:
           Write-Output ("Isolated test TEMP: " + $votcCiTemp)
       - name: Verify locked runtime dependencies
         run: node scripts/runtime-dependencies.js
+      - name: Locate one browser for offline renderer checks
+        run: |
+          $v95BrowserCandidates = @(
+            (Join-Path $env:ProgramFiles 'Google\Chrome\Application\chrome.exe'),
+            (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe')
+          )
+          $v95Browser = $v95BrowserCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+          if (-not $v95Browser) { throw 'No installed Chromium browser available for offline UI checks.' }
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value ('CHROME_PATH=' + $v95Browser)
       - name: Build runtime from source
         run: node scripts/build-runtime.js
       - name: Verify and materialize generated runtime

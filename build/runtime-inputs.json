@@ -1224,6 +1224,166 @@
     {
       "source": "main/providers/effective-request.js",
       "target": "out/main/providers/effective-request.js"
+    },
+    {
+      "source": "renderer/v95/visual/worldline-visual.js",
+      "target": "out/renderer/v95/visual/worldline-visual.js"
+    },
+    {
+      "source": "renderer/v95/visual/view-transition.js",
+      "target": "out/renderer/v95/visual/view-transition.js"
+    },
+    {
+      "source": "renderer/v95/visual/v95-ui.css",
+      "target": "out/renderer/v95/visual/v95-ui.css"
+    },
+    {
+      "source": "renderer/v95/visual/status-indicator.js",
+      "target": "out/renderer/v95/visual/status-indicator.js"
+    },
+    {
+      "source": "renderer/v95/visual/settings-visual.js",
+      "target": "out/renderer/v95/visual/settings-visual.js"
+    },
+    {
+      "source": "renderer/v95/visual/row-components.js",
+      "target": "out/renderer/v95/visual/row-components.js"
+    },
+    {
+      "source": "renderer/v95/visual/provider-visual.js",
+      "target": "out/renderer/v95/visual/provider-visual.js"
+    },
+    {
+      "source": "renderer/v95/visual/memory-visual.js",
+      "target": "out/renderer/v95/visual/memory-visual.js"
+    },
+    {
+      "source": "renderer/v95/visual/list-shell.js",
+      "target": "out/renderer/v95/visual/list-shell.js"
+    },
+    {
+      "source": "renderer/v95/visual/letter-visual.js",
+      "target": "out/renderer/v95/visual/letter-visual.js"
+    },
+    {
+      "source": "renderer/v95/visual/knowledge-visual.js",
+      "target": "out/renderer/v95/visual/knowledge-visual.js"
+    },
+    {
+      "source": "renderer/v95/visual/index.js",
+      "target": "out/renderer/v95/visual/index.js"
+    },
+    {
+      "source": "renderer/v95/visual/icon-button.js",
+      "target": "out/renderer/v95/visual/icon-button.js"
+    },
+    {
+      "source": "renderer/v95/visual/dom.js",
+      "target": "out/renderer/v95/visual/dom.js"
+    },
+    {
+      "source": "renderer/v95/visual/dialog-shell.js",
+      "target": "out/renderer/v95/visual/dialog-shell.js"
+    },
+    {
+      "source": "renderer/v95/visual/design-tokens.css",
+      "target": "out/renderer/v95/visual/design-tokens.css"
+    },
+    {
+      "source": "renderer/v95/visual/conversation-visual.js",
+      "target": "out/renderer/v95/visual/conversation-visual.js"
+    },
+    {
+      "source": "renderer/v95/visual/action-visual.js",
+      "target": "out/renderer/v95/visual/action-visual.js"
+    },
+    {
+      "source": "renderer/v95/state/scoped-resource-store.js",
+      "target": "out/renderer/v95/state/scoped-resource-store.js"
+    },
+    {
+      "source": "renderer/v95/state/request-controller.js",
+      "target": "out/renderer/v95/state/request-controller.js"
+    },
+    {
+      "source": "renderer/v95/state/read-boundary.js",
+      "target": "out/renderer/v95/state/read-boundary.js"
+    },
+    {
+      "source": "renderer/v95/state/context-epoch.js",
+      "target": "out/renderer/v95/state/context-epoch.js"
+    },
+    {
+      "source": "renderer/v95/package.json",
+      "target": "out/renderer/v95/package.json"
+    },
+    {
+      "source": "renderer/v95/integration.css",
+      "target": "out/renderer/v95/integration.css"
+    },
+    {
+      "source": "renderer/v95/ipc/event-subscriptions.js",
+      "target": "out/renderer/v95/ipc/event-subscriptions.js"
+    },
+    {
+      "source": "renderer/v95/ipc/renderer-ipc-client.js",
+      "target": "out/renderer/v95/ipc/renderer-ipc-client.js"
+    },
+    {
+      "source": "renderer/v95/i18n/index.js",
+      "target": "out/renderer/v95/i18n/index.js"
+    },
+    {
+      "source": "renderer/v95/i18n/locales/zh-CN.js",
+      "target": "out/renderer/v95/i18n/locales/zh-CN.js"
+    },
+    {
+      "source": "renderer/v95/i18n/locales/en-US.js",
+      "target": "out/renderer/v95/i18n/locales/en-US.js"
+    },
+    {
+      "source": "renderer/v95/adapters/domain-adapters.js",
+      "target": "out/renderer/v95/adapters/domain-adapters.js"
+    },
+    {
+      "source": "renderer/v95/contracts/view-fixtures.v1.js",
+      "target": "out/renderer/v95/contracts/view-fixtures.v1.js"
+    },
+    {
+      "source": "renderer/v95/contracts/view-contract.v1.js",
+      "target": "out/renderer/v95/contracts/view-contract.v1.js"
+    },
+    {
+      "source": "renderer/v95/contracts/errors.v1.js",
+      "target": "out/renderer/v95/contracts/errors.v1.js"
+    },
+    {
+      "source": "renderer/v95/contracts/async-states.v1.js",
+      "target": "out/renderer/v95/contracts/async-states.v1.js"
+    },
+    {
+      "source": "renderer/v95/icons/icon-registry.js",
+      "target": "out/renderer/v95/icons/icon-registry.js"
+    },
+    {
+      "source": "renderer/v95/containers/workspace-view.js",
+      "target": "out/renderer/v95/containers/workspace-view.js"
+    },
+    {
+      "source": "renderer/v95/containers/workspace-controller.js",
+      "target": "out/renderer/v95/containers/workspace-controller.js"
+    },
+    {
+      "source": "renderer/v95/containers/snapshot-presentation.js",
+      "target": "out/renderer/v95/containers/snapshot-presentation.js"
+    },
+    {
+      "source": "renderer/v95/containers/renderer-runtime.js",
+      "target": "out/renderer/v95/containers/renderer-runtime.js"
+    },
+    {
+      "source": "renderer/v95/containers/domain-container.js",
+      "target": "out/renderer/v95/containers/domain-container.js"
     }
   ]
 }

@@ -6,6 +6,7 @@
 /output/playwright/v9.3.9.3/
 /.playwright-cli/
 /.build/
+/review/v95-deepseek/tests/_chrome-profile/
 
 
 # Local Notepad debugging copy; not a VOTC distribution entry.

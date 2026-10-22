@@ -4,6 +4,14 @@ const crypto = require("crypto");
 
 function createPairMemoryService({ store, getCurrentConversation }) {
   const digest = value => crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  const conversationBindings = new WeakMap();
+  let conversationBindingSequence = 0;
+  function bindPreview(ctx, revision) {
+    if (ctx.conversation && !conversationBindings.has(ctx.conversation)) conversationBindings.set(ctx.conversation, ++conversationBindingSequence);
+    return digest([revision, ctx.campaignToken, ctx.ownerId, ctx.counterpartId,
+      ctx.conversation ? conversationBindings.get(ctx.conversation) : "offline",
+      ctx.conversation?.conversationEpoch ?? null]);
+  }
   const cleanName = value => typeof value === "string" && value.trim() && !/^\d+$/.test(value.trim()) && !/^(unknown|none)$/i.test(value.trim()) ? value.trim() : null;
   const id = value => {
     if (!Number.isSafeInteger(value) || value <= 0) throw new Error("PAIR_INDEX_SCOPE_INVALID");
@@ -62,7 +70,7 @@ function createPairMemoryService({ store, getCurrentConversation }) {
     const ids = ctx.counterpartId ? [ctx.counterpartId] : ctx.counterpartIds;
     const pairs = ids.map(counterpartId => {
       const result = store.pairLedger.preview(pair(ctx, counterpartId), ctx.options);
-      return { ...result, items: result.items || result.pairs?.flatMap(row => row.items || []) || [],
+      return { ...result, previewRevision: bindPreview({ ...ctx, counterpartId }, result.previewRevision), items: result.items || result.pairs?.flatMap(row => row.items || []) || [],
         ownerId: ctx.ownerId, counterpartId, ownerName: ctx.ownerName, counterpartName: ctx.name(counterpartId), writable: ctx.writable };
     });
     const counts = {};
@@ -73,8 +81,10 @@ function createPairMemoryService({ store, getCurrentConversation }) {
     const ctx = context(request);
     if (!ctx.writable || !ctx.counterpartId) throw new Error("PAIR_INDEX_READ_ONLY");
     if (getCurrentConversation() !== ctx.conversation) throw new Error("PAIR_INDEX_PREVIEW_STALE");
+    const currentPreview = store.pairLedger.preview(pair(ctx, ctx.counterpartId), ctx.options);
+    if (request.previewRevision !== bindPreview(ctx, currentPreview.previewRevision)) throw new Error("PAIR_INDEX_PREVIEW_STALE");
     const result = store.pairLedger.apply(pair(ctx, ctx.counterpartId), { ...ctx.options, readOnly: false,
-      allowHistoricalBackfill: ctx.offlineBackfill, previewRevision: request.previewRevision });
+      allowHistoricalBackfill: ctx.offlineBackfill, previewRevision: currentPreview.previewRevision });
     return { success: true, ...result, ...metadata(ctx), ownerId: ctx.ownerId, counterpartId: ctx.counterpartId };
   }
   function open(request) {

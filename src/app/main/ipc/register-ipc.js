@@ -29,6 +29,22 @@ function validateActionFilePath(filePath, actionsRoot) {
   return path.join(root, relative);
 }
 
+function validateOptionalProviderInstanceId(instanceId) {
+  if (instanceId === undefined) return undefined;
+  if (typeof instanceId !== "string" || !instanceId.trim() || instanceId.length > 256) {
+    const error = new Error("invalid_provider_instance_id");
+    error.code = "invalid_provider_instance_id";
+    throw error;
+  }
+  return instanceId;
+}
+
+function safeModelListErrorCode(error) {
+  const code = error?.code;
+  return typeof code === "string" && /^(?:invalid_provider_instance_id|provider_instance_unavailable|provider_not_configured|provider_(?:rate_limit|server_error|network|timeout|cancelled|unsupported|invalid_response|budget|auth|unknown))$/.test(code)
+    ? code : "provider_model_list_failed";
+}
+
 function registerIpcHandlers(runtime) {
   const { electron, settingsRepository, promptConfigManager, uuid, VOTC_PROMPTS_DIR, TemplateEngine, exportPromptsZip, letterManager, runFileManager, llmManager, providerRegistry, usageAnalytics, providerDiagnostics, actionRegistry, VOTC_ACTIONS_DIR, resolveI18nString, conversationManager, ActionEngine, VOTC_SUMMARIES_DIR, SummariesManager, memoryEngine, worldlineService, characterKnowledgeService } = runtime;
 
@@ -359,12 +375,14 @@ function registerIpcHandlers(runtime) {
   electron.ipcMain.handle("llm:setActiveProvider", (_, instanceId) => {
     settingsRepository.setActiveProviderInstanceId(instanceId);
   });
-  electron.ipcMain.handle("llm:listModels", async () => {
+  electron.ipcMain.handle("llm:listModels", async (_event, requestedInstanceId) => {
     try {
-      return await llmManager.listModelsForProvider();
+      const instanceId = validateOptionalProviderInstanceId(requestedInstanceId);
+      return await llmManager.listModelsForProvider(undefined, instanceId === undefined ? {} : { instanceId });
     } catch (error) {
-      console.error("IPC llm:listModels error:", error);
-      return { error: error.message || "Failed to list models" };
+      const errorCode = safeModelListErrorCode(error);
+      console.error("IPC llm:listModels error:", errorCode);
+      return { error: errorCode };
     }
   });
   electron.ipcMain.handle("llm:testConnection", async () => {
@@ -451,6 +469,20 @@ function registerIpcHandlers(runtime) {
   });
   electron.ipcMain.handle("llm:saveLanguage", (_, language) => {
     settingsRepository.saveLanguage(language);
+  });
+  electron.ipcMain.handle("llm:getUiLanguage", () => {
+    return settingsRepository.getUiLanguage();
+  });
+  electron.ipcMain.handle("llm:saveUiLanguage", (_, language) => {
+    settingsRepository.saveUiLanguage(language);
+  });
+  electron.ipcMain.handle("llm:getLanguagePreferences", () => {
+    return settingsRepository.getLanguagePreferences();
+  });
+  electron.ipcMain.handle("llm:getUiPresentationEnabled", () => settingsRepository.getUiPresentationEnabled());
+  electron.ipcMain.handle("llm:saveUiPresentationEnabled", (_, enabled) => {
+    settingsRepository.saveUiPresentationEnabled(enabled);
+    return true;
   });
   electron.ipcMain.handle("llm:getAllowPrerelease", () => {
     return settingsRepository.getAllowPrerelease();
@@ -812,6 +844,7 @@ function registerIpcHandlers(runtime) {
   electron.ipcMain.handle("conversation:getEntries", () => {
     return conversationManager.getConversationEntries();
   });
+  electron.ipcMain.handle("conversation:getUiContext", () => conversationManager.getUiContext());
   electron.ipcMain.handle("conversation:getContextUsage", () => conversationService.getContextUsageSnapshot?.() || {
     conversationId: null, conversationEpoch: conversationManager.conversationEpoch || 0,
     turnEpoch: 0, sceneRevision: null, revision: 0, phase: "reset", responders: []
@@ -1112,4 +1145,4 @@ function registerIpcHandlers(runtime) {
   console.log("Conversation IPC handlers registered successfully");
 }
 
-module.exports = { registerIpcHandlers, requireInteger, validateExternalHttpUrl, validateActionFilePath };
+module.exports = { registerIpcHandlers, requireInteger, validateExternalHttpUrl, validateActionFilePath, validateOptionalProviderInstanceId };

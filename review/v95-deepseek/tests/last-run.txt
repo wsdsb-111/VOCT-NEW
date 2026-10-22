@@ -1,0 +1,24 @@
+PASS  showcase boots with eight lanes  [8 lanes / 9 views]
+PASS  no raw keys, undefined or object text
+PASS  icons are offline svg and unknown falls back  [50 icons]
+PASS  all view kinds present
+PASS  ready state renders keyed rows  [27 rows]
+PASS  three themes expose host tokens  [parchment / knight / ink]
+PASS  English UI renders without missing text  [Conversation]
+PASS  async states render all five surfaces  [empty/loading/error/stale/refreshing/idle]
+PASS  page switch swaps without losing the host  [Legacy Summary → 服务商诊断]
+PASS  pagination emits CHANGE_PAGE and updates the page label  [第 2 页，共 3 页]
+PASS  row detail opens and closes with focus restored  [focus trap + escape + restore]
+PASS  dialog backdrop closes
+PASS  confirm dialog keeps actions explicit  [取消 / 审查]
+PASS  non-dismissible dialog hides close controls and ignores Escape  [no close controls / Escape ignored]
+PASS  settings control emits only CHANGE_FILTER  [zh-CN → en-US]
+PASS  no horizontal overflow at 1280/1920/2560/1067/390  [1280 / 1920 / 2560 / 1067 / 390]
+PASS  narrow 420px container wraps long text without horizontal overflow  [long text + focus preserved]
+PASS  mount/update/destroy is repeatable  [3 cycles]
+PASS  no runtime errors, console errors or failed requests
+PASS  no external network requests
+PASS  intent log contains no forbidden execution
+PASS  reduced motion keeps content visible  [1]
+
+22/22 checks passed

@@ -1,0 +1,157 @@
+/*
+ * V9.5 design tokens — scoped to .v95-ui only.
+ * Bridges existing --ui-* theme tokens; does not redefine :root, body or
+ * any legacy component.
+ */
+.v95-ui {
+  --v95-font: var(--ui-font, "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif);
+  --v95-heading-font: var(--ui-font, "Microsoft YaHei", sans-serif);
+  --v95-text: var(--ui-text, #dedfd8);
+  --v95-muted: var(--ui-muted, #b6bdb4);
+  --v95-accent: var(--ui-accent, #cbb88f);
+  --v95-line: var(--ui-line, #68685d);
+  --v95-field: var(--ui-field, #292b2c);
+  --v95-surface: var(--ui-surface, #303332);
+  --v95-hover: var(--ui-hover, #404641);
+  --v95-selected: var(--ui-selected, #46564b);
+  --v95-danger: var(--ui-danger, #e5aaa2);
+  --v95-success: var(--ui-success, #a3ccaf);
+  --v95-warning: var(--ui-warning, #dec598);
+
+  --v95-text-on-accent: #f0f3ec;
+  --v95-accent-soft: color-mix(in srgb, var(--v95-accent) 14%, transparent);
+  --v95-accent-line: color-mix(in srgb, var(--v95-accent) 44%, transparent);
+  --v95-hover-soft: color-mix(in srgb, var(--v95-hover) 48%, transparent);
+  --v95-panel-bg: color-mix(in srgb, var(--v95-surface) 93%, transparent);
+  --v95-panel-bg-soft: color-mix(in srgb, var(--v95-surface) 82%, transparent);
+  --v95-row-bg: color-mix(in srgb, var(--v95-surface) 74%, transparent);
+  --v95-row-bg-hover: color-mix(in srgb, var(--v95-hover) 58%, transparent);
+  --v95-field-bg: color-mix(in srgb, var(--v95-field) 94%, transparent);
+  --v95-scrim: rgba(7, 7, 8, 0.62);
+  --v95-line-strong: color-mix(in srgb, var(--v95-line) 74%, transparent);
+
+  --v95-radius: 6px;
+  --v95-radius-sm: 3px;
+  --v95-radius-pill: 999px;
+  --v95-panel-radius: 10px;
+  --v95-shadow: 0 14px 38px rgba(0, 0, 0, 0.26);
+  --v95-shadow-strong: 0 26px 80px rgba(0, 0, 0, 0.42);
+  --v95-row-shadow: none;
+  --v95-dialog-offset: 0;
+  --v95-badge-radius: var(--v95-radius-pill);
+
+  --v95-font-size: 13.5px;
+  --v95-line-height: 1.65;
+  --v95-title-size: 1.32rem;
+  --v95-row-title-size: 15px;
+  --v95-row-text-size: 13px;
+  --v95-small-size: 11px;
+  --v95-meta-size: 10.5px;
+  --v95-space-1: 4px;
+  --v95-space-2: 8px;
+  --v95-space-3: 12px;
+  --v95-space-4: 16px;
+  --v95-space-5: 22px;
+  --v95-space-6: 30px;
+
+  --v95-control-h: 34px;
+  --v95-row-pad-y: 12px;
+  --v95-row-pad-x: 14px;
+  --v95-gap: 12px;
+  --v95-list-gap: 8px;
+
+  --v95-message-size: var(--message-font-size, 16px);
+  --v95-motion-fast: 130ms;
+  --v95-motion: 190ms;
+  --v95-motion-slow: 300ms;
+  --v95-ease: cubic-bezier(.2, .65, .3, 1);
+  --v95-ease-out: cubic-bezier(.16, 1, .3, 1);
+
+  color: var(--v95-text);
+  font-family: var(--v95-font);
+  font-size: var(--v95-font-size);
+  line-height: var(--v95-line-height);
+}
+
+.v95-ui[data-density="compact"] {
+  --v95-font-size: 12.5px;
+  --v95-row-pad-y: 7px;
+  --v95-row-pad-x: 10px;
+  --v95-gap: 9px;
+  --v95-list-gap: 5px;
+  --v95-row-title-size: 14px;
+  --v95-row-text-size: 12.5px;
+  --v95-control-h: 30px;
+  --v95-space-5: 16px;
+  --v95-space-6: 22px;
+}
+
+/* Parchment: warm paper, soft edge, editorial serif headings. */
+:root[data-votc-theme="parchment"] .v95-ui {
+  --v95-heading-font: Georgia, "Songti SC", "STSong", "SimSun", var(--ui-font);
+  --v95-radius: 8px;
+  --v95-radius-sm: 4px;
+  --v95-panel-radius: 13px;
+  --v95-shadow: 0 16px 42px rgba(57, 35, 14, 0.2);
+  --v95-shadow-strong: 0 28px 70px rgba(43, 24, 8, 0.32);
+  --v95-panel-bg: color-mix(in srgb, var(--v95-surface) 90%, transparent);
+  --v95-row-bg: color-mix(in srgb, var(--v95-surface) 52%, transparent);
+  --v95-row-bg-hover: color-mix(in srgb, var(--v95-surface) 72%, transparent);
+  --v95-scrim: rgba(43, 28, 14, 0.44);
+  --v95-dialog-offset: 0;
+  --v95-badge-radius: var(--v95-radius-pill);
+}
+
+/* Knight: dark metal, clipped corners, gold rules. */
+:root[data-votc-theme="knight"] .v95-ui {
+  --v95-heading-font: Georgia, "Times New Roman", var(--ui-font);
+  --v95-radius: 0px;
+  --v95-radius-sm: 0px;
+  --v95-panel-radius: 0px;
+  --v95-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  --v95-shadow-strong: 0 32px 90px rgba(0, 0, 0, 0.68);
+  --v95-panel-bg: color-mix(in srgb, var(--v95-surface) 86%, transparent);
+  --v95-row-bg: color-mix(in srgb, var(--v95-surface) 66%, transparent);
+  --v95-row-bg-hover: color-mix(in srgb, var(--v95-hover) 76%, transparent);
+  --v95-scrim: rgba(4, 4, 5, 0.68);
+  --v95-line-strong: color-mix(in srgb, var(--v95-line) 72%, var(--v95-accent) 28%);
+  --v95-badge-radius: 0px;
+  --v95-dialog-offset: 0;
+}
+
+/* Ink: rice paper, brush rules, offset shadow. */
+:root[data-votc-theme="ink"] .v95-ui {
+  --v95-heading-font: "KaiTi", "STKaiti", "Kaiti SC", "Songti SC", "SimSun", var(--ui-font);
+  --v95-radius: 1px;
+  --v95-radius-sm: 1px;
+  --v95-panel-radius: 0px;
+  --v95-shadow: 6px 6px 0 rgba(37, 43, 39, 0.16);
+  --v95-shadow-strong: 10px 12px 0 rgba(37, 43, 39, 0.22), 0 24px 54px rgba(20, 24, 21, 0.18);
+  --v95-panel-bg: color-mix(in srgb, var(--v95-surface) 78%, transparent);
+  --v95-row-bg: color-mix(in srgb, var(--v95-surface) 46%, transparent);
+  --v95-row-bg-hover: color-mix(in srgb, var(--v95-surface) 68%, transparent);
+  --v95-scrim: rgba(29, 31, 27, 0.38);
+  --v95-badge-radius: 2px;
+  --v95-dialog-offset: 1px;
+}
+
+/* Light themes need slightly stronger hairline contrast on paper. */
+:root[data-votc-theme="parchment"] .v95-ui,
+:root[data-votc-theme="ink"] .v95-ui {
+  --v95-line-strong: color-mix(in srgb, var(--v95-line) 82%, transparent);
+}
+
+html.v95-dialog-open,
+html.v95-dialog-open body {
+  overflow: hidden !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v95-ui,
+  .v95-ui * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

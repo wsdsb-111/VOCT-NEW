@@ -291,6 +291,14 @@ const schema = {
     type: "string",
     default: "en"
   },
+  uiLanguage: {
+    type: "string",
+    default: "zh-CN"
+  },
+  v95PresentationEnabled: {
+    type: "boolean",
+    default: true
+  },
   promptSettings: {
     type: "object",
     default: {},

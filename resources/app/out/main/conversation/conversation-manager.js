@@ -1,6 +1,10 @@
 "use strict";
 
+const crypto = require("crypto");
+
 function createConversationManager({ events, memorySystem, Conversation, PromptBuilder, createActionFeedback, logVerboseLLM, runFileManager = null }) {
+  const uiScopeSalt = crypto.randomBytes(32);
+  const uiTag = value => value == null ? null : "ui-" + crypto.createHmac("sha256", uiScopeSalt).update(String(value)).digest("hex").slice(0, 32);
   class ConversationManager {
     constructor() {
       this.currentConversation = null;
@@ -173,6 +177,7 @@ function createConversationManager({ events, memorySystem, Conversation, PromptB
     endCurrentConversation(options = {}) {
       const conversation = this.currentConversation;
       this.currentConversation = null;
+      this.emitConversationUpdate();
       if (conversation) {
         this.contextUsageRevision = Math.max(this.contextUsageRevision || 0, Number(conversation.contextUsageRevision) || 0) + 1;
         this.emitContextUsageUpdate({ conversationId: null, conversationEpoch: this.conversationEpoch,
@@ -324,6 +329,17 @@ function createConversationManager({ events, memorySystem, Conversation, PromptB
         aiID: this.currentConversation.gameData.aiID,
         historyLength: this.currentConversation.getHistory().length,
         presence: this.currentConversation.getPresenceState()
+      };
+    }
+    getUiContext() {
+      const conversation = this.currentConversation;
+      const gameData = conversation?.gameData;
+      return {
+        campaignTag: uiTag(gameData?.campaignToken),
+        ownerTag: uiTag(gameData?.playerID),
+        conversationTag: conversation ? uiTag(`${conversation.id}:${this.conversationEpoch}`) : null,
+        conversationEpoch: this.conversationEpoch,
+        isActive: !!conversation?.isActive
       };
     }
     /**

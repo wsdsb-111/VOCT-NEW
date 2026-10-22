@@ -42,7 +42,9 @@ electron.contextBridge.exposeInMainWorld("llmConfigAPI", {
   deletePreset: (instanceId) => electron.ipcRenderer.invoke("llm:deletePreset", instanceId),
   // Renamed
   setActiveProvider: (instanceId) => electron.ipcRenderer.invoke("llm:setActiveProvider", instanceId),
-  listModels: () => electron.ipcRenderer.invoke("llm:listModels"),
+  listModels: (instanceId) => instanceId === undefined
+    ? electron.ipcRenderer.invoke("llm:listModels")
+    : electron.ipcRenderer.invoke("llm:listModels", instanceId),
   testConnection: () => electron.ipcRenderer.invoke("llm:testConnection"),
   checkPlayer2Health: () => electron.ipcRenderer.invoke("llm:checkPlayer2Health"),
   setCK3Folder: (path) => electron.ipcRenderer.invoke("llm:setCK3Folder", path),
@@ -55,6 +57,11 @@ electron.contextBridge.exposeInMainWorld("llmConfigAPI", {
   saveShowSettingsOnStartupSetting: (enabled) => electron.ipcRenderer.invoke("llm:saveShowSettingsOnStartupSetting", enabled),
   getLanguage: () => electron.ipcRenderer.invoke("llm:getLanguage"),
   saveLanguage: (language) => electron.ipcRenderer.invoke("llm:saveLanguage", language),
+  getUiLanguage: () => electron.ipcRenderer.invoke("llm:getUiLanguage"),
+  saveUiLanguage: (language) => electron.ipcRenderer.invoke("llm:saveUiLanguage", language),
+  getLanguagePreferences: () => electron.ipcRenderer.invoke("llm:getLanguagePreferences"),
+  getUiPresentationEnabled: () => electron.ipcRenderer.invoke("llm:getUiPresentationEnabled"),
+  saveUiPresentationEnabled: (enabled) => electron.ipcRenderer.invoke("llm:saveUiPresentationEnabled", enabled),
   getAllowPrerelease: () => electron.ipcRenderer.invoke("llm:getAllowPrerelease"),
   saveAllowPrerelease: (allow) => electron.ipcRenderer.invoke("llm:saveAllowPrerelease", allow),
   getCurrentContextLength: () => electron.ipcRenderer.invoke("llm:getCurrentContextLength"),
@@ -117,6 +124,7 @@ electron.contextBridge.exposeInMainWorld("conversationAPI", {
     return electron.ipcRenderer.invoke("conversation:getEntries");
   },
   getContextUsage: () => electron.ipcRenderer.invoke("conversation:getContextUsage"),
+  getUiContext: () => electron.ipcRenderer.invoke("conversation:getUiContext"),
   onConversationUpdate: (callback) => {
     const handler = (_event, entries) => callback(entries);
     electron.ipcRenderer.on("conversation:updated", handler);

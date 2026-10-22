@@ -6,6 +6,8 @@ VOTC 是面向《Crusader Kings III》（CK3）的 Windows Electron 宫廷对话
 
 ## 当前版本与进度
 
+2026-10-23 当前为 **V9.5.0 候选**：接入 DeepSeek 八域只读工作区，补齐异步 scope 与语言隔离，打磨三主题背景、配色及按钮反馈；修复历史世界记忆“战事仍在持续”被误判为人物现状。原聊天 Markdown、编辑、来源和审批功能保留。已构建部署 346 项并通过浏览器与专项检查，完整 EXE/CI 及实机状态以[发布验证](docs/current/v9/V9_5_RELEASE_VERIFICATION.md)为准。参见[实施](docs/current/v9/V9_5_IMPLEMENTATION.md)、[双语与异步](docs/current/v9/V9_5_ASYNC_I18N_VERIFICATION.md)、[视觉审查](docs/current/v9/V9_5_DEEPSEEK_REVIEW.md)。下方为历史版本证据。
+
 2026-10-22 当前候选为 **V9.4.2／9.4.2**。排查实机19条聊天请求，冻结前缀指纹未变；修复另行发现的 Action 动态身份混入稳定首块、固定示例落在动态动作之后，以及稳定 Token 边界和跨回应者统计混用。合法摘要冻结与来源权限保持。见[实施](docs/current/v9/V9_4_2_IMPLEMENTATION.md)、[本版验证](docs/current/v9/V9_4_2_VERIFICATION.md)。下方 V9.4.1 及更早段落为历史批次记录，不替代本版门禁。
 
 V9.4.2代码 `e9d7d6f` 的 [Windows CI 39651824091](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39651824091) 已通过488组完整发布、306项构建部署及完整EXE冷启动／重启／媒体加载，payload与本机一致。真实CK3、服务商新请求缓存与Soak仍待验收。

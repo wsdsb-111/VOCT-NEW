@@ -1,0 +1,393 @@
+{
+  "name": "V9.5 DeepSeek Harness visual layer",
+  "status": "review-candidate",
+  "generatedAt": "2026-10-22T10:38:09.292Z",
+  "generatedBy": "DeepSeek Harness",
+  "baseline": "713e9f614ab233fc3e9d0041cbb93018a54f6886",
+  "contract": {
+    "name": "v95-view-v1",
+    "revision": 1,
+    "frozenDoc": "docs/current/v9/V9_5_VIEW_CONTRACT_FREEZE.md"
+  },
+  "scope": [
+    "src/app/renderer/v95/visual/**",
+    "src/app/renderer/v95/icons/**",
+    "review/v95-deepseek/**"
+  ],
+  "notModified": [
+    "src/app/main/**",
+    "src/app/preload/**",
+    "src/app/renderer/index.html",
+    "src/app/renderer/assets/**",
+    "src/app/renderer/ui-comfort.css",
+    "src/app/renderer/v95/contracts/**",
+    "src/app/renderer/v95/i18n/**",
+    "src/app/renderer/v95/state/**",
+    "src/app/renderer/v95/adapters/**",
+    "src/app/renderer/v95/containers/**",
+    "build/**",
+    "resources/app/out/**",
+    "scripts/**",
+    "docs/**",
+    ".github/**"
+  ],
+  "source": "original UI work; read-only use of frozen contracts/i18n",
+  "license": "project-internal, original; no third-party icon or font assets",
+  "dependencies": {
+    "runtime": [],
+    "readOnly": [
+      "src/app/renderer/v95/contracts/view-contract.v1.js",
+      "src/app/renderer/v95/contracts/async-states.v1.js",
+      "src/app/renderer/v95/i18n/index.js",
+      "src/app/renderer/v95/i18n/locales/zh-CN.js",
+      "src/app/renderer/v95/i18n/locales/en-US.js"
+    ],
+    "host": "Chromium/Electron with color-mix, container queries, :has()"
+  },
+  "verification": {
+    "command": "node review/v95-deepseek/tests/run-ui-tests.mjs",
+    "result": "22/22 checks passed",
+    "evidence": "review/v95-deepseek/tests/last-run.txt",
+    "screenshots": "review/v95-deepseek/screenshots/",
+    "notRun": [
+      "real Electron integration / packaged EXE",
+      "real Windows 125%/150% DPI",
+      "production i18next instance",
+      "real CK3 / Provider / Soak",
+      "screen reader and full keyboard journey",
+      "performance P50/P95 and 50k-row rendering"
+    ]
+  },
+  "files": [
+    {
+      "path": "review/v95-deepseek/COMPONENTS.md",
+      "area": "review",
+      "bytes": 8763,
+      "sha256": "b7caae7dc9343ed55e5c2bfdb2da4272fedc10ac54da2625318db8a7e20d4ebf"
+    },
+    {
+      "path": "review/v95-deepseek/COORDINATION.md",
+      "area": "review",
+      "bytes": 4655,
+      "sha256": "5654355801e6b751b3b489a422b5f664989c0a8bcd4e05e2a0666211ccf59e1d"
+    },
+    {
+      "path": "review/v95-deepseek/fixtures/demo-fixtures.mjs",
+      "area": "review",
+      "bytes": 14116,
+      "sha256": "760a9dffc7ba3cb5b00daab0d447f0340fed1e8c7c83d2e5c16e7179af3000d9"
+    },
+    {
+      "path": "review/v95-deepseek/HANDOFF.md",
+      "area": "review",
+      "bytes": 7679,
+      "sha256": "75c1fbe7e7789f1e89efb8ca98d4208f2d265eb56a17857df903b4604d043cb6"
+    },
+    {
+      "path": "review/v95-deepseek/INTEGRATION_REQUESTS.md",
+      "area": "review",
+      "bytes": 5193,
+      "sha256": "5d49a035323540baccdcc819ebd2952e280e4b4d789f3dfe8c3992bd97622cd9"
+    },
+    {
+      "path": "review/v95-deepseek/LOCALE_KEY_REQUESTS.md",
+      "area": "review",
+      "bytes": 3176,
+      "sha256": "691b9abc32aa5a083488aeb0b3f848645fe5c2ba4b19f78282047802a57d6a3d"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/dialog-confirm.png",
+      "area": "review",
+      "bytes": 307145,
+      "sha256": "ff2b214347128e01a689da0c71978ae87712f775f662d26ee1ed2bc664f3307d"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/dialog-detail.png",
+      "area": "review",
+      "bytes": 319337,
+      "sha256": "99815027fcb2f7b869d1ec2def6d8547a2b10c308efa6373624f1de66df40098"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/dpi-125.png",
+      "area": "review",
+      "bytes": 1082132,
+      "sha256": "c8ee52aa9df19c3f1e4add6d2d83f09d453eae06311a17bcb71ba6cf2fb515b1"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/dpi-150.png",
+      "area": "review",
+      "bytes": 939043,
+      "sha256": "7a51e1a2ec9ef12d277d665ec80ca18aded61b2c17fa00a7f7cacf0b10b78234"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/matrix-ink-zh.png",
+      "area": "review",
+      "bytes": 1331299,
+      "sha256": "966f3695b1ee5f0404e18937489f1d0cfaa9663a89b58058d0dc6e405886f236"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/matrix-knight-en.png",
+      "area": "review",
+      "bytes": 1387381,
+      "sha256": "4f1aa6bc7392fae1f81d11e9354883b72070da681f193f0fc5398fa3027d07dc"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/matrix-knight-zh.png",
+      "area": "review",
+      "bytes": 1369234,
+      "sha256": "dc0d043c16cb5557cb8228f0d95cb47e0d066f8ca54b36e3ce3e91dca50352aa"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/matrix-parchment-zh.png",
+      "area": "review",
+      "bytes": 1271715,
+      "sha256": "3c16f050da5912a49fd49fe311f210632952a51ae7727d993b216fc8eae70bcb"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/mobile-390.png",
+      "area": "review",
+      "bytes": 643421,
+      "sha256": "4f1bc09e210de9e89f1addfa732cd3f2738019124a201cc75136a3ba5f0ce6f6"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/size-1280x720.png",
+      "area": "review",
+      "bytes": 1082026,
+      "sha256": "f1d363766404463c7947d0313983f3602a20cafef72d26a67413a2d9383d8877"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/size-1600x900.png",
+      "area": "review",
+      "bytes": 1279142,
+      "sha256": "3815d95afa096731a719008e28c0f732bccc3c361587f8c67c55ff9bee59cca3"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/size-1920x1080.png",
+      "area": "review",
+      "bytes": 1478933,
+      "sha256": "bf94f4c63a9f30e57acfba179df809f3e5766cb1bd9870274c283d8df7c616f2"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/size-2560x1440.png",
+      "area": "review",
+      "bytes": 2630747,
+      "sha256": "bf1a2f5795e3d284fe5f2e1ef1d307de05b1603032cfa43ff5dfdaa5d0a8caea"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/state-empty.png",
+      "area": "review",
+      "bytes": 1199120,
+      "sha256": "94c3eb241dbea357c46f50125ab1fc106c79839f33f1974e0be857b59a182766"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/state-error.png",
+      "area": "review",
+      "bytes": 1218282,
+      "sha256": "b7014caa1de51ca2793a2eb2e39e4fb9e349f9d0e0da168b94c1920c54249bf3"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/state-idle.png",
+      "area": "review",
+      "bytes": 1209756,
+      "sha256": "d1f67bb26c9331791af93809784d5f15dd8b4625b8612bbbb6839bddff4c577d"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/state-loading.png",
+      "area": "review",
+      "bytes": 1294143,
+      "sha256": "0f71b00ca9ce05173ec3748f3967ddbbdb37317a0a7ffadee40462d236263303"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/state-refreshing.png",
+      "area": "review",
+      "bytes": 1372212,
+      "sha256": "71ede4ee598fc9d5cb7fbb2d55cd28387de1dfb2c7d2cb04b8d0436aa6f05818"
+    },
+    {
+      "path": "review/v95-deepseek/screenshots/state-stale.png",
+      "area": "review",
+      "bytes": 1231695,
+      "sha256": "a1ba8e7eabdb419cc527048004e3465240546485f9fb63aa9374c7c70eb2decd"
+    },
+    {
+      "path": "review/v95-deepseek/serve.mjs",
+      "area": "review",
+      "bytes": 2256,
+      "sha256": "ba44c5922667a31935a47d2da4228faf4de486d3f29b928c92703d1df57a480a"
+    },
+    {
+      "path": "review/v95-deepseek/showcase.css",
+      "area": "review",
+      "bytes": 14583,
+      "sha256": "c503d7307d1e5bc6787c3b17174b58ca56ff51d755a7f641e3d4caad4bca3815"
+    },
+    {
+      "path": "review/v95-deepseek/showcase.html",
+      "area": "review",
+      "bytes": 7139,
+      "sha256": "267198a75fb3ee905380e0f11dc7443fe729c0a4e229a024aa6e10caf0bdf960"
+    },
+    {
+      "path": "review/v95-deepseek/showcase.js",
+      "area": "review",
+      "bytes": 15299,
+      "sha256": "727937904124b52eeab3446353f09b694783a6b37afd517e0562d8970314a47f"
+    },
+    {
+      "path": "review/v95-deepseek/tests/browser.mjs",
+      "area": "review",
+      "bytes": 7067,
+      "sha256": "b22688b28f024824f417df08406fb1d6623efbdd0bda02bb010327a37ffd21ef"
+    },
+    {
+      "path": "review/v95-deepseek/tests/capture-matrix.mjs",
+      "area": "review",
+      "bytes": 3077,
+      "sha256": "ced33c4bdb9578278fd11f587cbcc0cc358a6918f1e25fe44de2b0645eb24bb8"
+    },
+    {
+      "path": "review/v95-deepseek/tests/capture-states.mjs",
+      "area": "review",
+      "bytes": 1326,
+      "sha256": "d243d7dc5cc84b766ae71f0a8d2b3f3d6d36056b7b3f428f2b30ecc73387b069"
+    },
+    {
+      "path": "review/v95-deepseek/tests/last-run.txt",
+      "area": "review",
+      "bytes": 1446,
+      "sha256": "b9f7b95e89aad56d2d0edb3063038376ee4d427725eceb032e6de347c7ba3c0f"
+    },
+    {
+      "path": "review/v95-deepseek/tests/make-manifest.mjs",
+      "area": "review",
+      "bytes": 4732,
+      "sha256": "f753db37401752fd58f9fd2fe99b60483d95fabd55801f453128e7896113bd21"
+    },
+    {
+      "path": "review/v95-deepseek/tests/run-ui-tests.mjs",
+      "area": "review",
+      "bytes": 19050,
+      "sha256": "c28e027bba4e18a255d70c96c43444f7f811453f7538e0410b9186e4666cf1b4"
+    },
+    {
+      "path": "review/v95-deepseek/UI_DESIGN_DECISIONS.md",
+      "area": "review",
+      "bytes": 6685,
+      "sha256": "2a83844c54ce8c492b8af4ae68b61893dce2b8bc81944225ac41165955a61cc9"
+    },
+    {
+      "path": "src/app/renderer/v95/icons/icon-registry.js",
+      "area": "production",
+      "bytes": 13377,
+      "sha256": "4a3fb8334f17ce8a2517391d2a2f5ceed9e2ae48e8fecf75a27f7da9f200f665"
+    },
+    {
+      "path": "src/app/renderer/v95/visual/action-visual.js",
+      "area": "production",
+      "bytes": 311,
+      "sha256": "651674c16fba0efba894c919187b7ab0bc0295ab246e0bccdf35b34163a917a4"
+    },
+    {
+      "path": "src/app/renderer/v95/visual/conversation-visual.js",
+      "area": "production",
+      "bytes": 322,
+      "sha256": "4ff6446662c23480637aabc7794f22778c0d150f9026ccf5e44791faa09f50d5"
+    },
+    {
+      "path": "src/app/renderer/v95/visual/design-tokens.css",
+      "area": "production",
+      "bytes": 5850,
+      "sha256": "c12ac3c41c123eac73bcba217cca07d1cf048ba1226c22bf4857b176bf23809a"
+    },
+    {
+      "path": "src/app/renderer/v95/visual/dialog-shell.js",
+      "area": "production",
+      "bytes": 10627,
+      "sha256": "5f332ea9c2729bce3be88c42b901c78c93bb57846ccdef24b5c129959f127da0"
+    },
+    {
+      "path": "src/app/renderer/v95/visual/dom.js",
+      "area": "production",
+      "bytes": 5191,
+      "sha256": "baa5328f392a40d4ca645da318253df28a97bbc65005835c72dc4a5b479a840b"
+    },
+    {
+      "path": "src/app/renderer/v95/visual/icon-button.js",
+      "area": "production",
+      "bytes": 3818,
+      "sha256": "8ed06c9907e4931344a0760321aa71ce3807ff0ca50f17b82cc221147a795190"
+    },
+    {
+      "path": "src/app/renderer/v95/visual/index.js",
+      "area": "production",
+      "bytes": 2430,
+      "sha256": "9f30e4c3d62dcb106caa08e7a22063f04bba9c05a31a3c72e1cfa03b2f21ee6e"
+    },
+    {
+      "path": "src/app/renderer/v95/visual/knowledge-visual.js",
+      "area": "production",
+      "bytes": 307,
+      "sha256": "a0d38713dce6826a65f0f37292d652b65c10810e9e5a05c4ea5de6d7055f1048"
+    },
+    {
+      "path": "src/app/renderer/v95/visual/letter-visual.js",
+      "area": "production",
+      "bytes": 311,
+      "sha256": "fa34ece3e243e0e033a4daf77f90c71dad89d3c4c5d651197bc4a249eef806e9"
+    },
+    {
+      "path": "src/app/renderer/v95/visual/list-shell.js",
+      "area": "production",
+      "bytes": 11623,
+      "sha256": "996105825deed3d9fc88964a48fe882e47f8e473426d87f2c6e5ea634bd68722"
+    },
+    {
+      "path": "src/app/renderer/v95/visual/memory-visual.js",
+      "area": "production",
+      "bytes": 281,
+      "sha256": "476dbd039cb29f3b85b5d91549581b3641749160db9a38bcb3fed37bf33c5c11"
+    },
+    {
+      "path": "src/app/renderer/v95/visual/provider-visual.js",
+      "area": "production",
+      "bytes": 324,
+      "sha256": "4b2e1672d50358a0d4f26e2ff5f747539dc8a472bd713bb53ecd4aaca605cb7a"
+    },
+    {
+      "path": "src/app/renderer/v95/visual/row-components.js",
+      "area": "production",
+      "bytes": 16881,
+      "sha256": "a07a6ebbc317fe791fdb5bcb5ab7d951080575b50e067c77f45271760b6574f7"
+    },
+    {
+      "path": "src/app/renderer/v95/visual/settings-visual.js",
+      "area": "production",
+      "bytes": 308,
+      "sha256": "7a42cf4893c90f6f65b4699f4e78bfda26226d8e06b1c0c6ddcde417a3cae2ff"
+    },
+    {
+      "path": "src/app/renderer/v95/visual/status-indicator.js",
+      "area": "production",
+      "bytes": 7819,
+      "sha256": "cb5586a88a3322d530528c5f83f48f241008a8aa649506ce8ff6cc99235572f6"
+    },
+    {
+      "path": "src/app/renderer/v95/visual/v95-ui.css",
+      "area": "production",
+      "bytes": 38875,
+      "sha256": "13022f85afc77c4e959412b96f48f6e8e4cb3b1e43ae9838c51c3bf195a25f4e"
+    },
+    {
+      "path": "src/app/renderer/v95/visual/view-transition.js",
+      "area": "production",
+      "bytes": 1237,
+      "sha256": "3a5b2c9e9c03e6d24ce3d3e1e30476327a1dab6909ccf866da30bf05126b8d65"
+    },
+    {
+      "path": "src/app/renderer/v95/visual/worldline-visual.js",
+      "area": "production",
+      "bytes": 302,
+      "sha256": "ac256ac076733a288a3393fd266b77589c9f9a28d81d66a32126575832fd31af"
+    }
+  ]
+}
