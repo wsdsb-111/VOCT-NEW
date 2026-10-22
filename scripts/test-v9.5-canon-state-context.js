@@ -108,10 +108,23 @@ async function testBilingualActionableCurrentStateErrors() {
   for (const key of keys) assert.ok(editor.includes(`${key}:`), `WorldMemoryEditor must safely map ${key}`);
 }
 
+async function testHistoricalSaveAndReadback() {
+  const { create, createCanonFixture } = require("./v8.7.1-canon-test-fixture");
+  const fixture = createCanonFixture({ gameDate: "1130.4.1", totalDays: 410000 });
+  try {
+    await create(fixture.service, { title: historyTitle, content: history,
+      temporalMode: "SPECIFIC_DATE", temporalSemantics: "PAST_EVENT", gameDate: "1130.4.1" });
+    const page = await fixture.service.list();
+    assert(page.records.some(record => record.title === historyTitle && record.content === history),
+      "the real Canon service persists and returns the complete historical narrative");
+  } finally { fixture.dispose(); }
+}
+
 (async () => {
   await testHistoricalNarrativeContext();
   await testIndependentCurrentClaimsRemainBlocked();
   await testBilingualActionableCurrentStateErrors();
+  await testHistoricalSaveAndReadback();
   console.log("V9.5 Canon historical/current-state boundary PASS");
 })().catch((error) => {
   console.error(error);
