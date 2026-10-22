@@ -4,10 +4,12 @@
 
 ## 当前修正验证
 
-工作区移除已推送 `31037d9`，本轮另补齐头部旧渐变清除。本机 build、verify、deploy 和 deployed parity 通过：343 项映射，Payload SHA256 `d2d28139fe24ec47fe40cac2e0b059f31a91c6e1e416ab424783a8c8a6958430`。原功能页的三主题／双语、透明底色、保留主题图片、焦点和零业务副作用通过单 Chrome 匿名 Preload 冒烟；完整历史原文的 Canon 保存／回读与当前状态反例通过。旧 knowledge-ui 断言已按实际 `t` 与 `updateLanguage` 接线修正并本地通过，原安全／作用域断言保留。本轮提交的完整 Windows CI 等待中。
+工作区移除已推送 `31037d9`，本轮另补齐头部旧渐变清除。本机 build、verify、deploy 和 deployed parity 通过：343 项映射，Payload SHA256 `ed5482336f61203ef5b62414bbf93a912a99c06d46f9533e866017a4a4735afd`。原功能页的三主题／双语、透明底色、保留主题图片、焦点和零业务副作用通过单 Chrome 匿名 Preload 冒烟；完整历史原文的 Canon 保存／回读与当前状态反例通过。旧 knowledge-ui 断言已按实际 `t` 与 `updateLanguage` 接线修正并本地通过，原安全／作用域断言保留。本轮提交的完整 Windows CI 等待中。
 
 
 补充：`31037d9` 的 [CI run 39830857582](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39830857582) 在 `v9.3.8-context-usage` 的旧中文源码断言处失败，完整 EXE 冷启动／重启检查通过。该失败已修正：七项受 UI 本地化影响的旧检查改为核验翻译键和中英文原义，预算、人物状态、信件 IPC 及摘要绑定业务断言保留，七项本机串行 PASS。最新完整 CI 以随后提交的精确 SHA 为准。
+
+本轮补齐换分支保存的明确双语提示，仍由 Main 拒绝旧 token，零写入且不自动重放；`test-v8.15.2-world-summary-date-qa.js`、Canon 原文回读和 725 键字典一致性专项通过。该调整替换了 3 项部署资源，保持 343 映射。
 ## 前次 CI 与历史证据
 
 用户确认原有功能页已满足需求，并反馈重复的“V9.5 工作区”白色大面板遮住主题背景。Root 已移除独立工作区 UI 和其专用接线，通用契约及共享展示组件保留；视觉改动回到原功能页面，同时降低大面板遮罩不透明度。旧功能页面尚未全面迁移。
@@ -32,7 +34,7 @@
 |---|---|
 | 前次 SHA `ff86656` 的完整 Windows CI | **FAILED**：run 39822389302 在过时的 `knowledge-ui` 源码断言处停止；该失败属于旧 SHA，断言已本地修正并通过。 |
 | 当前 SHA 本轮提交的完整 Windows CI | 等待中；不预写结果。 |
-| 当前 SHA 的 build/deploy、343 项映射及 Payload | PASS：`d2d28139fe24ec47fe40cac2e0b059f31a91c6e1e416ab424783a8c8a6958430`。 |
+| 当前 SHA 的 build/deploy、343 项映射及 Payload | PASS：`ed5482336f61203ef5b62414bbf93a912a99c06d46f9533e866017a4a4735afd`。 |
 | 当前源码 EXE 冷启动／重启／媒体和界面冒烟 | 未验证；此前 EXE 检查对应旧 Payload。 |
 | 历史世界记忆当前状态边界回归 | PASS：完整用户原文在临时合成战役保存并回读，当前人物状态反例仍受保护。 |
 | 真实 CK3、真实 Provider、新增外部效果、长时间 Soak | NOT_RUN。 |

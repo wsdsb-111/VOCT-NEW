@@ -194,8 +194,10 @@ async function testCrossBranchSaveIsNotReplayed() {
     assert.equal(requests.length, 1, "the stale-token save attempt is not replayed against the new branch");
     tree = renderer.render(WorldMemoryEditor);
     const alerts = findNodes(tree, node => node.props?.role === "alert").map(getText);
-    assert(alerts.some(message => message.includes("branch_write_blocked_reload_editor")),
-      "the stale-token error remains visible after the new branch reload");
+    assert(alerts.some(message => message.includes("存档分支已变化") && message.includes("这次操作未保存")),
+      "the stale-token error remains actionable after the new branch reload");
+    assert(alerts.every(message => !message.includes("branch_write_blocked_reload_editor")),
+      "the user sees a safe explanation rather than the internal error code");
     assert.equal(findLabeledControl(tree, "标题", "input").props.value, "", "the previous branch draft is cleared after reload");
 
     const newBranchPage = await fixture.service.list();

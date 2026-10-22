@@ -80,6 +80,7 @@ async function testBilingualActionableCurrentStateErrors() {
   const en = createUiTranslator(instance, "en-US");
   const zh = createUiTranslator(instance, "zh-CN");
   const keys = [
+    "branch_write_blocked_reload_editor",
     "supplemental_current_state_needs_structured_confirmation",
     "supplemental_current_claim_required",
     "supplemental_current_claim_semantics_invalid",

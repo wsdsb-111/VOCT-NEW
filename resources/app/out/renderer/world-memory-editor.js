@@ -60,6 +60,7 @@ const CURRENT_CLAIM_FIELDS = {
   courtEmployer: "所在宫廷"
 };
 const CANON_ERROR_MESSAGES = {
+  branch_write_blocked_reload_editor: "存档分支已变化，这次操作未保存。请在刷新后的存档中重新核对后提交。",
   supplemental_date_invalid: "日期格式无效，请重新选择日期。",
   supplemental_current_date_invalid: "无法识别当前游戏日期，请刷新存档后重试。",
   supplemental_specific_date_invalid: "指定日期无效，请输入例如 1175.8.23。",
