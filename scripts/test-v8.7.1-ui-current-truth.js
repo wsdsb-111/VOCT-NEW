@@ -17,5 +17,6 @@ assert.ok(source.includes("world-memory-danger-button"));
 assert.match(source, /temporalSemantics: draft\.currentStateEnabled \? "CURRENT_STRUCTURED_CLAIM" : null/);
 assert.match(source, /currentClaim,/);
 assert.match(source, /RECALL_DISABLED:/);
+assert.match(source, /enumLabel\("recallReasons", result\.reason, RECALL_REASONS, "未知原因"\)/);
 assertCatalogValue("recallReasons.RECALL_DISABLED", "当前对话召回尚未开启", "Recall is disabled for this conversation");
 console.log("V8.7.1 Current Truth UI PASS");

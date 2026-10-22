@@ -3,16 +3,25 @@
 const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
+const vm = require("vm");
 
 const root = path.resolve(__dirname, "..");
 const source = fs.readFileSync(path.join(root, "resources/app/out/renderer/world-memory-editor.js"), "utf8");
 const zh = fs.readFileSync(path.join(root, "src/app/renderer/v95/i18n/locales/zh-CN.js"), "utf8");
 const en = fs.readFileSync(path.join(root, "src/app/renderer/v95/i18n/locales/en-US.js"), "utf8");
+const catalogs = ["src/app/renderer", "resources/app/out/renderer"].flatMap(directory =>
+  ["zh-CN", "en-US"].map(locale => {
+    const file = path.join(root, directory, "v95/i18n/locales", `${locale}.js`);
+    const expression = fs.readFileSync(file, "utf8").replace(/^export default\s*/, "").replace(/;\s*$/, "");
+    return { file, locale, value: vm.runInNewContext(`(${expression})`, {}, { timeout: 1000 }) };
+  }));
 
 function assertCatalogValue(key, zhValue, enValue) {
-  const property = key.split(".").at(-1);
-  assert.ok(zh.includes(`${property}: ${JSON.stringify(zhValue)}`), `missing zh-CN translation for worldMemoryEditor.${key}`);
-  assert.ok(en.includes(`${property}: ${JSON.stringify(enValue)}`), `missing en-US translation for worldMemoryEditor.${key}`);
+  for (const catalog of catalogs) {
+    const value = key.split(".").reduce((part, property) => part?.[property], catalog.value.worldMemoryEditor);
+    assert.strictEqual(value, catalog.locale === "zh-CN" ? zhValue : enValue,
+      `incorrect worldMemoryEditor.${key} translation in ${catalog.file}`);
+  }
 }
 
 function assertCopy(sourceNeedle, key, zhValue, enValue) {
