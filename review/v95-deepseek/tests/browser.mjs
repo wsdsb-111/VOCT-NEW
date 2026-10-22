@@ -1,6 +1,6 @@
 /** Minimal CDP browser harness for the offline showCase (no external deps). */
 import { spawn } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
@@ -12,9 +12,8 @@ export async function launchBrowser({ url, width = 1600, height = 1000, headless
   if (!url) throw new Error("url required");
   const chrome = process.env.CHROME_PATH
     || join(process.env.LOCALAPPDATA || "", "ms-playwright/chromium-1181/chrome-win/chrome.exe");
-  const port = 9600 + Math.floor(Math.random() * 300);
-  const profile = join(PROFILE_ROOT, `run-${port}`);
-  mkdirSync(profile, { recursive: true });
+  mkdirSync(PROFILE_ROOT, { recursive: true });
+  const profile = mkdtempSync(join(PROFILE_ROOT, "run-"));
   const child = spawn(chrome, [
     headless ? "--headless=new" : "--new-window",
     "--no-sandbox",
@@ -24,11 +23,13 @@ export async function launchBrowser({ url, width = 1600, height = 1000, headless
     "--disable-extensions",
     "--no-first-run",
     "--force-device-scale-factor=1",
-    `--remote-debugging-port=${port}`,
+    "--remote-debugging-port=0",
     `--user-data-dir=${profile}`,
     `--window-size=${width},${height}`,
     "about:blank"
-  ], { stdio: "ignore" });
+  ], { stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
+  let startupStderr = "";
+  child.stderr.on("data", chunk => { startupStderr = (startupStderr + chunk).slice(-4000); });
   let startupError = null;
   child.once("error", error => { startupError = error; });
 
@@ -36,6 +37,8 @@ export async function launchBrowser({ url, width = 1600, height = 1000, headless
   for (let attempt = 0; attempt < 120 && !targetUrl; attempt += 1) {
     if (startupError || child.exitCode !== null) break;
     try {
+      const port = Number(readFileSync(join(profile, "DevToolsActivePort"), "utf8").split(/\r?\n/)[0]);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid DevTools port");
       const response = await fetch(`http://127.0.0.1:${port}/json/list`);
       if (response.ok) {
         const list = await response.json();
@@ -47,7 +50,7 @@ export async function launchBrowser({ url, width = 1600, height = 1000, headless
   }
   if (!targetUrl) {
     child.kill();
-    throw new Error(`Chrome devtools did not start${startupError ? ` (${startupError.code})` : ""}`);
+    throw new Error(`Chrome devtools did not start (${startupError?.code || child.exitCode || "timeout"}): ${startupStderr}`);
   }
 
   const socket = new WebSocket(targetUrl);
