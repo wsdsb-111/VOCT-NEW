@@ -167,13 +167,19 @@ async function main() {
     const preload = fs.readFileSync(path.join(__dirname, "../resources/app/out/preload/preload.js"), "utf8");
     const ipc = fs.readFileSync(path.join(__dirname, "../resources/app/out/main/ipc/register-ipc.js"), "utf8");
     const renderer = fs.readFileSync(path.join(__dirname, "../resources/app/out/renderer/assets/index-Dn3qWlAB.js"), "utf8");
+    const zhLocale = fs.readFileSync(path.join(__dirname, "../src/app/renderer/v95/i18n/locales/zh-CN.js"), "utf8");
+    const enLocale = fs.readFileSync(path.join(__dirname, "../src/app/renderer/v95/i18n/locales/en-US.js"), "utf8");
     for (const api of ["previewLegacyConversationBinding", "bindLegacyConversationCampaign", "previewLegacyOwnerBinding", "bindLegacyOwnerCampaign"]) {
       assert(preload.includes(api), `preload exposes ${api}`);
       assert(ipc.includes(`conversation:${api}`), `main process registers ${api}`);
       assert(renderer.includes(api), `renderer calls ${api}`);
     }
-    assert(renderer.includes("绑定本对话全部旧摘要"));
-    assert(renderer.includes("绑定此人物全部旧摘要"));
+    assert(renderer.includes('v95Runtime.t("legacyUi.summary.bindConversation"')
+      && zhLocale.includes('bindConversation: "绑定本对话全部旧摘要（{{count}}）"')
+      && enLocale.includes('bindConversation: "Bind all legacy summaries in this conversation ({{count}})"'));
+    assert(renderer.includes('v95Runtime.t("legacyUi.summary.bindOwner"')
+      && zhLocale.includes('bindOwner: "绑定此人物全部旧摘要（{{count}}）"')
+      && enLocale.includes('bindOwner: "Bind all legacy summaries for this character ({{count}})"'));
     assert.match(renderer, /legacy_binding_preview_stale/);
     assert.match(renderer, /legacy_binding_conversation_not_active/);
     console.log("V8.13.2.2 Legacy Bulk Campaign Binding: PASS (scoped preview, fill-empty-only, stale rejection, multi-file rollback, current recall and frozen-prefix stability)");
