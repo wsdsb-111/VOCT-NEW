@@ -300,7 +300,7 @@ function connectCdp(webSocketUrl, errors) {
       });
       const evaluate = async expression => {
         const response = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
-        if (response.exceptionDetails) throw new Error(response.exceptionDetails.text || "CDP evaluation failed");
+        if (response.exceptionDetails) throw new Error(redactAndBoundOutput(response.exceptionDetails.exception?.description || response.exceptionDetails.text || "CDP evaluation failed"));
         return response.result?.value;
       };
       resolve({ send, evaluate, socket });
@@ -395,7 +395,9 @@ async function inspectOneLaunch(appDir, profileDir, expectedVersion, passNumber,
     main = await connectCdp(mainEndpoint, errors);
     await main.send("Runtime.enable");
     const readMainInfo = () => main.evaluate(`(() => {
+      if (!process.mainModule?.require) return { processType: process.type, appReady: false, windows: [] };
       const electron = process.mainModule.require("electron");
+      if (!electron.app.isReady()) return { processType: process.type, appReady: false, windows: [] };
       const windows = electron.BrowserWindow.getAllWindows().filter(window => !window.isDestroyed());
       return {
         pid: process.pid,

@@ -79,8 +79,15 @@ try {
   const jsxRuntimeExports = { jsx: () => null, jsxs: () => null };
   const reactExports = { useState: (initial) => [initial, () => {}], useRef: (initial) => ({ current: initial }), useEffect: () => {} };
   const useTranslation = () => ({ i18n: { language: "zh-CN" } });
+  // The isolated initial-render fixture does not run effects or real IPC.
+  const useV95ReadBoundary = () => ({
+    run: async () => ({ committed: false, errorCode: "REQUEST_CANCELLED", isCurrent: () => false }),
+    cancel: () => {},
+    capture: () => () => false,
+    contextVersion: "fixture"
+  });
   const featureVersion = JSON.parse(renderer.match(/const VOTC_FEATURE_VERSION = ("[^"]+");/)[1]);
-  const renderWorldline = new Function("reactExports", "jsxRuntimeExports", "useTranslation", "window", "navigator", "WorldMemoryEditor", "VOTC_FEATURE_VERSION", `${worldlineSource}; return WorldlineView;`)(reactExports, jsxRuntimeExports, useTranslation, {}, {}, () => null, featureVersion);
+  const renderWorldline = new Function("reactExports", "jsxRuntimeExports", "useTranslation", "useV95ReadBoundary", "v95Runtime", "window", "navigator", "WorldMemoryEditor", "VOTC_FEATURE_VERSION", `${worldlineSource}; return WorldlineView;`)(reactExports, jsxRuntimeExports, useTranslation, useV95ReadBoundary, { t: key => key }, {}, {}, () => null, featureVersion);
   assert.doesNotThrow(() => renderWorldline(), "WorldlineView must render before Prompt diagnostics have produced query arrays");
 
   const worldlineServiceSource = fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "main", "worldline", "worldline-service.js"), "utf8");
