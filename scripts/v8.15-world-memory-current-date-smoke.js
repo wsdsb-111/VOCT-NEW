@@ -189,7 +189,7 @@ async function run() {
     assert.equal(await fillForm("旧分支草稿不得写入新战役", "两位人物在宫廷宴会上订下共同守城的约定。"), true);
     await evaluate("[...document.querySelectorAll('.world-memory-form-actions button')].find(button=>button.textContent.trim()==='确认新增'&&!button.disabled)?.click()");
     await waitMainFor("globalThis.__worldMemoryCrossBranchNotified === true");
-    await waitFor("document.querySelector('[role=alert]')?.textContent.includes('branch_write_blocked_reload_editor')");
+    await waitFor("document.querySelector('[role=alert]')?.textContent.includes('存档分支已变化') && document.querySelector('[role=alert]')?.textContent.includes('这次操作未保存')");
     await waitFor("document.querySelector('.world-memory-list-heading')?.textContent.includes('0 / 0')");
     const nextPage = await evaluate("worldlineAPI.listCanon({})");
     assert.notEqual(nextPage.branch.branchId, persisted.branch.branchId, "the source change must bind the UI to a separate branch");

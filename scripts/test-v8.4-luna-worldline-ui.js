@@ -84,19 +84,54 @@ for (const marker of requiredRendererMarkers) {
   assert.ok(renderer.includes(marker), `renderer is missing Luna marker: ${marker}`);
 }
 
-for (const method of [
+const scopedReadMethods = [
   "getSettings",
-  "setAutosavePath",
-  "validateAutosavePath",
-  "selectAutosaveFile",
   "getCheckpointStatus",
-  "rebuildCheckpoint",
   "getOverview",
   "getAnnualDelta",
   "getWorldKnowledge",
   "getHistoricalBindings",
   "getDiagnostics",
   "getPromptDiagnostics",
+  "getSubjectiveResponderOptions",
+  "getSubjectiveWorldView",
+  "getEntityKinshipInspector"
+];
+assert.ok(worldlineSource.includes('useV95ReadBoundary("worldline")'), "Worldline reads must use the scoped read boundary");
+for (const marker of [
+  'readTask("checkpoint", () => Promise.all([',
+  'readTask("bindings", () => readInvoke("getHistoricalBindings"',
+  'readTask("prompt", () => readInvoke("getPromptDiagnostics"',
+  'readTask("responders", () => readInvoke("getSubjectiveResponderOptions"',
+  'readTask("subjective", () => Promise.all([',
+  'readTask("inspector", () => readInvoke("getEntityKinshipInspector"'
+]) {
+  assert.ok(worldlineSource.includes(marker), `Worldline read is missing its scoped read task: ${marker}`);
+}
+for (const method of scopedReadMethods) {
+  assert.ok(worldlineSource.includes(`readInvoke("${method}"`), `renderer is missing scoped Worldline read method: ${method}`);
+  assert.ok(!worldlineSource.includes(`invoke("${method}"`), `Worldline read method must not bypass the scoped read task: ${method}`);
+}
+
+const directInvokeMethods = Array.from(worldlineSource.matchAll(/(?:^|[^A-Za-z])invoke\("([^"]+)"/g), (match) => match[1]);
+assert.deepStrictEqual([...new Set(directInvokeMethods)].sort(), [
+  "createSupplemental",
+  "deleteSupplemental",
+  "getOfficialRecollection",
+  "rebuildCheckpoint",
+  "selectAutosaveFile",
+  "setAutosavePath",
+  "setRecallSettings",
+  "temporalArchive",
+  "updateSupplemental",
+  "validateAutosavePath"
+].sort(), "direct Worldline invoke calls must stay within the explicit UI intent/legacy diagnostic allowlist");
+
+for (const method of [
+  "setAutosavePath",
+  "validateAutosavePath",
+  "selectAutosaveFile",
+  "rebuildCheckpoint",
   "createSupplemental",
   "updateSupplemental",
   "deleteSupplemental"
