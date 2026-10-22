@@ -75,8 +75,13 @@ function legacyEntry(id, visibility = "PUBLIC_WORLD") {
   assert.match(renderer, /developerMode \? \[\["diagnostics"/);
   assert.match(renderer, /false && \/\* @__PURE__ \*\/ jsxRuntimeExports\.jsxs\("section", \{ className: "worldline-card worldline-editor"/);
   assert.doesNotMatch(defaultRefresh, /invoke\("getHistoricalBindings"|invoke\("listSupplemental"/);
-  assert.match(defaultRefresh, /developerMode \? invoke\("getDiagnostics"\) : Promise\.resolve\(null\)/);
+  assert.match(defaultRefresh, /developerMode \? readInvoke\("getDiagnostics"\) : Promise\.resolve\(null\)/);
+  assert.match(defaultRefresh, /readTask\("checkpoint", \(\) => Promise\.all/);
+  assert.match(defaultRefresh, /if \(!response\.committed \|\| !response\.isCurrent\(\)\) return;/);
   assert.match(editor, /if \(entries\.length === 0\) return null/);
-  assert.match(editor, /developerMode && h\("details", \{ className: "world-memory-secondary-details" \}, h\("summary", null, "分支技术信息"\)/);
+  assert.match(editor, /developerMode && h\("details", \{ className: "world-memory-secondary-details" \}, h\("summary", null, copy\("branch\.developerInfo", "分支技术信息"\)\)/,
+    "branch diagnostics remain developer-only and use the translated copy key");
+  const { assertMappedCopy } = require("./world-memory-i18n-test-helper");
+  assertMappedCopy("分支技术信息", "branch.developerInfo", "分支技术信息", "Branch diagnostics");
   console.log("V8.7.2 Sol PASS: load identity, migration atomicity/ACL and default UI boundary");
 })().catch((error) => { console.error(error); process.exitCode = 1; });

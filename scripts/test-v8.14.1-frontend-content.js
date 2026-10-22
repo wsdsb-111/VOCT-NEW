@@ -2,6 +2,7 @@
 
 const assert = require("assert");
 const fs = require("fs");
+const { assertCopy } = require("./world-memory-i18n-test-helper");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
@@ -53,7 +54,8 @@ const oldStageLabels = [
   [renderer, "通过 Memory Engine 3.0 搜索人物视角摘要目录"]
 ];
 for (const [source, label] of oldStageLabels) check(!source.includes(label), `obsolete UI label remains: ${label}`);
-check(/world-memory-version[\s\S]{0,220}"当前分支"/.test(worldMemoryEditor), "WorldMemoryEditor must use the unversioned 当前分支 label");
+check(/world-memory-version[\s\S]{0,240}copy\("ui\.currentBranch", "当前分支"\)/.test(worldMemoryEditor), "WorldMemoryEditor must use the current-branch translation key");
+assertCopy('copy("ui.currentBranch", "当前分支")', "ui.currentBranch", "当前分支", "Current branch");
 check(renderer.includes("只读诊断"), "subjective-world diagnostics must retain the read-only label");
 
 const experimentIndex = renderer.indexOf("actionExperiments?.overlayRequested");
