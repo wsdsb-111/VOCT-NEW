@@ -49,6 +49,7 @@ html[data-votc-theme][data-v95-presentation="true"] :is(.config-main-content, .m
 html[data-votc-theme][data-v95-presentation="true"] .config-header {
   color: var(--ui-text);
   background-color: color-mix(in srgb, var(--ui-surface) 22%, transparent);
+  background-image: none;
 }
 html[data-votc-theme][data-v95-presentation="true"] .court-theme-switcher[data-theme-label]::before {
   content: attr(data-theme-label);

@@ -4,13 +4,13 @@
 
 ## 当前修正验证
 
-2026-10-23 当前修正已在本机完成 build、verify、deploy 和 deployed parity：343 项映射，Payload SHA256 `ae690bf88da1d62cdcdfa4920fe48594d1d3903960f3794c5aa511d178fb8aa6`。原功能页的三主题／双语、无重复工作区、透明底色、保留主题图片、焦点和零业务副作用通过单 Chrome 匿名 Preload 冒烟。历史世界记忆完整原文的 Canon 保存／回读与当前状态反例通过。旧 knowledge-ui 断言已按实际 t 与 updateLanguage 接线更新并通过，原安全／作用域断言保留。最新源码的完整 Windows CI 待本次提交后运行。
+工作区移除已推送 `31037d9`，本轮另补齐头部旧渐变清除。本机 build、verify、deploy 和 deployed parity 通过：343 项映射，Payload SHA256 `d2d28139fe24ec47fe40cac2e0b059f31a91c6e1e416ab424783a8c8a6958430`。原功能页的三主题／双语、透明底色、保留主题图片、焦点和零业务副作用通过单 Chrome 匿名 Preload 冒烟；完整历史原文的 Canon 保存／回读与当前状态反例通过。旧 knowledge-ui 断言已按实际 `t` 与 `updateLanguage` 接线修正并本地通过，原安全／作用域断言保留。本轮提交的完整 Windows CI 等待中。
 
 ## 前次 CI 与历史证据
 
-用户确认原有功能页已满足需求，并反馈重复的“V9.5 工作区”白色大面板遮住主题背景。Root 已移除工作区 UI 及专用模块，视觉改动回到原功能页面，同时降低大面板遮罩不透明度。
+用户确认原有功能页已满足需求，并反馈重复的“V9.5 工作区”白色大面板遮住主题背景。Root 已移除独立工作区 UI 和其专用接线，通用契约及共享展示组件保留；视觉改动回到原功能页面，同时降低大面板遮罩不透明度。旧功能页面尚未全面迁移。
 
-当前代码 SHA `ff86656` 的 [CI run 39822389302](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39822389302) 在旧 `knowledge-ui` 源码断言处停止，该 SHA 的全量发布门禁为 **FAILED**；该运行未完成后续全量检查。修正旧断言并重新运行前，不得签署当前源码的 PASS、发布或 Full Freeze。最新本机构建部署见上方，新 CI 待提交后验证。
+前次 SHA `ff86656` 的 [CI run 39822389302](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39822389302) 在旧 `knowledge-ui` 源码断言处停止，该 SHA 的全量发布门禁为 **FAILED**；该运行未完成后续全量检查。该断言已修正并在本地通过；失败记录仅属于旧 SHA。最新提交 的完整 CI 等待中，不预写结果。
 
 已有 EXE 检查成功，但对应 Payload SHA256 `1a800b12bda2e750174a7bdf0452d0dd0451cf351ca5637a50655f364958e3c2` 属于移除工作区之前的旧批次。它保留为历史 EXE 证据，不代表当前移除工作区后的代码或资源。
 
@@ -28,11 +28,12 @@
 
 | Gate | 当前状态 |
 |---|---|
-| 前次 SHA `ff86656` 的完整 Windows CI | **FAILED**：run 39822389302 在过时的 `knowledge-ui` 源码断言处停止；修复后待重跑。 |
-| 移除工作区后的当前 build/deploy、343 项映射及 Payload | PASS：`ae690bf88da1d62cdcdfa4920fe48594d1d3903960f3794c5aa511d178fb8aa6`。 |
+| 前次 SHA `ff86656` 的完整 Windows CI | **FAILED**：run 39822389302 在过时的 `knowledge-ui` 源码断言处停止；该失败属于旧 SHA，断言已本地修正并通过。 |
+| 当前 SHA 本轮提交的完整 Windows CI | 等待中；不预写结果。 |
+| 当前 SHA 的 build/deploy、343 项映射及 Payload | PASS：`d2d28139fe24ec47fe40cac2e0b059f31a91c6e1e416ab424783a8c8a6958430`。 |
 | 当前源码 EXE 冷启动／重启／媒体和界面冒烟 | 未验证；此前 EXE 检查对应旧 Payload。 |
 | 历史世界记忆当前状态边界回归 | PASS：完整用户原文在临时合成战役保存并回读，当前人物状态反例仍受保护。 |
 | 真实 CK3、真实 Provider、新增外部效果、长时间 Soak | NOT_RUN。 |
 | 同机性能 A/B | **NOT_MEASURED**；没有可比基线。 |
 
-V9.5.0 仍是候选。前次完整 CI 的失败仍归属于原 SHA，最新本机专项与构建不代替新提交的完整 CI；在当前 SHA 的 Gate 全部完成前，不宣称发布完成或 Full Freeze。
+V9.5.0 仍是候选。前次完整 CI 的失败仍归属于 `ff86656`；最新本机专项与构建不代替 本轮完整 CI，未完成该 Gate 前不宣称发布完成或 Full Freeze。

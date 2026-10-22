@@ -6,7 +6,7 @@ VOTC 是面向《Crusader Kings III》（CK3）的 Windows Electron 宫廷对话
 
 ## 当前版本与进度
 
-2026-10-23 当前为 **V9.5.0 候选**：按用户反馈移除重复的八域只读工作区及专用模块，保留原有功能页，并降低大面板遮罩不透明度以显露主题背景；UI 语言隔离和异步状态修复继续沿用。历史世界记忆“战事仍在持续”误判已修复，完整原文保存回读及当前状态反例通过。前次 SHA `ff86656` 的 [CI run 39822389302](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39822389302) 在旧 `knowledge-ui` 源码断言处停止，该 SHA 全量失败，旧断言已修正，新提交 CI 待运行。最新 343 项已构建部署并通过单 Chrome 三主题／双语／透明背景冒烟；此前 346 项部署与 EXE 检查使用旧 Payload `1a800b12...e3c2`，不代表当前源码。详见[实施](docs/current/v9/V9_5_IMPLEMENTATION.md)、[双语与异步](docs/current/v9/V9_5_ASYNC_I18N_VERIFICATION.md)、[发布验证](docs/current/v9/V9_5_RELEASE_VERIFICATION.md)和[视觉审查](docs/current/v9/V9_5_DEEPSEEK_REVIEW.md)。下方为历史版本证据。
+2026-10-23 当前为 **V9.5.0 候选**：按用户反馈移除重复的八域只读工作区及专用接线，保留通用契约／展示组件与原有功能页，并降低大面板遮罩不透明度；旧功能页尚未全面迁移。历史世界记忆完整原文保存回读及当前状态反例通过。前次 SHA `ff86656` 的 [CI run 39822389302](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39822389302) 在旧 `knowledge-ui` 源码断言处停止，该 SHA 全量失败；断言已修正并本地通过，已推送 `31037d9` 的 CI 等待中。最新 SHA 的 343 项 build/deploy/verify 通过（Payload `d2d28139fe24ec47fe40cac2e0b059f31a91c6e1e416ab424783a8c8a6958430`）；原功能页 Chrome 三主题／双语／透明背景、主题图、焦点及零副作用冒烟通过。此前 346 项部署与 EXE 检查使用旧 Payload `1a800b12...e3c2`，不代表当前源码。详见[实施](docs/current/v9/V9_5_IMPLEMENTATION.md)、[双语与异步](docs/current/v9/V9_5_ASYNC_I18N_VERIFICATION.md)、[发布验证](docs/current/v9/V9_5_RELEASE_VERIFICATION.md)和[视觉审查](docs/current/v9/V9_5_DEEPSEEK_REVIEW.md)。下方为历史版本证据。
 
 2026-10-22 当前候选为 **V9.4.2／9.4.2**。排查实机19条聊天请求，冻结前缀指纹未变；修复另行发现的 Action 动态身份混入稳定首块、固定示例落在动态动作之后，以及稳定 Token 边界和跨回应者统计混用。合法摘要冻结与来源权限保持。见[实施](docs/current/v9/V9_4_2_IMPLEMENTATION.md)、[本版验证](docs/current/v9/V9_4_2_VERIFICATION.md)。下方 V9.4.1 及更早段落为历史批次记录，不替代本版门禁。
 

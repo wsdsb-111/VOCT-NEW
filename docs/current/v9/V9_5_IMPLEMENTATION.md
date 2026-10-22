@@ -4,13 +4,13 @@
 
 ## 当前修正验证
 
-2026-10-23 当前修正已在本机完成 build、verify、deploy 和 deployed parity：343 项映射，Payload SHA256 `ae690bf88da1d62cdcdfa4920fe48594d1d3903960f3794c5aa511d178fb8aa6`。原功能页的三主题／双语、无重复工作区、透明底色、保留主题图片、焦点和零业务副作用通过单 Chrome 匿名 Preload 冒烟。历史世界记忆完整原文的 Canon 保存／回读与当前状态反例通过。旧 knowledge-ui 断言已按实际 t 与 updateLanguage 接线更新并通过，原安全／作用域断言保留。最新源码的完整 Windows CI 待本次提交后运行。
+2026-10-23 已提交推送 `31037d9`。本机 build、verify、deploy 和 deployed parity 通过：343 项映射，Payload SHA256 `d2d28139fe24ec47fe40cac2e0b059f31a91c6e1e416ab424783a8c8a6958430`。原功能页的三主题／双语、透明底色、保留主题图片、焦点和零业务副作用通过单 Chrome 匿名 Preload 冒烟；工作区 UI 未接入。历史世界记忆完整原文的 Canon 保存／回读与当前状态反例通过。旧 knowledge-ui 断言已按实际 `t` 与 `updateLanguage` 接线更新并在本地通过，原安全／作用域断言保留。最新提交的完整 Windows CI 等待中。
 
 ## 范围
 
-用户反馈原有功能页已足够，并指出新增白色大面板遮挡了主题背景。已移除重复的“V9.5 工作区”界面及其专用运行时、容器和快照模块；浏览、编辑、来源查看及审批继续使用原有功能页面与业务容器。`v95-view-v1` revision 1 契约和通用表现组件保留；独立工作区不再接入当前 UI。
+用户反馈原有功能页已足够，并指出新增白色大面板遮挡了主题背景。已移除独立“V9.5 工作区”UI 和其专用生产接线；浏览、编辑、来源查看及审批继续使用原有功能页面与业务容器。`v95-view-v1` revision 1 通用契约和共享展示组件保留，供通用适配使用；独立工作区不再接入当前 UI。
 
-现有聊天 Markdown、Summary、Letters、Official Action、人物认知、世界线、设置和 Provider 页面继续使用各自既有业务入口；本轮不增加第二套只读工作区，也不改变原编辑、审批、来源复验或 Main 权限流程。契约字段、intent、未知状态、无副作用与富文本边界见 [V9.5 共享展示契约冻结](V9_5_VIEW_CONTRACT_FREEZE.md)，独立工作区的生产接线已撤下，契约仍用于通用组件验证。
+现有聊天 Markdown、Summary、Letters、Official Action、人物认知、世界线、设置和 Provider 页面继续使用各自既有业务入口；本轮不增加第二套只读工作区，也不改变原编辑、审批、来源复验或 Main 权限流程。契约字段、intent、未知状态、无副作用与富文本边界见 [V9.5 共享展示契约冻结](V9_5_VIEW_CONTRACT_FREEZE.md)，契约和共享组件保留，工作区专用生产接线已撤下。旧功能页面尚未全面迁移到通用展示组件。
 
 ## 语言与兼容边界
 
@@ -32,4 +32,4 @@ Renderer runtime 通过 `i18next.changeLanguage('zh'|'en')` 切换 UI 字典，�
 
 Prompt bytes、Official Action、Legacy Summary 的现有业务与存储合同、Main 权限门槛及现有编辑／审批／来源流程不因 UI 语言变化而改变。翻译只作用于固定 UI 标签，不翻译姓名、摘要正文、人物事实、信件内容、世界线事实或动作结果；移除工作区不改变这些业务边界。
 
-此前含工作区的构建部署批次有 346 项映射通过，Payload SHA256 为 `1a800b12bda2e750174a7bdf0452d0dd0451cf351ca5637a50655f364958e3c2`；该批次包含现已移除的工作区，不能代表当前源码。旧批次 EXE 检查通过也不替代当前 Gate。前次 SHA `ff86656` 的 [CI run 39822389302](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39822389302) 在旧 `knowledge-ui` 源码断言处停止，该 SHA 全量验证失败；最新本机构建部署见上方，完整 CI 待新提交验证。V9.5 继续保持候选，不签署 Full Freeze。验证细节见 [异步与双语验证记录](V9_5_ASYNC_I18N_VERIFICATION.md) 和[发布验证记录](V9_5_RELEASE_VERIFICATION.md)。
+此前含独立工作区的构建部署批次有 346 项映射通过，Payload SHA256 为 `1a800b12bda2e750174a7bdf0452d0dd0451cf351ca5637a50655f364958e3c2`；该旧批次 EXE 检查通过，但不代表当前源码。前次 SHA `ff86656` 的 [CI run 39822389302](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39822389302) 因旧 `knowledge-ui` 源码断言停止，该 SHA 全量验证失败；断言现已修正且本地通过。当前已推送 SHA `31037d9` 的 343 项 build/deploy/verify 及本地 Chrome、Canon 回归见上方；最新 SHA 的完整 CI 等待中。V9.5 继续保持候选，不签署 Full Freeze。验证细节见 [异步与双语验证记录](V9_5_ASYNC_I18N_VERIFICATION.md) 和[发布验证记录](V9_5_RELEASE_VERIFICATION.md)。

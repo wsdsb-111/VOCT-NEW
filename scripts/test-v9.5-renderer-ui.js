@@ -412,6 +412,8 @@ async function main() {
     assert.equal(panelStyle.background, "rgba(0, 0, 0, 0)", "the large panel should have no opaque base color");
     assert.equal(panelStyle.shadow, "none", "the large panel should have no added shadow frame");
     assert(panelStyle.image.includes("url("), "the existing theme artwork should remain visible behind the light veil");
+    assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('.config-header')).backgroundImage"), "none",
+      "the header should not retain the old opaque gradient above its transparent color");
     await selectTheme(browser, "ink");
     await browser.evaluate("new Promise(resolve => setTimeout(resolve, 220))");
     await browser.screenshot(path.join(root, ".build", "v9.5-construction", "visual", "ink-zh.png"));
