@@ -111,7 +111,12 @@ const { MemoryEngine } = require("../resources/app/out/main/memory-system");
     const renderer = fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
     const preload = fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "preload", "preload.js"), "utf8");
     const ipc = fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "main", "ipc", "register-ipc.js"), "utf8");
-    assert(renderer.includes("通过当前摘要模型重新整理本篇摘要"), "each normal saved summary must expose a model rewrite action");
+    const zhLocale = fs.readFileSync(path.join(__dirname, "..", "src", "app", "renderer", "v95", "i18n", "locales", "zh-CN.js"), "utf8");
+    const enLocale = fs.readFileSync(path.join(__dirname, "..", "src", "app", "renderer", "v95", "i18n", "locales", "en-US.js"), "utf8");
+    assert(renderer.includes('v95Runtime.t("legacyUi.summary.regenerateTitle")')
+      && zhLocale.includes('regenerateTitle: "通过当前摘要模型重新整理本篇摘要"')
+      && enLocale.includes('regenerateTitle: "Reorganize this summary with the current summary model"'),
+    "each normal saved summary must expose a localized model rewrite action");
     assert(preload.includes("regenerateSummary:"), "preload must expose the scoped regeneration API");
     assert(ipc.includes('"conversation:regenerateSummary"'), "main IPC must expose the regeneration endpoint");
     console.log("V8.14 Manual Summary Regeneration: PASS (single-record rewrite, Campaign metadata, owner-only projection, stale/no-op/failure/concurrency and official-recollection guard)");

@@ -7,6 +7,8 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const mainSource = fs.readFileSync(path.join(root, "src", "app", "main", "main.js"), "utf8");
 const rendererSource = fs.readFileSync(path.join(root, "src", "app", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
+const zhLocale = fs.readFileSync(path.join(root, "src", "app", "renderer", "v95", "i18n", "locales", "zh-CN.js"), "utf8");
+const enLocale = fs.readFileSync(path.join(root, "src", "app", "renderer", "v95", "i18n", "locales", "en-US.js"), "utf8");
 const {
   DEFAULT_CONTEXT_WINDOW,
   planRequestBudget,
@@ -135,8 +137,21 @@ assert.strictEqual(tinyBudget.usableInputBudget, 0, "the planner exposes zero us
 assert.strictEqual(tinyBudget.budgetStatus, "NO_USABLE_INPUT", "the planner marks a context that cannot carry input");
 assert.strictEqual(tinyBudget.safe, false, "the actual request guard rejects a prompt that cannot fit");
 
-for (const label of ["使用 90K 兼容设置", "保持 Auto", "自定义", "Mode", "Source", "Configured:", "Verified Native:", "Unknown / Unverified", "Effective", "可用输入", "输出预留"]) {
-  assert(rendererSource.includes(label), `ContextLengthField must show ${label}`);
+for (const [key, zh, en] of [
+  ["mode", 'mode: "模式："', 'mode: "Mode:"'],
+  ["source", 'source: "来源："', 'source: "Source:"'],
+  ["configured", 'configured: "已配置："', 'configured: "Configured:"'],
+  ["verifiedNative", 'verifiedNative: "服务商原生已验证："', 'verifiedNative: "Verified native:"'],
+  ["unknownUnverified", 'unknownUnverified: "未知／未核实"', 'unknownUnverified: "Unknown / unverified"'],
+  ["effective", 'effective: "有效值："', 'effective: "Effective:"'],
+  ["useCompatibility", 'useCompatibility: "使用 90K 兼容设置"', 'useCompatibility: "Use 90K compatibility setting"'],
+  ["keepAuto", 'keepAuto: "保持 Auto"', 'keepAuto: "Keep Auto"'],
+  ["custom", 'custom: "自定义"', 'custom: "Custom"'],
+  ["availableInput", 'availableInput: "可用输入（空消息预算估算）: "', 'availableInput: "Available input (empty-message budget estimate): "'],
+  ["outputReserve", 'outputReserve: "输出预留: "', 'outputReserve: "Output reserve: "']
+]) {
+  assert(rendererSource.includes(`v95Runtime.t("legacyUi.provider.${key}")`), `ContextLengthField must use the ${key} translation`);
+  assert(zhLocale.includes(zh) && enLocale.includes(en), `ContextLengthField ${key} must retain its meaning in both locales`);
 }
 assert.ok(/modelContextSource === "provider_native" \? modelContext : null/.test(rendererSource),
   "Verified Native shows only explicitly trusted provider-native metadata");
@@ -148,7 +163,9 @@ assert.ok(/effectiveInputBudget/.test(rendererSource), "the UI shows available i
 assert.ok(/outputReserveTokens/.test(rendererSource), "the UI shows output reserve");
 assert.ok(/Math\.max\(0,\s*effectiveContext\s*-\s*outputReserveTokens\s*-\s*32\s*-\s*safetyMarginTokens\)/.test(rendererSource),
   "the UI computes available input from the same output and safety reserves");
-assert(rendererSource.includes("此设置无法为当前输出预留、安全余量和协议开销留下可用输入"),
+assert(rendererSource.includes('v95Runtime.t("legacyUi.provider.noAvailableInput")')
+  && zhLocale.includes('noAvailableInput: "此设置无法为当前输出预留、安全余量和协议开销留下可用输入；请提高 Custom 值或降低输出上限。发送时仍会由预算守卫阻止不合适的请求。"')
+  && enLocale.includes('noAvailableInput: "This setting leaves no available input after the output reserve, safety margin, and protocol overhead.'),
   "the UI explains why a 256-token context cannot carry a normal prompt");
 
 const handlers = new Map();

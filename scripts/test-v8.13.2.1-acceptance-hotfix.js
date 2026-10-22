@@ -130,8 +130,12 @@ async function main() {
 
   const preloadSource = fs.readFileSync(path.join(__dirname, "../resources/app/out/preload/preload.js"), "utf8");
   const rendererBundle = fs.readFileSync(path.join(__dirname, "../resources/app/out/renderer/assets/index-Dn3qWlAB.js"), "utf8");
+  const zhLocale = fs.readFileSync(path.join(__dirname, "../src/app/renderer/v95/i18n/locales/zh-CN.js"), "utf8");
+  const enLocale = fs.readFileSync(path.join(__dirname, "../src/app/renderer/v95/i18n/locales/en-US.js"), "utf8");
   assert.match(preloadSource, /bindLegacySummaryCampaign/);
-  assert.match(rendererBundle, /绑定当前战役/);
+  assert(rendererBundle.includes('v95Runtime.t("legacyUi.summary.bindCurrentCampaign")')
+    && zhLocale.includes('bindCurrentCampaign: "绑定当前战役"')
+    && enLocale.includes('bindCurrentCampaign: "Bind to current campaign"'));
   assert.match(rendererBundle, /只修改此摘要/);
   } finally {
   fs.rmSync(tempRoot, { recursive: true, force: true });

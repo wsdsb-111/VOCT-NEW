@@ -6,6 +6,8 @@ const os = require("os");
 const path = require("path");
 const { createLetterManager } = require(path.join(__dirname, "..", "resources", "app", "out", "main", "letters", "letter-manager"));
 const rendererSource = fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
+const zhLocale = fs.readFileSync(path.join(__dirname, "..", "src", "app", "renderer", "v95", "i18n", "locales", "zh-CN.js"), "utf8");
+const enLocale = fs.readFileSync(path.join(__dirname, "..", "src", "app", "renderer", "v95", "i18n", "locales", "en-US.js"), "utf8");
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v710-rc3-letter-retry-"));
 const ck3Dir = path.join(tempDir, "ck3");
@@ -107,7 +109,10 @@ const api = createLetterManager({
     serverError.attemptCount = 4;
     serverError.retryable = true;
     assert.strictEqual(manager.classifyProviderError(serverError).httpStatus, 503);
-    assert(rendererSource.includes("手动重试回复生成"), "failed-letter UI must expose manual reply retry");
+    assert(rendererSource.includes('v95Runtime.t("legacyUi.letters.retryGeneration")')
+      && zhLocale.includes('retryGeneration: "手动重试回复生成"')
+      && enLocale.includes('retryGeneration: "Manually retry response generation"'),
+    "failed-letter UI must expose the localized manual reply retry");
     assert(rendererSource.includes("window.lettersAPI.retryFailed(letterId)"), "manual retry must use the dedicated IPC API");
 
     await manager.stopLogTailing();

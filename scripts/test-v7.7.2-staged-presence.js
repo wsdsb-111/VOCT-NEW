@@ -434,12 +434,28 @@ function makeConversation() {
   const preloadSource = fs.readFileSync(path.join(root, "resources", "app", "out", "preload", "preload.js"), "utf8");
   const ipcSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "ipc", "register-ipc.js"), "utf8");
   const rendererSource = fs.readFileSync(path.join(root, "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
+  const zhLocale = fs.readFileSync(path.join(root, "src", "app", "renderer", "v95", "i18n", "locales", "zh-CN.js"), "utf8");
+  const enLocale = fs.readFileSync(path.join(root, "src", "app", "renderer", "v95", "i18n", "locales", "en-US.js"), "utf8");
 const conversationSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "conversation", "conversation.js"), "utf8");
   const leavesActionSource = fs.readFileSync(path.join(root, "resources", "app", "default_userdata", "actions", "standard", "z_leavesConversation.js"), "utf8");
   assert(preloadSource.includes("joinWaitingCharacter") && preloadSource.includes("leavePresentCharacter") && preloadSource.includes("temporarilyLeaveCharacter") && preloadSource.includes("returnTemporaryCharacter"), "preload 必须公开入内、永久离场、暂离和返回操作");
   assert(ipcSource.includes("conversation:joinWaitingCharacter") && ipcSource.includes("conversation:leavePresentCharacter") && ipcSource.includes("conversation:temporarilyLeaveCharacter") && ipcSource.includes("conversation:returnTemporaryCharacter"), "主进程必须注册完整人物状态 IPC");
-  assert(rendererSource.includes("请入内") && rendererSource.includes("请离场") && rendererSource.includes("设为候场") && rendererSource.includes("暂时离场…") && rendererSource.includes("昏迷") && rendererSource.includes("睡着") && rendererSource.includes("暂时离开"), "聊天 UI 必须兼容候场、入内、永久离场和三种暂离模式");
-  assert(rendererSource.includes("正在生成回复或处理队列"), "忙碌时 UI 必须明确解释人物按钮为何禁用");
+  for (const [key, zh, en] of [
+    ["join", 'join: "请入内"', 'join: "Invite in"'],
+    ["leave", 'leave: "请离场"', 'leave: "Leave"'],
+    ["setWaiting", 'setWaiting: "设为候场"', 'setWaiting: "Set to waiting"'],
+    ["temporaryLeave", 'temporaryLeave: "暂时离场…"', 'temporaryLeave: "Temporarily leave…"'],
+    ["unconscious", 'unconscious: "昏迷"', 'unconscious: "Unconscious"'],
+    ["asleep", 'asleep: "睡着"', 'asleep: "Asleep"'],
+    ["temporarilyAway", 'temporarilyAway: "暂时离开"', 'temporarilyAway: "Temporarily away"']
+  ]) {
+    assert(rendererSource.includes(`v95Runtime.t("legacyUi.conversation.presence.${key}")`), `presence UI must use the ${key} translation`);
+    assert(zhLocale.includes(zh) && enLocale.includes(en), `presence ${key} must retain its meaning in both locales`);
+  }
+  assert(rendererSource.includes('v95Runtime.t("legacyUi.conversation.presence.busyLocked")')
+    && zhLocale.includes('busyLocked: "正在生成回复或处理队列，人物切换暂不可用。"')
+    && enLocale.includes('busyLocked: "A response is generating or the queue is processing; participant changes are unavailable."'),
+  "busy UI must explain why participant controls are disabled in both locales");
   assert(rendererSource.includes("presenceOperationPending || !conversationState.presence.canManage"), "忙碌和 IPC 处理中人物按钮必须实际禁用");
   assert(/this\.isActive = true;\s*this\.emitUpdate\(\);/.test(conversationSource), "日志解析完成后必须立即推送首句前的候场按钮状态");
   assert(!conversationSource.includes('requestType: "leaving_summary"'), "主动离场不得再单独调用旧散文摘要 Provider");

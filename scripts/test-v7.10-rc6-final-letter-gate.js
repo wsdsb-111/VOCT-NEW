@@ -11,6 +11,8 @@ const transport = read("resources/app/out/main/letters/letter-effect-transport.j
 const renderer = read("resources/app/out/renderer/assets/index-Dn3qWlAB.js");
 const preload = read("resources/app/out/preload/preload.js");
 const ipc = read("resources/app/out/main/ipc/register-ipc.js");
+const zhLocale = read("src/app/renderer/v95/i18n/locales/zh-CN.js");
+const enLocale = read("src/app/renderer/v95/i18n/locales/en-US.js");
 
 for (const field of ["payloadGameDay", "trackerGameDayAtCreation", "reconciledGameDayAtCreation", "deliveryBaseDay", "dateDelta", "dateSourceDecision"]) assert(manager.includes(field), `delivery field missing: ${field}`);
 assert(manager.includes('dateSourceEvent = dateDelta !== null && Math.abs(dateDelta) <= 1 ? "DATE_ALIGNED"'));
@@ -19,7 +21,10 @@ assert(!manager.includes("this.currentTotalDays = Math.max(this.currentTotalDays
 assert(transport.includes("outboundMode: modes.VOTC"), "formal outbound transport must be fixed to votc_run_file");
 assert(manager.includes("A3_VISUAL_CHECK_REQUIRED") && manager.includes("ARTIFACT_EFFECT_ABORTED") && manager.includes("ARTIFACT_SCOPE_NOT_CREATED") && manager.includes("ARTIFACT_NOT_VISIBLE"));
 assert(manager.includes("PAYLOAD_INCOMPLETE_TIMEOUT") && manager.includes("contentPreview") && manager.includes("slice(0, 40)"));
-assert(preload.includes("retryPayload") && ipc.includes('"letters:retryPayload"') && renderer.includes("重新读取信件数据"));
+assert(preload.includes("retryPayload") && ipc.includes('"letters:retryPayload"')
+  && renderer.includes('v95Runtime.t("legacyUi.letters.rereadData")')
+  && zhLocale.includes('rereadData: "重新读取信件数据"')
+  && enLocale.includes('rereadData: "Reload letter data"'));
 assert(renderer.includes("Payload 游戏日：") && renderer.includes("投递基准日：") && renderer.includes("DATE_SOURCE_DIVERGENCE"));
 assert(renderer.includes("Official-Parity Artifact") && renderer.includes("Effect 实机诊断 3.0"));
 assert(manager.includes('const deliveryBaseDay = payloadGameDay'));

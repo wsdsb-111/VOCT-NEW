@@ -187,17 +187,31 @@ function testRendererAndBridgeExposeInlineContextAndOverflow() {
   const renderer = fs.readFileSync(path.join(__dirname, "../src/app/renderer/assets/index-Dn3qWlAB.js"), "utf8");
   const css = fs.readFileSync(path.join(__dirname, "../src/app/renderer/ui-comfort.css"), "utf8");
   const preload = fs.readFileSync(path.join(__dirname, "../src/app/preload/preload.js"), "utf8");
+  const zhLocale = fs.readFileSync(path.join(__dirname, "../src/app/renderer/v95/i18n/locales/zh-CN.js"), "utf8");
+  const enLocale = fs.readFileSync(path.join(__dirname, "../src/app/renderer/v95/i18n/locales/en-US.js"), "utf8");
   assert(renderer.includes(`const VOTC_FEATURE_VERSION = "V${require("../package.json").version}"`));
   assert(renderer.includes("ContextUsageIndicator"));
   assert(renderer.includes("inputHeadroomBeforeSendTokens"));
   assert(renderer.includes("memory-budget-overflow-grid"));
-  assert(renderer.includes("用户设置，未经服务商确认"));
-  assert(renderer.includes("本场对话上下文") && renderer.includes("各 NPC 最近请求的最大占用"));
+  assert(renderer.includes('get user_provided_unverified() { return v95Runtime.t("legacyUi.conversation.usage.userUnverified"); }'));
+  assert(zhLocale.includes('userUnverified: "用户设置，未经服务商确认"')
+    && enLocale.includes('userUnverified: "User setting, not provider verified"'),
+  "the unverified user setting label must retain its meaning in both locales");
+  assert(renderer.includes('children: v95Runtime.t("legacyUi.conversation.usage.heading")')
+    && renderer.includes('children: v95Runtime.t("legacyUi.conversation.usage.subtitle")'));
+  assert(zhLocale.includes('heading: "本场对话上下文"') && zhLocale.includes('subtitle: "各 NPC 最近请求的最大占用"')
+    && enLocale.includes('heading: "Conversation context"')
+    && enLocale.includes('subtitle: "Maximum usage from each character\'s latest request"'),
+  "the inline heading and subtitle must remain localized");
   assert(renderer.includes("knownUsageResponders[0] || responders[0]") && renderer.includes("usageRevision"),
     "the inline UI selects the highest known per-responder occupancy, with revisions as stable tie breakers");
-  assert(renderer.includes("本次请求输入（完整 Prompt）"),
+  assert(renderer.includes('v95Runtime.t("legacyUi.conversation.usage.inputOutput"')
+    && zhLocale.includes('inputOutput: "本次请求输入（完整 Prompt）：')
+    && enLocale.includes('inputOutput: "Request input (full prompt):'),
     "the input count describes the whole outgoing prompt, not only player-entered text");
-  assert(renderer.includes("各 NPC 最近请求中的最大单次用量") && renderer.includes("不把不同 NPC 的请求相加"),
+  assert(renderer.includes('v95Runtime.t("legacyUi.conversation.usage.sceneMaxExplanation")')
+    && zhLocale.includes('sceneMaxExplanation: "本场占用取各 NPC 最近请求中的最大单次用量，不把不同 NPC 的请求相加。"')
+    && enLocale.includes('sceneMaxExplanation: "Scene usage is the highest single request among characters; requests from different characters are not added together."'),
     "the hover details state that scene occupancy uses a maximum, not a sum");
   assert(css.includes(".context-usage-indicator") && css.includes("max-height: min(18vh, 104px)"),
     "the indicator remains in normal flow with constrained height");
