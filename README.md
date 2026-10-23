@@ -8,6 +8,8 @@ VOTC 是面向《Crusader Kings III》（CK3）的 Windows Electron 宫廷对话
 
 2026-10-23 当前为 **V9.5.1 候选**：原功能页接入共享离线图标与状态组件，官方追忆按会话、回应者和快照治理异步读取，补齐双语及优化／世界书导航图标。英文动作列表读取模组已有英文标题，前端显示 GLM；移除关键动作召回面板，保留按请求类型的 action 用量。详见[实施与验证](docs/current/v9/V9_5_1_VERIFICATION.md)、[页面矩阵](docs/current/v9/V9_5_1_PAGE_MIGRATION_MATRIX.md)、[双语覆盖](docs/current/v9/V9_5_1_I18N_COVERAGE.md)。完整 CI、本机隔离 EXE 启动失败及人工 Gate 独立记录，以下为历史证据。
 
+代码 `bcdf226` 的 [Windows CI 39944550467](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39944550467) 已通过 **505组完整回归、346项构建部署和完整EXE冷启动／重启／媒体检查**，Runtime Payload 与本机部署一致。原失败保留；真实 CK3、Provider、手动输入／穿透、真实 DPI 和 Soak 尚未签署。
+
 2026-10-23 当前为 **V9.5.0 候选**：移除重复工作区，保留原功能页；大面板透明、低遮罩和原三主题背景已部署。UI 语言隔离、异步读取和历史世界记忆保存修复继续保留。代码 `d8db0ee` 的 [Windows CI 39844302011](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39844302011) 通过 **501 组完整回归、343 项构建部署及完整 EXE 冷启动／重启／媒体检查**，Payload `ed5482336f61203ef5b62414bbf93a912a99c06d46f9533e866017a4a4735afd` 与本机一致。旧功能页仍分阶段迁移；真实 CK3、真实 Provider、本机手动输入和 Soak 单列。详见[实施](docs/current/v9/V9_5_IMPLEMENTATION.md)、[双语与异步](docs/current/v9/V9_5_ASYNC_I18N_VERIFICATION.md)、[发布验证](docs/current/v9/V9_5_RELEASE_VERIFICATION.md)和[视觉审查](docs/current/v9/V9_5_DEEPSEEK_REVIEW.md)。下方为历史证据。
 
 2026-10-22 当前候选为 **V9.4.2／9.4.2**。排查实机19条聊天请求，冻结前缀指纹未变；修复另行发现的 Action 动态身份混入稳定首块、固定示例落在动态动作之后，以及稳定 Token 边界和跨回应者统计混用。合法摘要冻结与来源权限保持。见[实施](docs/current/v9/V9_4_2_IMPLEMENTATION.md)、[本版验证](docs/current/v9/V9_4_2_VERIFICATION.md)。下方 V9.4.1 及更早段落为历史批次记录，不替代本版门禁。

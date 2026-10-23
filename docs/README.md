@@ -2,6 +2,8 @@
 
 当前入口 **V9.5.1 候选**：[实施与验证](current/v9/V9_5_1_VERIFICATION.md)、[页面迁移矩阵](current/v9/V9_5_1_PAGE_MIGRATION_MATRIX.md)、[双语覆盖](current/v9/V9_5_1_I18N_COVERAGE.md)。原页面共享组件、官方追忆 scoped read、英文标题与标签、导航专属图标；完整门禁和实机状态按本版记录。以下 V9.5.0 及更早为历史批次。
 
+准确代码 `bcdf226` 的 [Windows CI 39944550467](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39944550467) 通过505组、346项构建部署及完整EXE冷启动／重启／媒体加载。Runtime Payload与本机一致；本机EXE失败和人工Gate不由远端结果替代。
+
 当前入口 **V9.5.0 候选**：[实施](current/v9/V9_5_IMPLEMENTATION.md)、[异步／双语](current/v9/V9_5_ASYNC_I18N_VERIFICATION.md)、[视觉审查](current/v9/V9_5_DEEPSEEK_REVIEW.md)、[发布验证](current/v9/V9_5_RELEASE_VERIFICATION.md)、[共享契约](current/v9/V9_5_VIEW_CONTRACT_FREEZE.md)。重复工作区已移除，原页面低遮罩背景已部署。`d8db0ee`／CI 39844302011 通过501组、343项构建部署与完整EXE冷启动／重启／媒体检查；Payload与本机一致。旧页迁移限制和人工Gate单列；下方“当前”属于各历史批次。
 
 当前入口为 **V9.4.2 缓存排查及 Action 前缀修复候选**：[实施](current/v9/V9_4_2_IMPLEMENTATION.md)、[验证](current/v9/V9_4_2_VERIFICATION.md)。聊天冻结指纹与服务商命中分开判断；Action 固定规则／示例在前、身份和当前可用动作在后。本机小型测试串行，完整门禁与 EXE 转隔离 Windows CI；无新增付费请求。下方 V9.4.1 为历史批次。

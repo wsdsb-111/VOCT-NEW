@@ -5,6 +5,7 @@
 - 补齐 Summary、Letters、连接设置与诊断固定 UI 双语，英文动作列表读取原有英文标题，前端品牌显示为 GLM。
 - 移除关键动作召回统计展示，保留按请求类型的 action Token／缓存统计。
 - [实施与验证](docs/current/v9/V9_5_1_VERIFICATION.md)记录专项、346 项构建部署、完整 CI 及本机 EXE 失败／实机 Gate 的独立状态。
+- `bcdf226` 的 [Windows CI 39944550467](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39944550467) 通过505组与完整EXE冷启动／重启／媒体加载；Runtime Payload与本机一致，原失败及实机未验收项保留。
 
 # V9.5.0 候选（2026-10-23）
 

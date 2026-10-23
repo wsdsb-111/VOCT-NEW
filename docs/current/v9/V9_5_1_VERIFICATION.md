@@ -15,8 +15,8 @@
 ## 自动验证状态
 
 - 官方追忆专项覆盖中英原文×中英UI、回应者/上下文/快照/逆序/超时/拒绝/卸载；生产runtime事件桥另有真实reader fixture，均PASS。
-- 页面接线、157键及双语结果、实际浏览器8页/三主题/双语/小视口专项PASS。基线与当前源码的匿名before/after各8页见review/v951，截图仅为合成UI证据，不是游戏事实。
-- build/verify/deploy/verify --deployed：346项通过；最终 Payload `e8f135cfae5df534086d379eeb286caa65b1de90ef4e52ea5e1fe0136ac7329d`，备份回执 `17921eae-ec2e-4c00-ad2d-0df92c0f78c7`。精确代码SHA与完整CI随收口更新。
+- 页面接线、178键及双语结果、实际浏览器8页/三主题/双语/小视口专项PASS。基线与当前源码的匿名before/after各8页见review/v951，截图仅为合成UI证据，不是游戏事实。
+- build/verify/deploy/verify --deployed：346项通过；最终 Payload `e8f135cfae5df534086d379eeb286caa65b1de90ef4e52ea5e1fe0136ac7329d`，备份回执 `17921eae-ec2e-4c00-ad2d-0df92c0f78c7`。与下述成功CI的 Runtime Payload 一致。
 - 完整本机Manifest收集停于第121组进度，未生成完成结果（INCOMPLETE）；已出现本机Windows链接/部署夹具检查失败，不冒充全量PASS。标准完整发布门禁交精确SHA的Windows CI另验。
 - 本机隔离完整分发副本EXE：FAILED，调试端点建立前退出2147483651（0x80000003），stdout仅换行，stderr为空；未证明原因，不用后续远端PASS覆盖本机失败。证据在.build/v9.5.1-local-exe.log及该日志指向的evidence.json。
 - Canon 历史保存专项首次在受限执行中因无法建立分支写入夹具失败；同一断言在允许 Windows 文件原子写入的执行环境串行重跑 PASS，没有修改 Canon 服务或降低拒写断言。Action 配置、overlay、GLM Provider、三主题背景及最终178键双语专项均 PASS，未访问真实端点。
@@ -25,11 +25,15 @@
 
 ## 远端发布门禁
 
+最终代码 `bcdf226be1e01288dcc7383718b96cd74594d2bf` 的 [Windows CI 39944550467](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39944550467) **PASS**：505组完整发布回归、346项构建／部署哈希校验、完整6399文件分发副本的 EXE 冷启动／同 profile 重启／三主题媒体加载通过。清单输出633个测试文件已分类、127项历史检查归档；这是自动化合成环境的结果，真实CK3／Provider／手动输入与Soak仍独立未验收。
+
 代码 `2ae3ee300c1cb451500f636ad83073fb30ddd057` 的 [CI 39936362209](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39936362209) 首轮 FAILED：新增导航测试用 `innerText` 精确比较摘要标题，骑士主题的 CSS uppercase 把 Token 显示为 TOKEN，触发文案断言；原始 DOM 文案和实际双语接线正确。测试改用 `textContent` 检验原文，不改 CSS 或弱化图标、焦点和小视口断言，本机默认入口路径重跑 PASS。该失败保留；同轮完整 EXE 冷启动／重启／媒体检查 PASS，但不抵消 release regression 的失败。最终精确代码的完整门禁另记。
 
 测试修正提交 `70e7c9e627a9064e7063ee301dbeaaaefe91bd75` 的 [CI 39938529633](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39938529633) 第二轮 FAILED 于旧 `v8.4-luna-worldline-ui`：旧断言仍要求官方追忆走直接 invoke，而本版已按规格移至 scoped reader。更新为更小的直接调用白名单，并新增禁止绕过 reader、按钮 refresh 及同步 getStateFor 投影的接线断言，本机专项 PASS；Main 权限与其他白名单检查保持。同轮完整 EXE 检查 PASS。
 
 `a9612edb15143047e23e0f7e294629bf589eaa26` 的 [CI 39940920563](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39940920563) 第三轮 FAILED 于旧单篇摘要绑定测试仍在 bundle 查找已迁入字典的中文确认文案。改为同时核对实际确认调用及中英词条；同类日期重同步旧标签断言一并核对字典与按钮调用。单篇／批量绑定和 Letter 日期／载荷／Effect／恢复专项本机串行 PASS，业务安全断言未删。同轮完整 EXE 检查 PASS。独立静态审查未发现追加英文标题、GLM、Schema 和统计面板改动的 P0/P1 问题；该审查不替代运行验收。
+
+同一最终代码此前的 [CI 39943721309](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39943721309) FAILED 于 `v9.5-visual-lifecycle` 的 Chrome 调试端点启动超时，用例尚未开始；没有证明业务或运行环境的具体原因。保持源代码与断言不变，仅重跑一次隔离CI，得到上面的505组 PASS，原失败不删除。同轮完整 EXE 检查也 PASS。
 
 ## 资源与剩余Gate
 
