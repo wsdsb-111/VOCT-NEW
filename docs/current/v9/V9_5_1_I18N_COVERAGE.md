@@ -6,6 +6,8 @@
 
 | 页面 / 组件 | 本轮固定 UI 文案 | 语言切换行为 | 保留原值的内容 |
 | --- | --- | --- | --- |
+| Connection / GLM / DeepSeek | Schema 传输模式、两个 Provider 的选项及说明，GLM 推理强度和 clear thinking 固定文案均接双语词条；前端 Provider 名称为 GLM | 实际原入口浏览器切换 Provider 与中英 UI，通过相应表单 DOM 核验；无测试连接或模型请求 | Provider 内部键 `zhipu`、端点、参数值、API Key 输入值与持久化键不变。 |
+| Actions | 模组定义的已有中英文标题通过只读 `localizedTitles` DTO 提供，由 UI 语言选择并排序；未提供本地化的自定义字符串保留原文 | 实际动作列表中英切换通过；无需重新读动作或修改原动作语言 | signature、禁用设置、审批、原 `title` 字段及执行语言保持。 |
 | Canon / `WorldMemoryEditor` | 表单、按钮、picker、状态、类型、错误及辅助说明通过 `worldMemoryEditor.*` 字典和 `EDITOR_COPY_KEYS` / `uiText` 映射；Canon 的当前状态错误有中英词条 | Renderer 将稳定 `v95Runtime.t` 传入组件，React 页面切换语言时重渲染；`test-v9.5-canon-state-context.js` 验证当前状态错误的双语译文和安全键映射，但未单独挂载整个编辑器做语言往返 | Canon 标题／正文、人物姓名、日期、状态证据和来源保持原值。`world-memory-editor.js` 的 `TEMPLATES` 的样例标题和正文仍为中文，模板按钮名称通过 `templates.*` 词条显示；这是此前明确排除的示例 Prompt 内容，不是游戏事实。 |
 | Character Knowledge / `character-knowledge-ui.js` | 当前对话标题、选择器、事实类型／状态、来源和错误提示使用受控 `t` | `test-v9.5-legacy-i18n.js` 用真实 `createUiTranslator` 验证英中往返、姓名／日期／事实保留、焦点保留且不重取 IPC | 人物姓名、事实值、日期和来源 key 保持原值。 |
 | Pair Ledger / `pair-long-term-ui.js` | 页面、分页、预览／确认／来源／错误等固定 UI 使用受控 `t` | `test-v9.5-legacy-i18n.js` 验证真实双语译者往返、搜索草稿／焦点保留、不重读来源、不回填或写入 | 人物姓名、摘要正文、日期、来源 key／ID 保持原值。 |

@@ -256,8 +256,8 @@ async function openAllOriginalPages(browser, localeIndex, { verifyPresentation =
         localeIndex === 0 ? "只读夹具动作" : "Read-only fixture action", "original action titles should follow UI language");
     }
     if (verifyPresentation && page.labels[0] === "摘要") {
-      const card = await browser.evaluate("document.querySelector('#finalSummaryMaxTokens').closest('.form-group').innerText");
-      assert(card.includes(localeIndex === 0 ? "最终摘要最大输出 Token" : "Final summary maximum output tokens"));
+      const card = await browser.evaluate("document.querySelector('#finalSummaryMaxTokens').closest('.form-group').textContent");
+      assert(card.includes(localeIndex === 0 ? "最终摘要最大输出 Token" : "Final summary maximum output tokens"), `summary locale mismatch: ${JSON.stringify({ localeIndex, card })}`);
       if (localeIndex === 1) assert(!/[\u3400-\u9fff]/u.test(card), "summary token settings must not show a Chinese fallback");
     }
     if (verifyPresentation && page.labels[0] === "优化") {
