@@ -136,7 +136,10 @@ async function main() {
   assert(rendererBundle.includes('v95Runtime.t("legacyUi.summary.bindCurrentCampaign")')
     && zhLocale.includes('bindCurrentCampaign: "绑定当前战役"')
     && enLocale.includes('bindCurrentCampaign: "Bind to current campaign"'));
-  assert.match(rendererBundle, /只修改此摘要/);
+  const bindingUiCopy = fs.readFileSync(path.join(__dirname, "../src/app/renderer/v95/i18n/locales/v9-5-1-legacy-ui.js"), "utf8");
+  assert.match(rendererBundle, /window\.confirm\(tV951\("binding\.confirmSingle"/);
+  assert.match(bindingUiCopy, /只修改此摘要/);
+  assert.match(bindingUiCopy, /Only this summary will change/);
   } finally {
   fs.rmSync(tempRoot, { recursive: true, force: true });
   }

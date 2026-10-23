@@ -118,7 +118,8 @@ const api = createLetterManager({
     await manager.checkAndDeliverLetters();
     await manager.checkAndDeliverLetters();
     assert.deepStrictEqual(delivered, ["letter_first"], "D09 second pending letter must wait for first acceptance");
-    assert(rendererSource.includes("重新同步日期"), "letter UI must expose manual date resync and producer recovery");
+    const dateUiCopy = fs.readFileSync(path.join(__dirname, "..", "src", "app", "renderer", "v95", "i18n", "locales", "v9-5-1-legacy-ui.js"), "utf8");
+    assert(rendererSource.includes('tV951("actions.resyncDate")') && dateUiCopy.includes('resyncDate: "重新同步日期"') && dateUiCopy.includes('resyncDate: "Resync date"'), "letter UI must expose bilingual manual date resync and producer recovery");
     assert(rendererSource.includes('snapshot.dateTracker?.lastObservedDateValue'), "letter UI must show the latest observed game day");
     assert(rendererSource.includes('snapshot.dateTracker?.dateSourceState'), "letter UI must show the date source state");
 
