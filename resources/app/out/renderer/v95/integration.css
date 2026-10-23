@@ -230,3 +230,51 @@ html[data-votc-theme][data-v95-presentation="true"] :is(.config-main-content, .w
   box-shadow: none;
   border-color: transparent;
 }
+
+html[data-v95-presentation="true"] .v95-page-row-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  vertical-align: -0.14em;
+  margin-inline-end: 6px;
+}
+
+html[data-v95-presentation="true"] .v95-page-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 21px;
+  max-width: 100%;
+  margin-inline-start: 6px;
+  padding: 1px 8px 1px 6px;
+  border: 1px solid var(--ui-line, rgba(127, 127, 127, 0.42));
+  border-radius: 999px;
+  background: var(--ui-field, transparent);
+  color: var(--ui-muted, inherit);
+  font-size: 0.82em;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+html[data-v95-presentation="true"] .v95-page-status .v95-status-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+html[data-v95-presentation="true"] .v95-page-status.v95-status--success {
+  color: var(--ui-success, #6eaa7e);
+  border-color: color-mix(in srgb, var(--ui-success, #6eaa7e) 48%, var(--ui-line, transparent));
+  background: color-mix(in srgb, var(--ui-success, #6eaa7e) 10%, transparent);
+}
+
+html[data-v95-presentation="true"] .v95-page-status.v95-status--warning {
+  color: var(--ui-warning, #ba8d4e);
+  border-color: color-mix(in srgb, var(--ui-warning, #ba8d4e) 48%, var(--ui-line, transparent));
+  background: color-mix(in srgb, var(--ui-warning, #ba8d4e) 10%, transparent);
+}
+
+html[data-v95-presentation="true"] .v95-page-status.v95-status--danger {
+  color: var(--ui-danger, #b45c57);
+  border-color: color-mix(in srgb, var(--ui-danger, #b45c57) 55%, var(--ui-line, transparent));
+  background: color-mix(in srgb, var(--ui-danger, #b45c57) 10%, transparent);
+}

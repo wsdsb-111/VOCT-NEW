@@ -912,7 +912,8 @@
         const list = makeElement("ol", "pair-ledger-items");
         for (const item of items) {
           const row = makeElement("li", "pair-ledger-item");
-          row.append(makeElement("p", "pair-ledger-item-text", item.text || ""),
+          const itemText = makeElement("p", "pair-ledger-item-text", item.text || "");
+          row.append(itemText,
             makeElement("time", "pair-ledger-item-date", item.conversationDate || localized(translate, "ui.dateUnrecorded", "日期未记录")));
           const actions = makeElement("div", "pair-ledger-item-actions");
           actions.append(makeButton(localized(translate, "ui.viewOriginalSummary", "查看原摘要"), () => controls.openSource(item), ""));
@@ -924,6 +925,7 @@
           const sourceActions = makeElement("details", "pair-ledger-item-source");
           sourceActions.append(makeElement("summary", "", localized(translate, "ui.source", "来源")), actions);
           row.append(sourceActions);
+          root.VOTCV95PageVisuals?.decorateLegacyRow(row, { target: itemText, icon: "memory" });
           list.append(row);
         }
         section.append(list);

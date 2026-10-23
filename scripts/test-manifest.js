@@ -176,8 +176,11 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.5.1-i18n-coverage", script: "test-v9.5.1-i18n-coverage.js" },
+  { group: "v9.5.1-page-integration", script: "test-v9.5.1-page-integration.js" },
   { group: "v9.5-canon-state-context", script: "test-v9.5-canon-state-context.js" },
   { group: "v9.5-renderer-reads", script: "test-v9.5-renderer-reads.js" },
+  { group: "v9.5.1-official-recollection-scope", script: "test-v9.5.1-official-recollection-scope.js" },
   { group: "v9.4.1-v813-static-classification", script: "test-v9.4.1-v813-static-classification.js" },
   { group: "v9.4.1-source-provenance", script: "test-v9.4.1-source-provenance.js" },
   { group: "v9.5-view-contract", script: "test-v9.5-view-contract.js" },
@@ -191,6 +194,7 @@ const releaseChecks = [
   { group: "v9.5-legacy-async", script: "test-v9.5-legacy-async.js" },
   { group: "v9.5-visual-lifecycle", script: "test-v9.5-visual-lifecycle.js" },
   { group: "v9.5-renderer-ui", script: "test-v9.5-renderer-ui.js" },
+  { group: "v9.5.1-nav-icons", script: "test-v9.5.1-nav-icons.js" },
   { group: "v9.4-deferred-main-span-source", script: "test-v9.4-deferred-main-span-source.js" },
   { group: "v9.4-static-first-order", script: "test-v9.4-static-first-order.js" },
   { group: "v9.4-source-path-boundary", script: "test-v9.4-source-path-boundary.js" },

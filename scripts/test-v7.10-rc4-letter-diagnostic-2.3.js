@@ -96,9 +96,13 @@ try {
   }
 
   const renderer = fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
-  assert(renderer.includes("A2 → A3 → B → C → D"));
-  assert(renderer.includes("旧 A1 管道已停用"));
-  assert(renderer.includes("选择 Known Letter ID（B/C/D 必填）"));
+  const locale = fs.readFileSync(path.join(__dirname, "..", "src", "app", "renderer", "v95", "i18n", "locales", "v9-5-1-legacy-ui.js"), "utf8");
+  assert(renderer.includes('tV951("diagnostics.help")')
+    && locale.includes('help: "按 A2 → A3 → B → C → D 执行；旧 A1 管道已停用。文件写入不代表 CK3 已执行。B/C/D 只能选择当前已知 Letter ID，正式投递繁忙时诊断会锁定。"')
+    && locale.includes('help: "Run A2 → A3 → B → C → D in order; legacy A1 is disabled. Writing a file does not mean CK3 executed it. B/C/D require a currently known Letter ID, and diagnostics lock while formal delivery is busy."'), "diagnostic instructions must be wired to bilingual UI copy");
+  assert(renderer.includes('tV951("actions.chooseLetterId")')
+    && locale.includes('chooseLetterId: "选择 Known Letter ID（B/C/D 必填）"')
+    && locale.includes('chooseLetterId: "Select a Known Letter ID (required for B/C/D)"'), "letter selector prompt must be wired to bilingual UI copy");
   assert(renderer.includes('snapshot?.letterTransport?.outboundMode'));
   console.log("VOTC Letter Diagnostic: PASS (A1 retired, A2/A3/B/C/D strict sequence and busy lock)");
 } finally {

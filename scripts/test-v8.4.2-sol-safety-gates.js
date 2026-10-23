@@ -87,7 +87,7 @@ try {
     contextVersion: "fixture"
   });
   const featureVersion = JSON.parse(renderer.match(/const VOTC_FEATURE_VERSION = ("[^"]+");/)[1]);
-  const renderWorldline = new Function("reactExports", "jsxRuntimeExports", "useTranslation", "useV95ReadBoundary", "v95Runtime", "window", "navigator", "WorldMemoryEditor", "VOTC_FEATURE_VERSION", `${worldlineSource}; return WorldlineView;`)(reactExports, jsxRuntimeExports, useTranslation, useV95ReadBoundary, { t: key => key }, {}, {}, () => null, featureVersion);
+  const renderWorldline = new Function("reactExports", "jsxRuntimeExports", "useTranslation", "useV95ReadBoundary", "V95PageVisuals", "v95Runtime", "window", "navigator", "WorldMemoryEditor", "VOTC_FEATURE_VERSION", `${worldlineSource}; return WorldlineView;`)(reactExports, jsxRuntimeExports, useTranslation, useV95ReadBoundary, { Icon: () => null, StatusBadge: () => null }, { t: key => key }, {}, {}, () => null, featureVersion);
   assert.doesNotThrow(() => renderWorldline(), "WorldlineView must render before Prompt diagnostics have produced query arrays");
 
   const worldlineServiceSource = fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "main", "worldline", "worldline-service.js"), "utf8");

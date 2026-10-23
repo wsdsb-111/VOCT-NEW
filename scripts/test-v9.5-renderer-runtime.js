@@ -60,7 +60,7 @@ function makeEventApi() {
       listeners.usage.add(callback);
       return () => { unsubscribeCalls.usage += 1; listeners.usage.delete(callback); };
     },
-    emitConversationUpdate() { for (const callback of [...listeners.conversation]) callback([]); },
+    emitConversationUpdate(entries) { for (const callback of [...listeners.conversation]) callback(entries); },
     emitUsage(snapshot) { for (const callback of [...listeners.usage]) callback(snapshot); }
   };
 }
@@ -216,6 +216,75 @@ async function testContextLatestWinsResetAndDispose(createRendererRuntime) {
   }
 }
 
+async function testEmptyConversationUpdateInvalidatesOfficialRecollection(createRendererRuntime) {
+  const events = makeEventApi();
+  const conversationA = context("conversation-ready-a", 6);
+  let contextReader = async () => conversationA;
+  let contextReads = 0;
+  const api = {
+    async getLanguagePreferences() { return { uiLanguage: "zh-CN", promptLanguage: "en", promptLanguageSource: "legacy-action-language" }; },
+    async getUiLanguage() { return "zh-CN"; },
+    async getUiPresentationEnabled() { return false; },
+    getUiContext() { contextReads += 1; return contextReader(); }
+  };
+  events.getUiContext = api.getUiContext;
+  const runtime = await createRendererRuntime({ i18n: await makeI18n(), apis: { llmConfigAPI: api, conversationAPI: events } });
+  const { createOfficialRecollectionReader } = await import(pathToFileURL(path.join(root,
+    "src/app/renderer/v95/state/official-recollection-reader.js")).href);
+  const recollection = {
+    status: "READY",
+    ownerCharacterId: "42",
+    sourceType: "CK3_OFFICIAL_RECOLLECTION",
+    entries: [{ renderedText: "Anonymous official recollection fixture." }],
+    renderedSummary: "Anonymous official recollection fixture.",
+    gameDate: "1171.9.20"
+  };
+  const reader = createOfficialRecollectionReader({
+    runtime,
+    worldlineApi: {
+      async getOfficialRecollection() { return recollection; },
+      onUpdated() { return () => {}; }
+    },
+    timeoutMs: 1000
+  });
+
+  try {
+    const ready = await reader.refresh("42");
+    assert.equal(ready.status, "ready", "the fixture starts with a valid A-context recollection");
+    assert.strictEqual(ready.value, recollection);
+    assert.notEqual(ready.contextVersion, null);
+
+    events.emitConversationUpdate([{ type: "message", content: "streaming update" }]);
+    assert.equal(runtime.getContext()?.conversationTag, conversationA.conversationTag,
+      "a non-empty conversation update must not clear context during normal streaming");
+
+    const deferredContextB = deferred();
+    contextReader = () => deferredContextB.promise;
+    const readsBeforeEnd = contextReads;
+    events.emitConversationUpdate([]);
+    assert.equal(runtime.getContext(), null, "the explicit empty entries event invalidates context synchronously");
+    assert.equal(reader.getStateFor("42", ready.contextVersion).value, null,
+      "render-time official recollection projection is null before the deferred B context read resolves");
+    await waitFor(() => contextReads > readsBeforeEnd, "empty entries should start a Main context readback");
+
+    events.emitUsage({ conversationId: null, phase: "reset", responders: [] });
+    assert.equal(runtime.getContext(), null, "the subsequent usage reset leaves context invalidated");
+    assert.equal(reader.getStateFor("42", ready.contextVersion).value, null,
+      "official recollection remains hidden after reset while Main context is unresolved");
+    await waitFor(() => contextReads > readsBeforeEnd + 1, "usage reset should supersede the earlier context read");
+
+    deferredContextB.resolve(context("conversation-b", 7));
+    await waitFor(() => runtime.getContext()?.conversationTag === "conversation-b",
+      "the latest deferred Main context read should eventually commit");
+    assert.equal(reader.getStateFor("42", ready.contextVersion).value, null,
+      "the A recollection remains hidden after the B context read completes");
+    assert.equal(reader.getState().value, null);
+  } finally {
+    reader.dispose();
+    runtime.dispose();
+  }
+}
+
 async function testUnknownWriteDoesNotRetry(createRendererRuntime) {
   const pendingSave = deferred();
   let saveCalls = 0;
@@ -296,6 +365,7 @@ async function main() {
   const createRendererRuntime = await loadRuntime();
   await testLanguageIsolationAndPresentation(createRendererRuntime);
   await testContextLatestWinsResetAndDispose(createRendererRuntime);
+  await testEmptyConversationUpdateInvalidatesOfficialRecollection(createRendererRuntime);
   await testUnknownWriteDoesNotRetry(createRendererRuntime);
   await testMissingApisFailClosed(createRendererRuntime);
   process.stdout.write("V9.5 renderer runtime: PASS\n");

@@ -379,6 +379,7 @@ async function run() {
   const preloadSource = fs.readFileSync(path.join(root, "resources", "app", "out", "preload", "preload.js"), "utf8");
   const ipcSource = fs.readFileSync(path.join(root, "resources", "app", "out", "main", "ipc", "register-ipc.js"), "utf8");
   const rendererSource = fs.readFileSync(path.join(root, "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
+  const rendererLocale = fs.readFileSync(path.join(root, "src", "app", "renderer", "v95", "i18n", "locales", "v9-5-1-legacy-ui.js"), "utf8");
   const startupBlock = mainSource.slice(mainSource.indexOf("const initializeRunCommandQueue"), mainSource.indexOf("initLogger();"));
   const firstScan = startupBlock.indexOf("reconcileRecentAcks();");
   const tailStart = startupBlock.indexOf("await letterManager.startLogTailing();");
@@ -387,8 +388,12 @@ async function run() {
   assert(firstScan >= 0 && firstScan < tailStart && tailStart < secondScan && secondScan < initialize, "startup must scan, start Tail, close the scan gap, then initialize without replay");
   assert(preloadSource.includes("retryBlockedRunCommand") && preloadSource.includes("cancelBlockedRunCommand") && preloadSource.includes("retryStalledRunCommand") && preloadSource.includes("cancelStalledRunCommand"), "T10 preload must expose BLOCKED and STALLED controls");
   assert(ipcSource.includes('"letters:retryBlockedRunCommand"') && ipcSource.includes('"letters:cancelBlockedRunCommand"') && ipcSource.includes('"letters:retryStalledRunCommand"') && ipcSource.includes('"letters:cancelStalledRunCommand"'), "T10 IPC must expose BLOCKED and STALLED controls");
-  assert(rendererSource.includes("这条命令尚未成功写入 CK3，因此重新尝试不会造成重复 Effect。"), "T11 UI must explain that BLOCKED retry is safe");
-  assert(rendererSource.includes("CK3 是否已经执行该 Effect 无法完全确认。重新执行可能造成重复效果。"), "T10 UI must show the duplicate-effect warning");
+  assert(rendererSource.includes('tV951("diagnostics.blockedHelp")')
+    && rendererLocale.includes('blockedHelp: "这条命令尚未成功写入 CK3，因此重新尝试不会造成重复 Effect。请检查 CK3 用户目录和 run 文件权限。"')
+    && rendererLocale.includes('blockedHelp: "This command has not been written to CK3, so retrying will not duplicate an Effect. Check the CK3 user directory and run-file permissions."'), "T11 UI must explain that BLOCKED retry is safe in both locales");
+  assert(rendererSource.includes('tV951("confirm.retryStalled")')
+    && rendererLocale.includes('retryStalled: "无法完全确认 CK3 是否已执行该 Effect。重新执行可能造成重复效果。"')
+    && rendererLocale.includes('retryStalled: "It is not possible to confirm whether CK3 executed this Effect. Retrying may cause a duplicate effect."'), "T10 UI must show the bilingual duplicate-effect warning");
   assert(rendererSource.includes("result?.success === false"), "T18 Renderer must not accept a failed CK3 path transaction");
   assert(!mainSource.includes("cleanLogFile"), "T13 main process must not retain debug.log cleaning");
   assert(!fs.readFileSync(path.join(root, "resources", "app", "out", "main", "conversation", "conversation.js"), "utf8").includes("cleanLogFile"), "T13 Conversation.end must not clean debug.log");

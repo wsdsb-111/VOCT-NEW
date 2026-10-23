@@ -198,7 +198,14 @@ export async function createRendererRuntime({ i18n, apis = {} } = {}) {
     }
   }
 
-  subscribeHostEvent("conversation:updated", conversationApi.onConversationUpdate, () => { void syncContext(); });
+  subscribeHostEvent("conversation:updated", conversationApi.onConversationUpdate, entries => {
+    // Main emits an empty entries array when clearing the active conversation.
+    if (Array.isArray(entries) && entries.length === 0) {
+      clearContextForReset();
+      return;
+    }
+    void syncContext();
+  });
   subscribeHostEvent("conversation:context-usage-updated", conversationApi.onContextUsageUpdate, snapshot => {
     if (!snapshot || snapshot.conversationId === null || snapshot.conversationId === undefined
       || String(snapshot.phase || "").toLowerCase() === "reset") clearContextForReset();

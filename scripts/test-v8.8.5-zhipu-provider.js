@@ -14,7 +14,7 @@ const rendererSource = fs.readFileSync(path.join(root, "resources", "app", "out"
 assert(mainSource.includes('"zhipu"'), "the persisted provider list must include zhipu");
 assert(mainSource.includes('glmReasoningEffort: "low"'), "GLM must default to low reasoning effort");
 assert(mainSource.includes('glmClearThinking: true'), "GLM must default to clearing historical thinking");
-assert(rendererSource.includes('children: "智谱 GLM"') || rendererSource.includes('"智谱 GLM"'), "the provider sidebar must expose 智谱 GLM");
+assert(rendererSource.includes('providerType === "zhipu" ? "GLM"'), "the dedicated zhipu provider sidebar must display GLM");
 assert(rendererSource.includes('id: "glmReasoningEffort"'), "the GLM reasoning selector must be rendered");
 assert(rendererSource.includes('id: "glmClearThinking"'), "the GLM clear-thinking control must be rendered");
 assert(rendererSource.includes('glmReasoningEffort: editingConfig.glmReasoningEffort'), "GLM reasoning settings must survive save and preset creation");

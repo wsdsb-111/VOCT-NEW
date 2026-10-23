@@ -118,7 +118,7 @@ assert.match(finalThemeBlock, /url\("\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/image\/草原
 assert.match(finalThemeBlock, /url\("\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/image\/中世纪骑士\.png"\)/);
 assert.match(finalThemeBlock, /url\("\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/image\/中国古典\.png"\)/);
 assert.match(styles, /content: "游牧"/);
-assert.ok(renderer.includes('children: v95Runtime.t("legacyUi.nav.worldline")'), "Worldline navigation must use its translation key");
+assert.match(renderer, /jsxRuntimeExports\.jsx\(V95TabIcon, \{ name: "worldbook" \}\), v95Runtime\.t\("legacyUi\.nav\.worldline"\)/, "Worldbook navigation must keep its translated label beside its dedicated icon");
 assert.ok(zhLegacyNav.includes('worldline: "世界书"'), "Chinese Worldline navigation label must match its dictionary");
 assert.ok(enLegacyNav.includes('worldline: "Worldline"'), "English Worldline navigation label must match its dictionary");
 

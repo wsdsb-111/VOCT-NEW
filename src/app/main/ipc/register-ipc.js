@@ -585,6 +585,10 @@ function registerIpcHandlers(runtime) {
       return actions.map((a) => ({
           id: a.id,
           title: a.definition.title ? resolveI18nString(a.definition.title, userLang) : a.id,
+          localizedTitles: {
+            "zh-CN": a.definition.title ? resolveI18nString(a.definition.title, "zh") : a.id,
+            "en-US": a.definition.title ? resolveI18nString(a.definition.title, "en") : a.id
+          },
           scope: a.scope,
           filePath: a.filePath,
           validation: a.validation,

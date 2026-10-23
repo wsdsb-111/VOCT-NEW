@@ -1,8 +1,12 @@
 import zhCN from "./locales/zh-CN.js";
 import enUS from "./locales/en-US.js";
+import v951LegacyUi from "./locales/v9-5-1-legacy-ui.js";
 
 export const UI_LANGUAGES = Object.freeze(["zh-CN", "en-US"]);
-export const UI_CATALOGS = Object.freeze({ "zh-CN": zhCN, "en-US": enUS });
+export const UI_CATALOGS = Object.freeze({
+  "zh-CN": Object.freeze({ ...zhCN, legacyUiV951: v951LegacyUi["zh-CN"] }),
+  "en-US": Object.freeze({ ...enUS, legacyUiV951: v951LegacyUi["en-US"] })
+});
 export function normalizeUiLanguage(value) {
   return UI_LANGUAGES.includes(value) ? value : "zh-CN";
 }

@@ -605,7 +605,7 @@ export function WorldMemoryEditor({ react: R, t }) {
   };
 
   const renderRecord = record => h("article", { key: record.recordId, className: `world-memory-record ${record.status !== "ACTIVE" ? "is-inactive" : ""}` },
-    h("div", { className: "world-memory-record-heading" }, h("strong", null, record.title), h("span", { className: `world-memory-status-tag status-${String(record.status).toLowerCase()}` }, enumLabel("status", record.status, STATUS, "未知状态"))),
+    h("div", { className: "world-memory-record-heading" }, h("strong", null, window.VOTCV95PageVisuals?.Icon ? h(window.VOTCV95PageVisuals.Icon, { name: "worldbook" }) : null, record.title), h("span", { className: `world-memory-status-tag status-${String(record.status).toLowerCase()}` }, enumLabel("status", record.status, STATUS, "未知状态"))),
     h("p", { className: "world-memory-record-content" }, record.content),
     h("div", { className: "world-memory-record-meta" }, h("span", null, record.temporalMode === "TIMELESS" ? enumLabel("temporalModes", "TIMELESS", TEMPORAL_MODES) : record.temporalMode === "PLANNED" ? enumLabel("temporalModes", "PLANNED", TEMPORAL_MODES) : formatGameDateForDisplay(record.gameDate) || copy("ui.noDate", "无日期")), h("span", null, enumLabel("types", record.type, TYPES, "未知类型")), h("span", null, enumLabel("visibility", record.visibility, VISIBILITY, "未知范围")), h("span", null, copy("ui.revision", "修订 {{revision}}", { revision: record.revision }))),
     record.recallWarning && h("p", { className: "world-memory-record-warning", role: "status" }, copy(RECALL_WARNING_KEYS[record.recallWarning] || "warnings.generic", "这条记忆当前无法召回。")),

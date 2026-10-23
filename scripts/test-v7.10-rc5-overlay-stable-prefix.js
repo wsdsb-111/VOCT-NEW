@@ -212,9 +212,10 @@ const manager = new LLMManager({
   const rendererSource = fs.readFileSync(path.join(root, "resources/app/out/renderer/assets/index-Dn3qWlAB.js"), "utf8");
   assert(mainSource.includes("deepseekActionStateTransitionRecallOverlay: true"), "overlay must default on");
   assert(settingsSource.includes("deepseekActionStateTransitionRecallOverlay: config.deepseekActionStateTransitionRecallOverlay !== false"), "overlay must preserve explicit opt-out while defaulting on");
-  assert(rendererSource.includes("关键动作召回"));
+  assert(!rendererSource.includes("criticalActionRecall"), "retired recall statistics should not render");
+  assert(rendererSource.includes('text("按请求类型", "Requests by type")'), "request-type usage statistics remain");
   assert(rendererSource.includes("历史动作实验统计（已退役）"));
-  assert(rendererSource.includes("可用但未选择不自动算 SELECTOR_MISS"));
+  assert(rendererSource.includes("legacyUiV951.connection.recallOverlayHelp"), "the production recall optimization setting remains available");
   console.log("VOTC v7.10-RC5 Overlay/Stable Prefix: PASS (A/B/C isolation, <=450 tokens, blockId order, fail-open metadata, UI)");
 })().catch((error) => {
   console.error(error);

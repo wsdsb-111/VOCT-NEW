@@ -134,6 +134,7 @@
       button.addEventListener("click", () => onChange(fact, fact.effectiveKnown ? "MANUAL_HIDDEN" : "MANUAL_KNOWN"));
       row.append(button);
     }
+    window.VOTCV95PageVisuals?.decorateLegacyRow(row, { target: title, icon: "knowledge" });
     return row;
   }
 

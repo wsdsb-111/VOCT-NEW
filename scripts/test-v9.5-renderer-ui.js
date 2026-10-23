@@ -5,11 +5,11 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const root = path.resolve(__dirname, "..");
-function mockPreloadSource() {
+function mockPreloadSource({ presentationEnabled = false } = {}) {
   return `(() => {
     const state = {
       uiLanguage: "zh-CN",
-      presentationEnabled: false,
+      presentationEnabled: ${JSON.stringify(presentationEnabled)},
       legacyLanguage: "en",
       effectApiCalls: [],
       providerConfigWrites: [],
@@ -144,6 +144,10 @@ function mockPreloadSource() {
       getSummaryProviderId: async () => { read("llmConfigAPI", "getSummaryProviderId"); return "player2"; },
       getActionApprovalSettings: async () => { read("llmConfigAPI", "getActionApprovalSettings"); return clone(state.appSettings.actionApprovalSettings); },
       listModels: async () => { read("llmConfigAPI", "listModels"); return []; },
+      getSummaryPromptSettings: async () => {
+        read("llmConfigAPI", "getSummaryPromptSettings");
+        return { rollingPrompt: "Anonymous rolling prompt fixture", finalPrompt: "Anonymous final prompt fixture", letterSummaryPrompt: "Anonymous letter prompt fixture", finalSummaryMaxTokens: 4096 };
+      },
       setActiveProvider: async instanceId => {
         state.providerSelectionCalls.push(instanceId);
         state.appSettings.llmSettings.activeProviderInstanceId = instanceId;
@@ -178,6 +182,7 @@ function mockPreloadSource() {
     const conversationAPI = api("conversationAPI", {
       getUiContext: async () => { read("conversationAPI", "getUiContext"); return clone(context); },
       getConversationEntries: async () => { read("conversationAPI", "getConversationEntries"); return clone(entries); },
+      getActiveConversationData: async () => { read("conversationAPI", "getActiveConversationData"); return null; },
       getSummariesDashboardData: async () => {
         read("conversationAPI", "getSummariesDashboardData");
         return { summaries: [{ ownerName: "Mock player", counterpartName: "Mock courtier", summaries: [
@@ -195,9 +200,16 @@ function mockPreloadSource() {
       }
     });
     const worldlineAPI = api("worldlineAPI", {
+      getSettings: async () => { read("worldlineAPI", "getSettings"); return { settings: { autosavePath: null, lastValidationStatus: "UNCONFIGURED" } }; },
+      getCheckpointStatus: async () => { read("worldlineAPI", "getCheckpointStatus"); return { checkpoint: { status: "UNCONFIGURED" } }; },
+      getOverview: async () => { read("worldlineAPI", "getOverview"); return { overview: { importantWars: 0, deltaPending: 0 } }; },
       getAnnualDelta: async () => {
         read("worldlineAPI", "getAnnualDelta");
         return { annualDelta: [{ detail: "A harmless local timeline fixture.", date: "867.1.1", actors: [{ displayName: "Mock actor" }], confidence: "PARTIAL" }] };
+      },
+      getWorldKnowledge: async () => {
+        read("worldlineAPI", "getWorldKnowledge");
+        return { worldKnowledge: [{ id: "fixture-worldbook", title: "Fixture worldbook entry", value: "Read-only fixture", source: "GAME_TRUTH", visibility: "PUBLIC_WORLD" }] };
       },
       onUpdated: subscribe("worldlineAPI", "onUpdated")
     });
@@ -222,7 +234,11 @@ function mockPreloadSource() {
       }
     });
     const usageAPI = api("usageAPI", {
-      getReport: async () => { read("usageAPI", "getReport"); return { recent: [] }; }
+      getReport: async () => {
+        read("usageAPI", "getReport");
+        return { recent: [], byRequest: [{ key: "action | deepseek | fixture-model", requests: 2, promptTokens: 100, totalTokens: 110, cacheHitRate: 0.5 }],
+          criticalActionRecall: { requests: 2, byAction: [{ actionId: "isInjured", available: 2, observations: 2 }], recent: [] } };
+      }
     });
     const electronAPI = api("electronAPI", {
       getAppVersion: async () => "V9.5 UI fixture",
@@ -242,11 +258,22 @@ function mockPreloadSource() {
     window.promptsAPI = promptsAPI;
     window.conversationAPI = conversationAPI;
     window.lettersAPI = lettersAPI;
-    window.actionsAPI = api("actionsAPI", {});
+    window.actionsAPI = api("actionsAPI", {
+      getSettings: async () => { read("actionsAPI", "getSettings"); return { disabledActions: [] }; },
+      getAll: async () => {
+        read("actionsAPI", "getAll");
+        return [{ id: "fixture-action", title: "只读夹具动作", localizedTitles: { "zh-CN": "只读夹具动作", "en-US": "Read-only fixture action" }, scope: "local", filePath: "fixture/read-only.action",
+          validation: { valid: true, message: "" }, disabled: false, isDestructive: false, hasDestructiveOverride: false }];
+      }
+    });
     window.worldlineAPI = worldlineAPI;
     window.characterKnowledgeAPI = characterKnowledgeAPI;
     window.usageAPI = usageAPI;
-    window.providerDiagnosticsAPI = api("providerDiagnosticsAPI", {});
+    window.providerDiagnosticsAPI = api("providerDiagnosticsAPI", {
+      getStatus: async () => { read("providerDiagnosticsAPI", "getStatus"); return { status: "READY" }; },
+      getRealRequestDiff: async () => { read("providerDiagnosticsAPI", "getRealRequestDiff"); return { summary: { conclusion: "insufficient_data" }, entries: [] }; },
+      getV89Settings: async () => { read("providerDiagnosticsAPI", "getV89Settings"); return { chatPromptV89Layout: true, chatPromptV89OutboundDiagnostics: true, chatPromptV89RuntimeProfileSplit: true, chatPromptV810ProviderAdapter: true }; }
+    });
     window.performanceDiagnosticsAPI = performanceDiagnosticsAPI;
     state.protectedSnapshot = () => JSON.stringify({
       providerSettings: state.appSettings.llmSettings,
@@ -454,7 +481,11 @@ async function main() {
   }
 }
 
-main().catch(error => {
-  process.stderr.write(`${error.stack || error}\n`);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch(error => {
+    process.stderr.write(`${error.stack || error}\n`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { mockPreloadSource };

@@ -3,6 +3,8 @@ import { getLegacySummaryPage, getSummaryDisplayEntries, getSummaryImportantMatt
 import { createRendererRuntime } from "../v95/containers/renderer-runtime.js";
 import { createReadBoundary } from "../v95/state/read-boundary.js";
 import { defaultIconRegistry } from "../v95/icons/icon-registry.js";
+import { createReactVisuals } from "../v95/integration/react-visuals.js";
+import { createOfficialRecollectionReader } from "../v95/state/official-recollection-reader.js";
 let v95Runtime = null;
 function V95TabIcon({ name }) {
   const host = reactExports.useRef(null);
@@ -45,7 +47,7 @@ function V95UiSettings() {
     finally { setBusy(false); }
   };
   return jsxRuntimeExports.jsxs("section", { className: "v95-language-settings", children: [
-    jsxRuntimeExports.jsxs("p", { children: [v95Runtime.t("settings.uiLanguage"), ": ", preferences.uiLanguage] }),
+    jsxRuntimeExports.jsxs("p", { children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "settings" }), v95Runtime.t("settings.uiLanguage"), ": ", preferences.uiLanguage] }),
     jsxRuntimeExports.jsxs("p", { children: [v95Runtime.t("settings.promptLanguage"), ": ", preferences.promptLanguage || v95Runtime.t("common.unknown")] }),
     jsxRuntimeExports.jsxs("p", { children: [v95Runtime.t("settings.gameLanguage"), ": ", preferences.gameLanguage === "unknown" ? v95Runtime.t("common.unknown") : preferences.gameLanguage] }),
     jsxRuntimeExports.jsx("p", { className: "form-help", children: v95Runtime.t("settings.languageHelp") }),
@@ -56,7 +58,7 @@ function V95UiSettings() {
     error && jsxRuntimeExports.jsx("p", { role: "status", children: error })
   ] });
 }
-const VOTC_FEATURE_VERSION = "V9.5.0";
+const VOTC_FEATURE_VERSION = "V9.5.1";
 const VOTC_WORKSHOP_MOD_VERSION = "2.0.5";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -110,6 +112,8 @@ function requireJsxRuntime() {
   return jsxRuntime.exports;
 }
 var jsxRuntimeExports = requireJsxRuntime();
+const V95PageVisuals = createReactVisuals({ jsxRuntime: jsxRuntimeExports, iconRegistry: defaultIconRegistry });
+window.VOTCV95PageVisuals = V95PageVisuals;
 var react = { exports: {} };
 var react_production = {};
 /**
@@ -15847,7 +15851,7 @@ const ActionFeedbackItem = ({ entry }) => {
     else itemClass += ` ${feedback.sentiment}`;
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: itemClass, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-feedback-message", children: feedback.message }),
-      lifecycleLabel && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-feedback-status", children: lifecycleLabel })
+      lifecycleLabel && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-feedback-status", children: jsxRuntimeExports.jsx(V95PageVisuals.StatusBadge, { code: lifecycleStatus, label: lifecycleLabel }) })
     ] }, index);
   }) }) });
 };
@@ -17814,7 +17818,7 @@ const DEFAULT_PROVIDER_CONFIGS = {
     glmClearThinking: true
   }
 };
-const getProviderDisplayName = (providerType) => providerType === "zhipu" ? "智谱 GLM" : providerType.charAt(0).toUpperCase() + providerType.slice(1);
+const getProviderDisplayName = (providerType) => providerType === "zhipu" ? "GLM" : providerType.charAt(0).toUpperCase() + providerType.slice(1);
 const getCacheKey$2 = (config2) => {
   if (config2.providerType === "openrouter") return "openrouter";
   if (config2.providerType === "player2") return "player2";
@@ -18433,7 +18437,7 @@ const ProviderSidebar = ({
                                     ${selectedProviderTypeForEditing === type && !selectedPresetIdForEditing ? "active" : ""}
                                     ${getAssignmentClass(type)}
                                 `.trim(),
-            children: getProviderDisplayName(type)
+            children: jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "provider" }), getProviderDisplayName(type)] })
           },
           type
         );
@@ -18894,19 +18898,19 @@ const ZhipuConfigFieldsComponent = ({ config: config2, onInputChange }) => /* @_
     FormGroupInput,
     {
       id: "apiKey",
-      label: "智谱 GLM API Key:",
+      label: "GLM API Key:",
       type: "password",
       name: "apiKey",
       value: config2.apiKey || "",
       onChange: onInputChange,
-      placeholder: "填写智谱开放平台 API Key"
+      placeholder: v95Runtime.t("legacyUiV951.connection.glmApiKeyPlaceholder")
     }
   ),
   /* @__PURE__ */ jsxRuntimeExports.jsx(
     FormGroupInput,
     {
       id: "baseUrl",
-      label: "智谱 GLM Base URL:",
+      label: "GLM Base URL:",
       type: "text",
       name: "baseUrl",
       value: config2.baseUrl || "https://open.bigmodel.cn/api/paas/v4",
@@ -19117,20 +19121,20 @@ const ProviderConfigPanel = (props) => {
       ),
       config2.providerType === "zhipu" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "glmReasoningEffort", children: "推理强度" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "glmReasoningEffort", children: v95Runtime.t("legacyUiV951.connection.reasoningEffort") }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { id: "glmReasoningEffort", name: "glmReasoningEffort", value: ["low", "high", "max"].includes(config2.glmReasoningEffort) ? config2.glmReasoningEffort : "low", onChange: (event) => updateEditingConfig({ glmReasoningEffort: event.target.value }), className: "schema-type-select", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "low", children: "低（推荐 RP）" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "high", children: "高" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "max", children: "最大" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "low", children: v95Runtime.t("legacyUiV951.connection.reasoningLow") }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "high", children: v95Runtime.t("legacyUiV951.connection.reasoningHigh") }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "max", children: v95Runtime.t("legacyUiV951.connection.reasoningMax") })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "GLM 未指定时可能默认最大推理强度；VOCT 会始终显式发送当前选择。" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: v95Runtime.t("legacyUiV951.connection.reasoningHelp") })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "glmClearThinking", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("input", { id: "glmClearThinking", name: "glmClearThinking", type: "checkbox", checked: config2.glmClearThinking !== false, onChange: (event) => updateEditingConfig({ glmClearThinking: event.target.checked }) }),
-            " 清除历史思考（推荐）"
+            v95Runtime.t("legacyUiV951.connection.clearThinking")
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "只保留可见对话上下文；隐藏 reasoning_content 不会进入对话历史或摘要。" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: v95Runtime.t("legacyUiV951.connection.clearThinkingHelp") })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
@@ -19167,7 +19171,7 @@ const ProviderConfigPanel = (props) => {
       ] }),
       ["deepseek", "openai-compatible"].includes(config2.providerType) && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "actionSchemaDeliveryMode", children: "Action Schema 传输模式" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "actionSchemaDeliveryMode", children: v95Runtime.t("legacyUiV951.connection.schemaDelivery") }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("select", {
             id: "actionSchemaDeliveryMode",
             name: "actionSchemaDeliveryMode",
@@ -19175,11 +19179,11 @@ const ProviderConfigPanel = (props) => {
             onChange: (event) => updateEditingConfig({ actionSchemaDeliveryMode: event.target.value }),
             className: "schema-type-select",
             children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "official_full_injected", children: config2.providerType === "deepseek" ? "Baseline：官方 Full Schema 注入" : "标准：通过 response_format 传输 Schema（推荐）" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "optimized_local_validation", children: config2.providerType === "deepseek" ? "Full Schema 仅本地校验（推荐）" : "兼容：Schema 仅本地校验" })
+              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "official_full_injected", children: v95Runtime.t(config2.providerType === "deepseek" ? "legacyUiV951.connection.schemaBaseline" : "legacyUiV951.connection.schemaStandard") }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "optimized_local_validation", children: v95Runtime.t(config2.providerType === "deepseek" ? "legacyUiV951.connection.schemaLocal" : "legacyUiV951.connection.schemaCompatible") })
             ]
           }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: config2.providerType === "deepseek" ? "两种模式都完整构建官方 Full Schema；仅本地校验模式只移除 DeepSeek HTTP Prompt 中的重复 Schema 文本。" : "标准模式通过 response_format.json_schema 发送 Schema；若兼容接口不支持该格式，可改用仅发送 json_object、仍在本地校验的兼容模式。" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: v95Runtime.t(config2.providerType === "deepseek" ? "legacyUiV951.connection.schemaDeepseekHelp" : "legacyUiV951.connection.schemaCompatibleHelp") })
         ] }),
         config2.providerType === "deepseek" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "deepseekActionStateTransitionRecallOverlay", children: [
@@ -19190,9 +19194,9 @@ const ProviderConfigPanel = (props) => {
               checked: config2.deepseekActionStateTransitionRecallOverlay !== false,
               onChange: (event) => updateEditingConfig({ deepseekActionStateTransitionRecallOverlay: event.target.checked })
             }),
-            " DeepSeek Action State Transition Recall Overlay"
+            v95Runtime.t("legacyUiV951.connection.recallOverlay")
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "默认开启；强化受伤、死亡与关系状态转换的官方 Selector 召回，不改变动作可用性、Schema、校验或执行。" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: v95Runtime.t("legacyUiV951.connection.recallOverlayHelp") })
         ] }),
         config2.providerType === "deepseek" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "deepseekActionStablePrefixOptimization", children: [
@@ -19203,9 +19207,9 @@ const ProviderConfigPanel = (props) => {
               checked: config2.deepseekActionStablePrefixOptimization !== false,
               onChange: (event) => updateEditingConfig({ deepseekActionStablePrefixOptimization: event.target.checked })
             }),
-            " DeepSeek Action Stable Prefix A/B"
+            v95Runtime.t("legacyUiV951.connection.stablePrefix")
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "默认开启；保持稳定 Action 前缀，不修改官方 ActionPromptBuilder。实际缓存命中以服务商返回的用量为准。" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: v95Runtime.t("legacyUiV951.connection.stablePrefixHelp") })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(DefaultParameterFieldsComponent, { config: config2, onInputChange, t }),
@@ -19372,6 +19376,7 @@ const ConnectionView = () => {
 };
 function LettersStatusModal({ onClose }) {
   const { t } = useTranslation();
+  const tV951 = (key, params) => v95Runtime.t(`legacyUiV951.letters.${key}`, params);
   const { run: readTask, contextVersion } = useV95ReadBoundary("letters");
   const [snapshot, setSnapshot] = reactExports.useState(null);
   const [isLoading, setIsLoading] = reactExports.useState(false);
@@ -19417,7 +19422,7 @@ function LettersStatusModal({ onClose }) {
       await loadStatuses();
     } catch (error) {
       console.error("Failed to run letter effect diagnostic:", error);
-      setDiagnosticResult({ success: false, error: error?.message || "Unknown error" });
+      setDiagnosticResult({ success: false, error: error?.message || null, uiErrorKey: error?.message ? null : "result.unknownError" });
     } finally {
       setIsRunningDiagnostic(false);
     }
@@ -19430,7 +19435,7 @@ function LettersStatusModal({ onClose }) {
       await loadStatuses();
     } catch (error) {
       console.error("Failed to confirm letter effect diagnostic:", error);
-      setDiagnosticResult({ success: false, error: error?.message || "Unknown error" });
+      setDiagnosticResult({ success: false, error: error?.message || null, uiErrorKey: error?.message ? null : "result.unknownError" });
     } finally {
       setIsRunningDiagnostic(false);
     }
@@ -19447,11 +19452,11 @@ function LettersStatusModal({ onClose }) {
     }
   };
   const retryStalledRunCommand = async (commandId) => {
-    if (!window.confirm("CK3 是否已经执行该 Effect 无法完全确认。重新执行可能造成重复效果。")) return;
+    if (!window.confirm(tV951("confirm.retryStalled"))) return;
     setHandlingRunCommandId(commandId);
     try {
       const result = await window.lettersAPI.retryStalledRunCommand(commandId);
-      setDiagnosticResult(result?.success ? { success: true, stage: "RUN_COMMAND", result: `已明确重试 ${commandId}` } : { success: false, error: result?.error || "命令重试失败" });
+      setDiagnosticResult(result?.success ? { success: true, stage: "RUN_COMMAND", uiResultKey: "result.commandRetried", uiResultParams: { id: commandId } } : { success: false, error: result?.error || null, uiErrorKey: result?.error ? null : "result.commandRetryFailed" });
       await loadStatuses();
     } finally {
       setHandlingRunCommandId(null);
@@ -19461,29 +19466,29 @@ function LettersStatusModal({ onClose }) {
     setHandlingRunCommandId(commandId);
     try {
       const result = await window.lettersAPI.retryBlockedRunCommand(commandId);
-      setDiagnosticResult(result?.success ? { success: true, stage: "RUN_COMMAND", result: `已安全重试 ${commandId}` } : { success: false, error: result?.error || "命令重试失败" });
+      setDiagnosticResult(result?.success ? { success: true, stage: "RUN_COMMAND", uiResultKey: "result.commandSafelyRetried", uiResultParams: { id: commandId } } : { success: false, error: result?.error || null, uiErrorKey: result?.error ? null : "result.commandRetryFailed" });
       await loadStatuses();
     } finally {
       setHandlingRunCommandId(null);
     }
   };
   const cancelStalledRunCommand = async (commandId) => {
-    if (!window.confirm("确定取消这条 STALLED 命令并继续后续队列吗？该 Effect 是否已由 CK3 执行仍无法确认。")) return;
+    if (!window.confirm(tV951("confirm.cancelStalled"))) return;
     setHandlingRunCommandId(commandId);
     try {
       const result = await window.lettersAPI.cancelStalledRunCommand(commandId);
-      setDiagnosticResult(result?.success ? { success: true, stage: "RUN_COMMAND", result: `已取消 ${commandId}` } : { success: false, error: result?.error || "命令取消失败" });
+      setDiagnosticResult(result?.success ? { success: true, stage: "RUN_COMMAND", uiResultKey: "result.commandCancelled", uiResultParams: { id: commandId } } : { success: false, error: result?.error || null, uiErrorKey: result?.error ? null : "result.commandCancelFailed" });
       await loadStatuses();
     } finally {
       setHandlingRunCommandId(null);
     }
   };
   const cancelBlockedRunCommand = async (commandId) => {
-    if (!window.confirm("确定取消这条 BLOCKED 命令并继续后续队列吗？该命令尚未写入 CK3。")) return;
+    if (!window.confirm(tV951("confirm.cancelBlocked"))) return;
     setHandlingRunCommandId(commandId);
     try {
       const result = await window.lettersAPI.cancelBlockedRunCommand(commandId);
-      setDiagnosticResult(result?.success ? { success: true, stage: "RUN_COMMAND", result: `已取消 ${commandId}` } : { success: false, error: result?.error || "命令取消失败" });
+      setDiagnosticResult(result?.success ? { success: true, stage: "RUN_COMMAND", uiResultKey: "result.commandCancelled", uiResultParams: { id: commandId } } : { success: false, error: result?.error || null, uiErrorKey: result?.error ? null : "result.commandCancelFailed" });
       await loadStatuses();
     } finally {
       setHandlingRunCommandId(null);
@@ -19493,11 +19498,11 @@ function LettersStatusModal({ onClose }) {
     setRetryingLetterId(letterId);
     try {
       const result = await window.lettersAPI.retryFailed(letterId);
-      if (!result?.success) setDiagnosticResult({ success: false, error: result?.error || "Retry failed." });
+      if (!result?.success) setDiagnosticResult({ success: false, error: result?.error || null, uiErrorKey: result?.error ? null : "result.retryResponseFailed" });
       await loadStatuses();
     } catch (error) {
       console.error("Failed to retry letter response:", error);
-      setDiagnosticResult({ success: false, error: error?.message || "Unknown error" });
+      setDiagnosticResult({ success: false, error: error?.message || null, uiErrorKey: error?.message ? null : "result.unknownError" });
     } finally {
       setRetryingLetterId(null);
     }
@@ -19506,25 +19511,25 @@ function LettersStatusModal({ onClose }) {
     setRetryingLetterId(errorRecordId);
     try {
       const result = await window.lettersAPI.retryPayload(errorRecordId);
-      setDiagnosticResult(result?.success ? { success: true, stage: "PAYLOAD", result: `已从原触发上下文重新读取为 ${result.letterId}` } : { success: false, error: result?.error || "重新读取失败" });
+      setDiagnosticResult(result?.success ? { success: true, stage: "PAYLOAD", uiResultKey: "result.rereadAs", uiResultParams: { id: result.letterId } } : { success: false, error: result?.error || null, uiErrorKey: result?.error ? null : "result.rereadFailed" });
       await loadStatuses();
     } catch (error) {
       console.error("Failed to reread letter payload:", error);
-      setDiagnosticResult({ success: false, error: error?.message || "Unknown error" });
+      setDiagnosticResult({ success: false, error: error?.message || null, uiErrorKey: error?.message ? null : "result.unknownError" });
     } finally {
       setRetryingLetterId(null);
     }
   };
   const clearPendingLetters = async () => {
-    if (!window.confirm("确定清除全部待送达信件吗？这会解除当前等待确认锁，已送达历史不会删除。")) return;
+    if (!window.confirm(tV951("confirm.clearPending"))) return;
     setIsClearingPending(true);
     try {
       const result = await window.lettersAPI.clearPending();
-      setDiagnosticResult(result?.success ? { success: true, stage: "CLEAR", result: `已清除 ${result.clearedPendingCount || 0} 封待送达信件` } : { success: false, error: result?.error || "清除失败" });
+      setDiagnosticResult(result?.success ? { success: true, stage: "CLEAR", uiResultKey: "result.clearedPending", uiResultParams: { count: result.clearedPendingCount || 0 } } : { success: false, error: result?.error || null, uiErrorKey: result?.error ? null : "result.clearFailed" });
       await loadStatuses();
     } catch (error) {
       console.error("Failed to clear pending letters:", error);
-      setDiagnosticResult({ success: false, error: error?.message || "Unknown error" });
+      setDiagnosticResult({ success: false, error: error?.message || null, uiErrorKey: error?.message ? null : "result.unknownError" });
     } finally {
       setIsClearingPending(false);
     }
@@ -19629,13 +19634,13 @@ function LettersStatusModal({ onClose }) {
       case "send_failed":
         return t("lettersModal.statusSendFailed");
       case "payload_invalid":
-        if (payloadErrorCode === "PAYLOAD_INCOMPLETE_TIMEOUT") return "信件数据读取超时";
-        if (payloadErrorCode === "INVALID_LETTER_PAYLOAD_NUMERIC") return "信件日期数值无效";
-        return "信件载荷无效";
+        if (payloadErrorCode === "PAYLOAD_INCOMPLETE_TIMEOUT") return tV951("status.payloadTimeout");
+        if (payloadErrorCode === "INVALID_LETTER_PAYLOAD_NUMERIC") return tV951("status.invalidDate");
+        return tV951("status.invalidPayload");
       case "legacy_invalid_pending":
-        return "旧待送达记录已隔离";
+        return tV951("status.legacyQuarantined");
       case "cancelled":
-        return "已手动清除";
+        return tV951("status.manuallyCleared");
       case "not_started":
         return t("lettersModal.statusNotStarted");
       case "saved":
@@ -19691,7 +19696,7 @@ function LettersStatusModal({ onClose }) {
       return t("lettersModal.delivered");
     }
     if (letter.responseStatus === "cancelled") return v95Runtime.t("legacyUi.letters.cleared");
-    if (!Number.isFinite(letter.daysUntilDelivery)) return "日期数据异常";
+    if (!Number.isFinite(letter.daysUntilDelivery)) return tV951("status.dateDataInvalid");
     if (letter.isLate) {
       return t("lettersModal.lateByDays", { days: Math.abs(letter.daysUntilDelivery) });
     }
@@ -19705,15 +19710,15 @@ function LettersStatusModal({ onClose }) {
     return new Date(timestamp).toLocaleString();
   };
   const getDiagnosticDisableReason = (stage) => {
-    if (isRunningDiagnostic) return "诊断操作进行中";
+    if (isRunningDiagnostic) return tV951("actions.diagnosticRunning");
     const active = Object.values(snapshot?.effectDiagnostics || {}).find((item) => ["WAITING_FOR_CK3_EXECUTION", "A3_PRE_WAIT", "A3_EFFECT_ENTERED", "A3_POST_WAIT", "A3_SCOPE_CONFIRMED", "ARTIFACT_VISUAL_CHECK_REQUIRED", "A3_VISUAL_CHECK_REQUIRED"].includes(item?.result));
-    if (active) return ["ARTIFACT_VISUAL_CHECK_REQUIRED", "A3_VISUAL_CHECK_REQUIRED"].includes(active.result) ? `${active.stage} 已执行，请先确认 CK3 可见结果` : `${active.stage} 正在等待 CK3 Execution Marker`;
-    if (["B", "C", "D"].includes(stage) && !diagnosticLetterId) return "请选择 Known Letter ID";
-    if (stage === "A1") return "旧 letters.txt 管道已停用；请从 A2 开始";
-    if (stage === "A3" && snapshot?.effectDiagnostics?.A2?.result !== "PASS") return "A2 votc.txt Execution Marker 尚未通过";
+    if (active) return ["ARTIFACT_VISUAL_CHECK_REQUIRED", "A3_VISUAL_CHECK_REQUIRED"].includes(active.result) ? tV951("actions.visibleResultRequired", { stage: active.stage }) : tV951("actions.waitingForMarker", { stage: active.stage });
+    if (["B", "C", "D"].includes(stage) && !diagnosticLetterId) return tV951("actions.selectKnownId");
+    if (stage === "A1") return tV951("actions.retiredA1");
+    if (stage === "A3" && snapshot?.effectDiagnostics?.A2?.result !== "PASS") return tV951("actions.a2Required");
     if (["B", "C", "D"].includes(stage)) {
       const previousStage = stage === "B" ? "A3" : String.fromCharCode(stage.charCodeAt(0) - 1);
-      if (snapshot?.effectDiagnostics?.[previousStage]?.result !== "PASS") return `${previousStage} 尚未通过 CK3 Execution 与可见结果确认`;
+      if (snapshot?.effectDiagnostics?.[previousStage]?.result !== "PASS") return tV951("actions.previousStageRequired", { stage: previousStage });
     }
     return snapshot?.diagnosticDisableReasons?.[stage] || null;
   };
@@ -19729,7 +19734,7 @@ function LettersStatusModal({ onClose }) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modal-body", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: loadStatuses, disabled: isLoading, children: isLoading ? t("lettersModal.loading") : t("lettersModal.refresh") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: clearPendingLetters, disabled: isClearingPending || (snapshot?.clearablePendingCount || 0) === 0, children: isClearingPending ? "清除中…" : "一键清除待送达信件" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: clearPendingLetters, disabled: isClearingPending || (snapshot?.clearablePendingCount || 0) === 0, children: isClearingPending ? tV951("actions.clearing") : tV951("actions.clearPending") }),
         snapshot && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { marginLeft: "10px", color: "#888", fontSize: "0.9em" }, children: [
           t("lettersModal.lastUpdated"),
           ": ",
@@ -19765,81 +19770,75 @@ function LettersStatusModal({ onClose }) {
         ] }),
         " ",
         snapshot.currentTotalDays,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", style: { marginLeft: "12px" }, onClick: resyncGameDate, disabled: isResyncingDate, children: isResyncingDate ? "恢复并同步中…" : "重新同步日期" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", style: { marginLeft: "12px" }, onClick: resyncGameDate, disabled: isResyncingDate, children: isResyncingDate ? tV951("actions.resyncingDate") : tV951("actions.resyncDate") }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "muted-text", style: { marginLeft: "12px" }, children: [
-          "Tail Consumer: ",
+          tV951("date.tailConsumer"),
           snapshot.dateTracker?.tailState || "UNKNOWN",
-          " / Date Producer: ",
+          tV951("date.dateProducer"),
           snapshot.dateTracker?.dateProducerState || "UNKNOWN",
-          " / Overall: ",
+          tV951("date.overall"),
           snapshot.dateTracker?.dateSourceState || "UNKNOWN",
-          " / Last Date Marker: ",
+          tV951("date.lastMarker"),
           snapshot.dateTracker?.lastObservedDateValue ?? snapshot.dateTracker?.lastDateScanResult?.value ?? "—",
-          " / Last Fresh Marker At: ",
+          tV951("date.lastFreshAt"),
           formatDate(snapshot.dateTracker?.lastObservedDateMarkerAt),
-          " / Marker Age: ",
+          tV951("date.markerAge"),
           snapshot.dateTracker?.markerAgeMs == null ? "—" : `${Math.round(snapshot.dateTracker.markerAgeMs / 1e3)}s`,
-          " / Last Progress: ",
+          tV951("date.lastProgress"),
           snapshot.dateTracker?.lastProgressDateValue ?? "—",
           " @ ",
           formatDate(snapshot.dateTracker?.lastProgressAt),
-          " / Source: ",
+          tV951("date.source"),
           snapshot.dateTracker?.lastDateMarkerSource || "—",
-          " / ACK Queue: ",
+          tV951("date.ackQueue"),
           snapshot.dateTracker?.runCommands?.length || 0
         ] })
       ] }),
       blockedRunCommand && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "letter-details", style: { borderColor: "#d9822b" }, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { style: { color: "#d9822b" }, children: "Run Command Queue 暂时无法发送（BLOCKED）" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "这条命令尚未成功写入 CK3，因此重新尝试不会造成重复 Effect。请检查 CK3 用户目录和 run 文件权限。" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { style: { color: "#d9822b" }, children: tV951("diagnostics.blockedTitle") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: tV951("diagnostics.blockedHelp") }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => retryBlockedRunCommand(blockedRunCommand.commandId), disabled: handlingRunCommandId === blockedRunCommand.commandId, children: "安全重新尝试" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => cancelBlockedRunCommand(blockedRunCommand.commandId), disabled: handlingRunCommandId === blockedRunCommand.commandId, children: "取消命令并继续队列" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => retryBlockedRunCommand(blockedRunCommand.commandId), disabled: handlingRunCommandId === blockedRunCommand.commandId, children: tV951("actions.retryBlocked") }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => cancelBlockedRunCommand(blockedRunCommand.commandId), disabled: handlingRunCommandId === blockedRunCommand.commandId, children: tV951("actions.cancelAndContinue") })
         ] })
       ] }),
       stalledRunCommand && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "letter-details", style: { borderColor: "#dc3545" }, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { style: { color: "#dc3545" }, children: "Run Command Queue 已阻塞（STALLED）" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "muted-text", children: [
-          "命令 ",
-          stalledRunCommand.commandId,
-          " / ",
-          stalledRunCommand.kind,
-          " 已超过 ACK 等待时间。没有看到 ACK 不代表 CK3 没有执行。"
-        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { style: { color: "#dc3545" }, children: tV951("diagnostics.stalledTitle") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: tV951("diagnostics.stalledDetails", { id: stalledRunCommand.commandId, kind: stalledRunCommand.kind }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => retryStalledRunCommand(stalledRunCommand.commandId), disabled: handlingRunCommandId === stalledRunCommand.commandId, children: "确认风险并重新执行" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => cancelStalledRunCommand(stalledRunCommand.commandId), disabled: handlingRunCommandId === stalledRunCommand.commandId, children: "取消命令并继续队列" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => retryStalledRunCommand(stalledRunCommand.commandId), disabled: handlingRunCommandId === stalledRunCommand.commandId, children: tV951("actions.retryRisk") }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => cancelStalledRunCommand(stalledRunCommand.commandId), disabled: handlingRunCommandId === stalledRunCommand.commandId, children: tV951("actions.cancelAndContinue") })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "letter-details", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: "Effect 实机诊断 3.0（Transport → CK3 EXECUTE → Scope → 可见结果确认）" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "按 A2 → A3 → B → C → D 执行；旧 A1 管道已停用。文件写入不代表 CK3 已执行。B/C/D 只能选择当前已知 Letter ID，正式投递繁忙时诊断会锁定。" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: tV951("diagnostics.title") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: tV951("diagnostics.help") }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "muted-text", children: [
-          "正式 Outbound Transport: ",
+          tV951("diagnostics.outboundTransport"),
           snapshot?.letterTransport?.outboundMode || "votc_run_file",
-          " / Contract Drift: ",
+          tV951("diagnostics.contractDrift"),
           snapshot?.letterTransport?.contractDriftConfirmed ? "CONFIRMED" : "NOT CONFIRMED"
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: diagnosticLetterId, onChange: (event) => setDiagnosticLetterId(event.target.value), disabled: isRunningDiagnostic, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "选择 Known Letter ID（B/C/D 必填）" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: tV951("actions.chooseLetterId") }),
           (snapshot?.knownDiagnosticLetters || []).map((letter) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: letter.letterId, children: `${letter.letterId} — ${letter.characterName} — ${letter.responseStatus}` }, letter.letterId))
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", style: { marginTop: "8px" }, children: [
-          ...[["A1", "letters.txt Execution"], ["A2", "votc.txt Execution"], ["A3", "Official-Parity Artifact"], ["B", "Creator Scope"], ["C", "Global Variable"], ["D", "Message Event"]].map(([stage, label]) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", title: getDiagnosticDisableReason(stage) || "", onClick: () => runEffectDiagnostic(stage), disabled: Boolean(getDiagnosticDisableReason(stage)), children: `${stage} ${label} — ${snapshot?.effectDiagnostics?.[stage]?.result || "NOT_STARTED"}` }, stage))
+          ...[["A1", tV951("diagnostics.stageA1")], ["A2", tV951("diagnostics.stageA2")], ["A3", tV951("diagnostics.stageA3")], ["B", tV951("diagnostics.stageB")], ["C", tV951("diagnostics.stageC")], ["D", tV951("diagnostics.stageD")]].map(([stage, label]) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", title: getDiagnosticDisableReason(stage) || "", onClick: () => runEffectDiagnostic(stage), disabled: Boolean(getDiagnosticDisableReason(stage)), children: `${stage} ${label} — ${snapshot?.effectDiagnostics?.[stage]?.result || "NOT_STARTED"}` }, stage))
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted-text", children: [["A1", "letters.txt Execution"], ["A2", "votc.txt Execution"], ["A3", "Official-Parity Artifact"], ["B", "Creator Scope"], ["C", "Global Variable"], ["D", "Message Event"]].map(([stage, label]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted-text", children: [["A1", tV951("diagnostics.stageA1")], ["A2", tV951("diagnostics.stageA2")], ["A3", tV951("diagnostics.stageA3")], ["B", tV951("diagnostics.stageB")], ["C", tV951("diagnostics.stageC")], ["D", tV951("diagnostics.stageD")]].map(([stage, label]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           stage,
           " ",
           label,
           ": ",
-          getDiagnosticDisableReason(stage) ? `🔒 ${getDiagnosticDisableReason(stage)}` : "可执行"
+          getDiagnosticDisableReason(stage) ? `🔒 ${getDiagnosticDisableReason(stage)}` : tV951("actions.executable")
         ] }, stage)) }),
         visualCheckDiagnostic && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-actions", style: { marginTop: "8px" }, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "muted-text", children: `${visualCheckDiagnostic.stage} 已收到 CK3 Execution Marker，请检查游戏内可见结果：` }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => confirmEffectDiagnostic(visualCheckDiagnostic.stage, true), disabled: isRunningDiagnostic, children: "可见结果通过" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => confirmEffectDiagnostic(visualCheckDiagnostic.stage, false), disabled: isRunningDiagnostic, children: "可见结果失败" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "muted-text", children: tV951("actions.visibleResultPrompt", { stage: visualCheckDiagnostic.stage }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => confirmEffectDiagnostic(visualCheckDiagnostic.stage, true), disabled: isRunningDiagnostic, children: tV951("actions.visibleResultPass") }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => confirmEffectDiagnostic(visualCheckDiagnostic.stage, false), disabled: isRunningDiagnostic, children: tV951("actions.visibleResultFail") })
         ] }),
-        diagnosticResult && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: diagnosticResult.success ? "muted-text" : "error-message", children: diagnosticResult.error || `阶段 ${diagnosticResult.stage}: ${diagnosticResult.result}; creator=${diagnosticResult.creatorScopeName || "n/a"}` })
+        diagnosticResult && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: diagnosticResult.success ? "muted-text" : "error-message", children: diagnosticResult.error || (diagnosticResult.uiErrorKey ? tV951(diagnosticResult.uiErrorKey) : diagnosticResult.uiResultKey ? tV951(diagnosticResult.uiResultKey, diagnosticResult.uiResultParams) : tV951("diagnostics.result", { stage: diagnosticResult.stage, result: diagnosticResult.result, creator: diagnosticResult.creatorScopeName || "n/a" })) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "letters-list", children: [
         groups.generating.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -19922,7 +19921,7 @@ function LettersStatusModal({ onClose }) {
         groups.cancelled.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
           LetterGroup,
           {
-            title: "已清除记录",
+            title: tV951("status.clearedRecords"),
             letters: [...groups.cancelled],
             icon: "🗑️",
             expandedLetters,
@@ -19994,8 +19993,9 @@ function LetterItem({
   retryingLetterId,
   t
 }) {
+  const tV951 = (key, params) => v95Runtime.t(`legacyUiV951.letters.${key}`, params);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "letter-item", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "letter-header", onClick: onToggle, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "letter-header", onClick: onToggle, children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "letter" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "expand-icon", children: isExpanded ? "▼" : "▶" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "letter-id", children: letter.letterId }),
       letter.characterName && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "character-name", children: letter.characterName }),
@@ -20117,7 +20117,7 @@ function LetterItem({
               ":"
             ] }),
             " ",
-            Number.isFinite(letter.expectedDeliveryDay) ? letter.expectedDeliveryDay : "日期数据异常"
+            Number.isFinite(letter.expectedDeliveryDay) ? letter.expectedDeliveryDay : tV951("status.dateDataInvalid")
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
@@ -20128,27 +20128,27 @@ function LetterItem({
             letter.currentDay
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Payload 游戏日：" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: tV951("date.payloadGameDay") }),
             letter.payloadGameDay ?? "—"
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Tracker 游戏日：" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: tV951("date.trackerGameDay") }),
             letter.trackerGameDayAtCreation ?? "—"
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Reconciled 游戏日：" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: tV951("date.reconciledGameDay") }),
             letter.reconciledGameDayAtCreation ?? "—"
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "投递基准日：" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: tV951("date.deliveryBaseDay") }),
             letter.deliveryBaseDay ?? "—"
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "日期偏差：" }),
-            Number.isFinite(letter.dateDelta) ? `${letter.dateDelta} 天` : "—"
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: tV951("date.dateDelta") }),
+            Number.isFinite(letter.dateDelta) ? tV951("date.days", { count: letter.dateDelta }) : "—"
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "日期来源：" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: tV951("date.dateSource") }),
             letter.dateSourceDecision || "—"
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -20157,7 +20157,7 @@ function LetterItem({
               ":"
             ] }),
             " ",
-            Number.isFinite(letter.daysUntilDelivery) ? letter.daysUntilDelivery : "日期数据异常"
+            Number.isFinite(letter.daysUntilDelivery) ? letter.daysUntilDelivery : tV951("status.dateDataInvalid")
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
@@ -20168,7 +20168,7 @@ function LetterItem({
             letter.isLate ? t("lettersModal.yes") : t("lettersModal.no")
           ] })
         ] }),
-        letter.dateSourceEvent === "DATE_SOURCE_DIVERGENCE" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "error-message", children: "⚠ Payload 发送日与当前游戏日期不一致；已记录偏差，投递日仍按 Payload sendDay + delay 计算" })
+        letter.dateSourceEvent === "DATE_SOURCE_DIVERGENCE" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "error-message", children: tV951("date.divergence") })
       ] })
     ] })
   ] });
@@ -20214,7 +20214,7 @@ const SettingsView = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: t("settings.globalApplicationSettings") }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(V95UiSettings, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "globalStreamEnabled", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "globalStreamEnabled", children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "settings" }),
         t("settings.enableStreamingGlobally"),
         ":"
       ] }),
@@ -20316,9 +20316,9 @@ const SettingsView = () => {
       /* @__PURE__ */ jsxRuntimeExports.jsx("small", { style: { display: "block", marginTop: "4px", opacity: 0.7 }, children: t("settings.allowPrereleaseHelp") })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "developerMode", children: "开发者模式:" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "developerMode", children: v95Runtime.t("legacyUiV951.letters.settings.developerMode") }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", id: "developerMode", name: "developerMode", checked: developerMode, onChange: handleDeveloperModeToggle }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("small", { style: { display: "block", marginTop: "4px", opacity: 0.7 }, children: "显示世界书诊断、原始 ID 与技术信息；默认关闭，不改变生产召回行为。" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("small", { style: { display: "block", marginTop: "4px", opacity: 0.7 }, children: v95Runtime.t("legacyUiV951.letters.settings.developerModeHelp") })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("hr", {}),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group letter-management", children: [
@@ -20337,7 +20337,7 @@ const SettingsView = () => {
   ] });
 };
 const ActionsView = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [allActions, setAllActions] = reactExports.useState([]);
   const [hideDisabled, setHideDisabled] = reactExports.useState(false);
   const [isLoading, setIsLoading] = reactExports.useState(true);
@@ -20380,7 +20380,7 @@ const ActionsView = () => {
     loadActionApprovalSettings();
   }, [getActionApprovalSettings]);
   const visibleActions = reactExports.useMemo(() => {
-    let list = allActions;
+    let list = allActions.map((action) => ({ ...action, title: action.localizedTitles?.[(i18n.language || "").startsWith("zh") ? "zh-CN" : "en-US"] || action.title }));
     if (hideDisabled) {
       list = list.filter((a) => !a.disabled);
     }
@@ -20392,7 +20392,7 @@ const ActionsView = () => {
       if (a.scope !== b.scope) return a.scope === "standard" ? -1 : 1;
       return a.title.localeCompare(b.title);
     });
-  }, [allActions, hideDisabled, showOnlyInvalid]);
+  }, [allActions, hideDisabled, showOnlyInvalid, i18n.language]);
   const toggleDisabled = async (id, current) => {
     try {
       await window.actionsAPI?.setDisabled?.(id, !current);
@@ -20629,7 +20629,7 @@ const ActionsView = () => {
                   children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: AlertIcon, alt: "Destructive indicator" })
                 }
               ),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "action-title-group", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "action-title-group", children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "action" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   "span",
                   {
@@ -20735,13 +20735,13 @@ const PromptPreview = ({ onCharacterChange, promptSettingsVersion }) => {
   };
   if (!conversationData) {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "prompt-preview", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "prompt-preview-header", children: /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: t("promptPreview.promptPreview") }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "prompt-preview-header", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "edit" }), t("promptPreview.promptPreview")] }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "prompt-preview-content", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: t("promptPreview.noActiveConversation") }) })
     ] });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "prompt-preview", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "prompt-preview-header", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: t("promptPreview.promptPreview") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "edit" }), t("promptPreview.promptPreview")] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "character-selector", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
           t("promptPreview.character"),
@@ -20771,7 +20771,7 @@ const PromptPreview = ({ onCharacterChange, promptSettingsVersion }) => {
           ] }),
           previewData.blocks.map((block, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `preview-block ${expandedBlocks.has(index) ? "expanded" : ""} ${block.error ? "has-error" : ""}`, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "block-header", onClick: () => toggleBlockExpanded(index), children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "block-title", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "block-title", children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "edit" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "expand-icon", children: expandedBlocks.has(index) ? "▼" : "▶" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: block.block.label }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "badge", children: block.block.type }),
@@ -20856,7 +20856,7 @@ const HandlebarsTextarea = ({
   ] });
 };
 const PromptsView = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const promptSettings = useConfigStore((state) => state.promptSettings);
   const letterPromptSettings = useConfigStore((state) => state.letterPromptSettings);
   const promptFiles = useConfigStore((state) => state.promptFiles);
@@ -21161,7 +21161,7 @@ const PromptsView = () => {
         ] });
       case "main":
       case "history":
-        return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: "This block uses the main prompt text or conversation history." });
+        return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: (i18n.language || "").startsWith("zh") ? "此区块使用主提示词文本或对话历史。" : "This block uses the main prompt text or conversation history." });
       default:
         return null;
     }
@@ -21187,7 +21187,7 @@ const PromptsView = () => {
               draggable: true,
               onDragStart: () => setDraggingId(block.id),
               children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "block-title", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "block-title", children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "edit" }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "drag-handle", children: "↕" }),
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
                     index + 1,
@@ -21195,7 +21195,7 @@ const PromptsView = () => {
                     block.label
                   ] }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "badge", children: block.type }),
-                  block.pinned && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "badge pinned", children: "pinned" })
+                  block.pinned && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "badge pinned", children: t("prompts.pinned") })
                 ] }),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "block-actions", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "toggle", children: [
@@ -21263,7 +21263,7 @@ const PromptsView = () => {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "main-prompt-card", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card-header", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: t("prompts.mainPrompt") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h4", { children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "edit" }), t("prompts.mainPrompt")] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mini-buttons", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: handleResetMain, children: t("prompts.resetToDefault") }) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -21395,7 +21395,8 @@ const CharacterKnowledgeUiMount = () => {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "character-knowledge-ui-host", ref: hostRef });
 };
 const SummariesManager = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const tV951 = (key, params) => v95Runtime.t(`legacyUiV951.summary.${key}`, params);
   const { run: readTask, contextVersion } = useV95ReadBoundary("memory");
   const getSummariesDashboardData = useConfigStore((state) => state.getSummariesDashboardData);
   const updateSummary = useConfigStore((state) => state.updateSummary);
@@ -21409,6 +21410,7 @@ const SummariesManager = () => {
   const [isRetryingSummaries, setIsRetryingSummaries] = reactExports.useState(false);
   const [regeneratingSummaryKey, setRegeneratingSummaryKey] = reactExports.useState(null);
   const [retryResult, setRetryResult] = reactExports.useState(null);
+  const setRetryUiMessage = (...v951Parts) => setRetryResult({ v951Parts });
   const [isLoadingSummaries, setIsLoadingSummaries] = reactExports.useState(false);
   const [bindingLegacySummaryId, setBindingLegacySummaryId] = reactExports.useState(null);
   const [bulkBindingKey, setBulkBindingKey] = reactExports.useState(null);
@@ -21453,7 +21455,7 @@ const SummariesManager = () => {
     const index = Number(resolvedSource?.summaryIndex ?? resolvedSource?.locator?.summaryIndex ?? resolvedSource?.summary?.summaryIndex);
     const verifiedContent = typeof resolvedSource?.content === "string" ? resolvedSource.content : resolvedSource?.summary?.content;
     if (!Number.isSafeInteger(ownerId) || ownerId <= 0 || !Number.isSafeInteger(counterpartId) || counterpartId <= 0 || !Number.isSafeInteger(index) || index < 0 || typeof verifiedContent !== "string") {
-      return { success: false, error: "source_locator_incomplete", message: "已验证来源未提供可定位的当前摘要记录。" };
+      return { success: false, error: "source_locator_incomplete", message: tV951("source.locatorIncomplete") };
     }
     try {
       const result = await readTask("dashboard", () => getSummariesDashboardData({ refresh: true }));
@@ -21466,11 +21468,11 @@ const SummariesManager = () => {
       const current = metadata?.summaries?.[index];
       const resolvedDate = resolvedSource?.summary?.date;
       if (!metadata || !current || current.content !== verifiedContent || resolvedDate && current.date !== resolvedDate) {
-        return { success: false, error: "source_unavailable_or_stale", message: "源摘要在定位前已变化；已刷新摘要列表，请重新打开事项来源。" };
+        return { success: false, error: "source_unavailable_or_stale", message: tV951("source.changed") };
       }
       const ordered = getSummaryDisplayEntries(metadata.summaries, sortByDate);
       const position = ordered.findIndex((entry) => entry.index === index);
-      if (position < 0) return { success: false, error: "source_unavailable_or_stale", message: "已刷新列表中找不到该来源摘要。" };
+      if (position < 0) return { success: false, error: "source_unavailable_or_stale", message: tV951("source.notFound") };
       const ownerKey = `player-${Number(metadata.playerId ?? ownerId)}`;
       const pairKey = `${Number(metadata.playerId ?? ownerId)}-${Number(metadata.characterId ?? counterpartId)}`;
       setSearchQuery("");
@@ -21481,7 +21483,7 @@ const SummariesManager = () => {
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       if (!result.isCurrent()) return { success: false, error: "source_unavailable_or_stale", message: v95Runtime.t("errors.STALE_CONTEXT") };
       const target = document.querySelector(`[data-pair-source-id="${ownerId}:${counterpartId}:${index}"]`);
-      if (!target) return { success: false, error: "source_row_not_rendered", message: "源摘要已验证，但当前页面未能展开对应记录；请刷新列表后重试。" };
+      if (!target) return { success: false, error: "source_row_not_rendered", message: tV951("source.rowUnavailable") };
       const importantMatters = target.querySelector(".summary-important-matters");
       const fullSummary = target.querySelector(".summary-full-content");
       const itemText = String(matchedItem?.text || "").trim();
@@ -21506,10 +21508,10 @@ const SummariesManager = () => {
       (importantMatters && !itemMismatch ? importantMatters : fullSummary || target).scrollIntoView({ behavior: "smooth", block: "center" });
       target.classList.add("pair-source-highlight");
       window.setTimeout(() => target.classList.remove("pair-source-highlight"), 3000);
-      if (itemMismatch) return { success: false, error: "source_item_not_rendered", message: "已验证并定位到原摘要，但当前事项显示与索引内容不完全一致；已展开全文，请核对原文后再编辑。" };
+      if (itemMismatch) return { success: false, error: "source_item_not_rendered", message: tV951("source.itemMismatch") };
       return { success: true };
-    } catch (error) {
-      return { success: false, error: "source_navigation_failed", message: `定位源摘要失败：${error instanceof Error ? error.message : "请刷新摘要列表后重试。"}` };
+    } catch {
+      return { success: false, error: "source_navigation_failed", message: tV951("source.navigationFailed") };
     }
   };
   const handleRetrySummaries = async () => {
@@ -21518,10 +21520,13 @@ const SummariesManager = () => {
     setRetryResult(null);
     try {
       const result = await window.conversationAPI.retryFailedSummaries();
-      setRetryResult(result.error || `本次恢复 ${result.recovered || 0} 项；失败 ${result.failed || 0} 项。${result.recoveryStatus?.balanceBlocked ? "服务商余额不足，请充值或更换摘要模型后重试。" : "失败记录保留恢复快照；已提交的 Narrative 不会重生成。"}`);
+      setRetryUiMessage(
+        result.error ? { key: "retry.failed" } : { key: "retry.recoveryResult", params: { recovered: result.recovered || 0, failed: result.failed || 0 }, separator: " " },
+        ...(result.error ? [] : [{ key: result.recoveryStatus?.balanceBlocked ? "retry.balanceBlocked" : "retry.preservedSnapshot" }])
+      );
       await loadSummaries(true);
-    } catch (error) {
-      setRetryResult("摘要或信件归档重试失败，请检查摘要模型配置及日志；恢复记录不会删除。");
+    } catch {
+      setRetryUiMessage({ key: "retry.failed" });
     } finally {
       setIsRetryingSummaries(false);
     }
@@ -21601,23 +21606,23 @@ const SummariesManager = () => {
       const result = await window.conversationAPI.regenerateSummary(ownerId, counterpartId, index, summary.content);
       if (!result?.success) {
         const messages = {
-          summary_regeneration_in_progress: "已有一篇摘要正在整理，请完成后再试。",
-          summary_regeneration_stale: "这篇摘要在等待期间已发生变化，未覆盖内容；请刷新后重试。",
-          summary_regeneration_no_change: "模型返回内容与原文相同，未覆盖原摘要。",
-          summary_regeneration_output_truncated: "模型输出被截断，原摘要未更改；可调高摘要 Token 上限后重试。",
-          summary_regeneration_output_incomplete: "模型没有完整结束生成，原摘要未更改；请检查服务商状态后重试。",
-          summary_regeneration_output_invalid: "模型没有返回可用正文，原摘要未更改。",
-          summary_model_unavailable: "摘要模型不可用，请先检查摘要模型配置。",
-          summary_request_budget_exceeded: "这篇摘要过长，超过当前模型上下文预算；原摘要未更改。",
-          official_recollection_is_not_regenerable: "官方追忆由 CK3 管理，不能从此处重新生成。"
+          summary_regeneration_in_progress: "regeneration.inProgress",
+          summary_regeneration_stale: "regeneration.stale",
+          summary_regeneration_no_change: "regeneration.noChange",
+          summary_regeneration_output_truncated: "regeneration.outputTruncated",
+          summary_regeneration_output_incomplete: "regeneration.outputIncomplete",
+          summary_regeneration_output_invalid: "regeneration.outputInvalid",
+          summary_model_unavailable: "regeneration.modelUnavailable",
+          summary_request_budget_exceeded: "regeneration.budgetExceeded",
+          official_recollection_is_not_regenerable: "regeneration.officialNotRegenerable"
         };
-        setRetryResult(`摘要整理失败：${messages[result?.error] || result?.error || "未知错误"}`);
+        setRetryUiMessage({ key: "regeneration.failurePrefix" }, { key: messages[result?.error] || "regeneration.unknown" });
         return;
       }
-      setRetryResult("摘要已由模型重新整理并保存。");
+      setRetryUiMessage({ key: "regeneration.succeeded" });
       await loadSummaries(true);
-    } catch (error) {
-      setRetryResult(`摘要整理失败，原文未更改：${error instanceof Error ? error.message : "请检查摘要模型配置及日志。"}`);
+    } catch {
+      setRetryUiMessage({ key: "regeneration.failedPreservedGeneric" });
     } finally {
       setRegeneratingSummaryKey(null);
     }
@@ -21642,14 +21647,18 @@ const SummariesManager = () => {
     const ownerId = Number(metadata.ownerId ?? metadata.playerId);
     const counterpartId = Number(metadata.counterpartId);
     const bindingId = summary.legacyBindingId;
-    if (!bindingId || !window.confirm(`确认将“${summaryPersonName(metadata.ownerName || metadata.playerName)} ↔ ${summaryPersonName(metadata.counterpartName || metadata.characterName)}”的 ${summary.date || "无日期"} 这篇旧摘要绑定到当前加载的战役？只修改此摘要；已有绑定和同文件其他摘要不受影响。`)) return;
+    if (!bindingId || !window.confirm(tV951("binding.confirmSingle", {
+      owner: summaryPersonName(metadata.ownerName || metadata.playerName),
+      counterpart: summaryPersonName(metadata.counterpartName || metadata.characterName),
+      date: summary.date || tV951("binding.noDate")
+    }))) return;
     setBindingLegacySummaryId(bindingId);
     try {
       const result = await window.conversationAPI.bindLegacySummaryCampaign(ownerId, counterpartId, [bindingId]);
       if (!result?.success) throw new Error(result?.error || "legacy_summary_binding_failed");
       await loadSummaries(true);
     } catch (error) {
-      alert(`旧摘要绑定失败：${error.message || "请确认已连接存档且两名角色属于当前战役。"}`);
+      alert(tV951("binding.failedSingle"));
     } finally {
       setBindingLegacySummaryId(null);
     }
@@ -21666,37 +21675,53 @@ const SummariesManager = () => {
         : await window.conversationAPI.previewLegacyConversationBinding(ownerId, counterpartId, metadata.folderName, metadata.conversationFile);
       if (!preview?.previewRevision) throw new Error(preview?.error || "legacy_summary_binding_preview_failed");
       if (!preview.bindableCount) {
-        alert(`扫描完成，没有可绑定的旧摘要。\n\n摘要：${preview.scannedSummaries || 0}\n已属于当前战役：${preview.alreadyCurrentCount || 0}\n属于其他战役：${preview.otherCampaignCount || 0}\n官方追忆：${preview.officialCount || 0}\n身份待核实：${preview.unresolvedCounterpartCount || 0}\n无效摘要/文件：${(preview.invalidSummaryCount || 0) + (preview.invalidFileCount || 0)}`);
+        alert([
+          tV951("binding.empty"), "",
+          tV951("binding.summaryCount", { count: preview.scannedSummaries || 0 }),
+          tV951("binding.alreadyCurrent", { count: preview.alreadyCurrentCount || 0 }),
+          tV951("binding.otherCampaign", { count: preview.otherCampaignCount || 0 }),
+          tV951("binding.officialCount", { count: preview.officialCount || 0 }),
+          tV951("binding.unresolved", { count: preview.unresolvedCounterpartCount || 0 }),
+          tV951("binding.invalid", { count: (preview.invalidSummaryCount || 0) + (preview.invalidFileCount || 0) })
+        ].join("\n"));
         return;
       }
+      const ownerName = summaryPersonName(metadata.ownerName || metadata.playerName);
+      const counterpartName = summaryPersonName(metadata.counterpartName || metadata.characterName);
       const scopeLabel = scope === "owner"
-        ? `“${summaryPersonName(metadata.ownerName || metadata.playerName)}”的全部旧摘要`
-        : `“${summaryPersonName(metadata.ownerName || metadata.playerName)} ↔ ${summaryPersonName(metadata.counterpartName || metadata.characterName)}”的全部旧摘要`;
+        ? tV951("binding.ownerScope", { owner: ownerName })
+        : tV951("binding.conversationScope", { owner: ownerName, counterpart: counterpartName });
       const previewText = scope === "owner"
-        ? `扫描对话文件：${preview.scannedFiles}\n扫描摘要：${preview.scannedSummaries}`
-        : `扫描摘要：${preview.scannedSummaries}`;
-      const detailText = `${previewText}\n待绑定旧摘要：${preview.bindableCount}\n已属于当前战役：${preview.alreadyCurrentCount}\n属于其他战役：${preview.otherCampaignCount}\n官方追忆：${preview.officialCount}\n身份待核实：${preview.unresolvedCounterpartCount}\n无效摘要/文件：${preview.invalidSummaryCount + preview.invalidFileCount}`;
-      if (!window.confirm(`确认将${scopeLabel}绑定到当前战役？\n\n当前战役：${preview.campaignToken}\n\n${detailText}\n\n本操作只修改待绑定的旧摘要，不覆盖已有 Campaign 归属，也不修改官方追忆。\n\n确认绑定 ${preview.bindableCount} 篇？`)) return;
+        ? `${tV951("binding.scanFiles", { count: preview.scannedFiles })}\n${tV951("binding.scanSummaries", { count: preview.scannedSummaries })}`
+        : tV951("binding.scanSummaries", { count: preview.scannedSummaries });
+      const detailText = `${previewText}\n${tV951("binding.pending", { count: preview.bindableCount })}\n${tV951("binding.alreadyCurrent", { count: preview.alreadyCurrentCount })}\n${tV951("binding.otherCampaign", { count: preview.otherCampaignCount })}\n${tV951("binding.officialCount", { count: preview.officialCount })}\n${tV951("binding.unresolved", { count: preview.unresolvedCounterpartCount })}\n${tV951("binding.invalid", { count: preview.invalidSummaryCount + preview.invalidFileCount })}`;
+      if (!window.confirm(tV951("binding.confirmBulk", { scope: scopeLabel, campaign: preview.campaignToken, details: detailText, count: preview.bindableCount }))) return;
       const result = scope === "owner"
         ? await window.conversationAPI.bindLegacyOwnerCampaign(ownerId, preview.campaignToken, preview.previewRevision)
         : await window.conversationAPI.bindLegacyConversationCampaign(ownerId, counterpartId, metadata.folderName, metadata.conversationFile, preview.campaignToken, preview.previewRevision);
       if (!result?.success) throw new Error(result?.error || "legacy_summary_bulk_binding_failed");
-      alert(`已完成旧摘要迁移${scope === "owner" ? `：${summaryPersonName(metadata.ownerName || metadata.playerName)}` : ""}\n扫描对话文件：${result.scannedFiles}\n扫描摘要：${result.scannedSummaries}\n成功绑定：${result.boundCount}\n已属于当前战役：${result.alreadyCurrentCount}\n其他战役跳过：${result.otherCampaignCount}\n官方追忆跳过：${result.officialCount}\n身份待核实：${result.unresolvedCounterpartCount}\n无效摘要/文件：${result.invalidSummaryCount + result.invalidFileCount}`);
+      alert([
+        `${tV951("binding.migrationComplete")}${scope === "owner" ? `：${ownerName}` : ""}`,
+        tV951("binding.scanFiles", { count: result.scannedFiles }),
+        tV951("binding.scanSummaries", { count: result.scannedSummaries }),
+        tV951("binding.success", { count: result.boundCount }),
+        tV951("binding.alreadyCurrentResult", { count: result.alreadyCurrentCount }),
+        tV951("binding.otherSkipped", { count: result.otherCampaignCount }),
+        tV951("binding.officialSkipped", { count: result.officialCount }),
+        tV951("binding.unresolved", { count: result.unresolvedCounterpartCount }),
+        tV951("binding.invalid", { count: result.invalidSummaryCount + result.invalidFileCount })
+      ].filter(Boolean).join("\n"));
       await loadSummaries(true);
     } catch (error) {
-      const message = error?.message === "legacy_binding_preview_stale"
-        ? "摘要数据在确认期间发生变化。未执行任何绑定，请重新扫描。"
-        : error?.message === "legacy_binding_conversation_not_active"
-          ? "当前没有已加载的 VOTC 游戏对话。请先在目标存档中触发一次 VOTC 对话，待游戏数据加载后再进行绑定。"
-          : error?.message === "legacy_binding_game_data_unavailable"
-            ? "当前 VOTC 对话的游戏数据尚不可用。请等待解析完成后重试；本次未修改摘要。"
-            : error?.message === "legacy_binding_campaign_not_loaded"
-              ? "当前游戏数据没有可确认的 Campaign 标识。请确认模组已输出 VOTC:CAMPAIGN，并重新触发对话；本次未修改摘要。"
-              : error?.message === "legacy_binding_conversation_changed"
-                ? "操作期间游戏对话已切换。未执行绑定，请重新扫描后重试。"
-                : error?.message === "legacy_summary_binding_owner_not_in_current_campaign"
-                  ? "当前存档中无法确认该人物归属，未执行绑定。"
-                  : `旧摘要批量绑定失败，未完成迁移：${error?.message || "请确认当前存档和角色信息。"}`;
+      const messages = {
+        legacy_binding_preview_stale: "unchangedDuringConfirm",
+        legacy_binding_conversation_not_active: "noConversation",
+        legacy_binding_game_data_unavailable: "gameDataUnavailable",
+        legacy_binding_campaign_not_loaded: "campaignUnavailable",
+        legacy_binding_conversation_changed: "conversationChanged",
+        legacy_summary_binding_owner_not_in_current_campaign: "ownerUnverified"
+      };
+      const message = tV951(`binding.${messages[error?.message] || "failedBulk"}`);
       alert(message);
     } finally {
       setBulkBindingKey(null);
@@ -21725,17 +21750,17 @@ const SummariesManager = () => {
       if (!normalizedSearchQuery) return { kind: "all", label: "", score: 0 };
       const exact = (value) => String(value ?? "").trim().toLocaleLowerCase() === normalizedSearchQuery;
       const includes = (value) => String(value ?? "").toLocaleLowerCase().includes(normalizedSearchQuery);
-      if (exact(metadata.ownerName) || exact(metadata.ownerId) || exact(metadata.folderName)) return { kind: "owner", label: "该人物的摘要目录", score: 100 };
-      if (exact(metadata.counterpartName) || exact(metadata.counterpartId)) return { kind: "counterpart", label: "他人与该人物的直接对话", score: 90 };
-      if ((metadata.participantNames || []).some(exact) || (metadata.participantIds || []).some(exact)) return { kind: "related", label: "其他摘要中提到该人物", score: 80 };
-      if (includes(metadata.ownerName) || includes(metadata.ownerId) || includes(metadata.folderName)) return { kind: "owner", label: "匹配人物目录", score: 70 };
-      if (includes(metadata.counterpartName) || includes(metadata.counterpartId) || includes(metadata.conversationFile)) return { kind: "counterpart", label: "匹配直接对话", score: 60 };
-      if ((metadata.participantNames || []).some(includes) || (metadata.participantIds || []).some(includes)) return { kind: "related", label: "匹配参与人物", score: 50 };
-      if ((metadata.summaries || []).some((summary) => includes(summary.content) || includes(summary.date))) return { kind: "related", label: "匹配摘要内容", score: 20 };
+      if (exact(metadata.ownerName) || exact(metadata.ownerId) || exact(metadata.folderName)) return { kind: "owner", label: tV951("search.ownerExact"), score: 100 };
+      if (exact(metadata.counterpartName) || exact(metadata.counterpartId)) return { kind: "counterpart", label: tV951("search.counterpartExact"), score: 90 };
+      if ((metadata.participantNames || []).some(exact) || (metadata.participantIds || []).some(exact)) return { kind: "related", label: tV951("search.relatedExact"), score: 80 };
+      if (includes(metadata.ownerName) || includes(metadata.ownerId) || includes(metadata.folderName)) return { kind: "owner", label: tV951("search.ownerPartial"), score: 70 };
+      if (includes(metadata.counterpartName) || includes(metadata.counterpartId) || includes(metadata.conversationFile)) return { kind: "counterpart", label: tV951("search.counterpartPartial"), score: 60 };
+      if ((metadata.participantNames || []).some(includes) || (metadata.participantIds || []).some(includes)) return { kind: "related", label: tV951("search.relatedPartial"), score: 50 };
+      if ((metadata.summaries || []).some((summary) => includes(summary.content) || includes(summary.date))) return { kind: "related", label: tV951("search.contentMatch"), score: 20 };
       return null;
     };
     return summaries2.map((metadata) => ({ ...metadata, searchMatch: classifySummarySearchMatch(metadata) })).filter((metadata) => metadata.searchMatch).sort((left, right) => right.searchMatch.score - left.searchMatch.score || String(left.ownerName).localeCompare(String(right.ownerName), "zh-CN"));
-  }, [summaries2, normalizedSearchQuery]);
+  }, [summaries2, normalizedSearchQuery, i18n.language]);
   const summaryGroups = reactExports.useMemo(() => {
     const groups = new Map();
     for (const metadata of filteredSummaries) {
@@ -21780,13 +21805,13 @@ const SummariesManager = () => {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(CharacterKnowledgeUiMount, {}),
     clearResult && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `clear-result ${clearResult.success ? "success" : "error"}`, children: clearResult.message }),
-    retryResult && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: retryResult }),
-    (recoveryStatus.pending > 0 || recoveryStatus.running) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: `待恢复：对话摘要 ${recoveryStatus.narrativePending || 0} 场，信件归档 ${recoveryStatus.letterPending || 0} 封。${recoveryStatus.running ? "后台正在生成，完成后请刷新。" : recoveryStatus.balanceBlocked ? "服务商报告余额不足；充值或更换摘要模型后重试。" : "可点击“重试失败摘要/信件归档”；已提交结果不重生成，已接受信件不重发。"}` }),
+    retryResult && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: Array.isArray(retryResult.v951Parts) ? retryResult.v951Parts.map((part) => `${tV951(part.key, part.params)}${part.separator || ""}`).join("") : retryResult }),
+    (recoveryStatus.pending > 0 || recoveryStatus.running) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "help-text", children: `${tV951("recovery.pending", { narrative: recoveryStatus.narrativePending || 0, letters: recoveryStatus.letterPending || 0 })} ${recoveryStatus.running ? tV951("recovery.running") : recoveryStatus.balanceBlocked ? tV951("recovery.balance") : `${tV951("recovery.retryHint")}${tV951("recovery.acceptedSafe")}`}` }),
     ...[[v95Runtime.t("legacyUi.summary.recallDiagnostics"), "recall"], [v95Runtime.t("legacyUi.summary.recoveryDiagnostics"), "recovery"], [v95Runtime.t("legacyUi.summary.providerCacheDiagnostics"), "providerCache"]].map(([label, key]) =>
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: label }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: "400px", overflow: "auto" },
-          children: incidentDiagnostics[key]?.length ? JSON.stringify(incidentDiagnostics[key], null, 2) : "暂无记录；完成一次对话请求后刷新。" })
+          children: incidentDiagnostics[key]?.length ? JSON.stringify(incidentDiagnostics[key], null, 2) : tV951("recovery.noDiagnostics") })
       ] }, key)),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "legacy-summary-overview", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memory-engine-title", children: [
@@ -21825,7 +21850,7 @@ const SummariesManager = () => {
     ] }),
     normalizedSearchQuery && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "search-result-stats", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: ["“", deferredSearchQuery.trim(), "”"] }),
-      "：本人目录 ", searchCounts.owner, " 个文件；他人直接对话 ", searchCounts.counterpart, " 个；其他相关摘要 ", searchCounts.related, " 个。目录已定位，仅首条正文自动展开。"
+      tV951("search.counts", { owner: searchCounts.owner, counterpart: searchCounts.counterpart, related: searchCounts.related })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-date-filter", role: "group", "aria-label": v95Runtime.t("legacyUi.summary.dateFilterAria"), style: { display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", margin: "12px 0" }, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { style: { display: "flex", alignItems: "center", gap: "6px" }, children: [v95Runtime.t("legacyUi.summary.startDate"), /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "date", value: summaryDateFrom, onChange: (event) => { setSummaryDateFrom(event.target.value); setSummaryPages({}); } })] }),
@@ -21851,7 +21876,7 @@ const SummariesManager = () => {
             },
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "expand-icon", children: isPlayerExpanded ? "▼" : "▶" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "player-name", children: [summaryPersonName(playerSummaries[0]?.ownerName || playerSummaries[0]?.playerName), /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { children: ["对话文件：", ownerSummaries.length, " | 摘要总数：", ownerTotalSummaries, " | 未绑定旧摘要：", ownerUnboundCount] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "summary-person-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "诊断详情" }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: ["Owner ID：", playerId, " · 目录：", playerSummaries[0]?.folderName || "未载入"] })] })] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "player-name", children: [summaryPersonName(playerSummaries[0]?.ownerName || playerSummaries[0]?.playerName), /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { children: [tV951("labels.conversationFileCount"), ownerSummaries.length, " | ", tV951("labels.summaryCount"), ownerTotalSummaries, " | ", tV951("labels.unboundCount"), ownerUnboundCount] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "summary-person-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: tV951("labels.diagnostics") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [tV951("labels.ownerId"), playerId, " · ", tV951("labels.directory"), playerSummaries[0]?.folderName || tV951("labels.notLoaded")] })] })] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "summary-count", children: [
                 playerSummaries.length,
                 " ",
@@ -21887,7 +21912,7 @@ const SummariesManager = () => {
           const isExpanded = expandedCharacters.has(characterKey);
           const counterpartName = summaryPersonName(metadata.counterpartName || metadata.characterName);
           const ownerName = summaryPersonName(metadata.ownerName || metadata.playerName);
-          const conversationLabel = `与${counterpartName}的对话`;
+          const conversationLabel = tV951("labels.conversationWith", { name: counterpartName });
           return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "character-summary-group", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs(
               "div",
@@ -21902,7 +21927,7 @@ const SummariesManager = () => {
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "expand-icon", children: isExpanded ? "▼" : "▶" }),
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "character-name", children: [conversationLabel, /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { className: "summary-route-label", children: [ownerName, " → ", counterpartName] })] }),
                   normalizedSearchQuery && metadata.searchMatch.kind !== "all" && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `summary-match-badge is-${metadata.searchMatch.kind}`, children: metadata.searchMatch.label }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "summary-person-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "诊断详情" }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: ["Owner ID：", metadata.ownerId ?? metadata.playerId, " · Counterpart ID：", metadata.counterpartId ?? metadata.characterId, " · 来源文件：", metadata.conversationFile || "未载入"] })] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "summary-person-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: tV951("labels.diagnostics") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [tV951("labels.ownerId"), metadata.ownerId ?? metadata.playerId, " · ", tV951("labels.counterpartId"), metadata.counterpartId ?? metadata.characterId, " · ", tV951("labels.sourceFile"), metadata.conversationFile || tV951("labels.notLoaded")] })] }),
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "summary-count", children: [
                     metadata.summaries.length,
                     " ",
@@ -21961,7 +21986,7 @@ const SummariesManager = () => {
               }),
               summaryPage.entries.map(({ summary, index }) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-item", "data-pair-source-id": `${Number(metadata.ownerId ?? metadata.playerId)}:${Number(metadata.counterpartId ?? metadata.characterId)}:${index}`, children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-header", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "summary-date", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "summary-date", children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "memory" }),
                   summary.sourceType === "CK3_OFFICIAL_RECOLLECTION" ? v95Runtime.t("legacyUi.summary.officialTag") : "📅 ",
                   summary.sourceType === "CK3_OFFICIAL_RECOLLECTION" ? null : summary.date
                 ] }),
@@ -22049,14 +22074,14 @@ const SummariesManager = () => {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "edit-info", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
-              "目录人物："
+              tV951("labels.directoryPerson")
             ] }),
             " ",
             summaryPersonName(editingEntry.ownerName),
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
-              "对话对象："
+              tV951("labels.conversationCounterpart")
             ] }),
             " ",
             summaryPersonName(editingEntry.counterpartName),
@@ -22070,8 +22095,8 @@ const SummariesManager = () => {
             editingEntry.index + 1
           ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "summary-person-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "诊断详情" }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: ["Owner ID：", editingEntry.playerId, " · Counterpart ID：", editingEntry.characterId] })] }),
-        editingEntry.sourceType === "CK3_OFFICIAL_RECOLLECTION" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "help-text", children: "官方追忆来自 CK3。本页修改作用于当前同步副本；开始新对话后，系统可能根据最新 CK3 日志重新覆盖。" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "summary-person-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: tV951("labels.diagnostics") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [tV951("labels.ownerId"), editingEntry.playerId, " · ", tV951("labels.counterpartId"), editingEntry.characterId] })] }),
+        editingEntry.sourceType === "CK3_OFFICIAL_RECOLLECTION" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "help-text", children: v95Runtime.t("legacyUiV951.summary.labels.officialRecollectionEditHelp") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "textarea",
           {
@@ -22253,8 +22278,8 @@ const SummariesView = () => {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "form-group", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: t("summaries.finalSummaryMaxTokens", { defaultValue: "最终摘要最大输出 Token" }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: t("summaries.finalSummaryMaxTokensHelp", { defaultValue: "范围 256–16384。该值会作为最终摘要模型请求的 max_tokens；输入完成后离开输入框即可保存。" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: v95Runtime.t("legacyUiV951.summary.finalSummaryMaxTokens") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: v95Runtime.t("legacyUiV951.summary.finalSummaryMaxTokensHelp") }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("input", { id: "finalSummaryMaxTokens", type: "number", min: 256, max: 16384, step: 1, value: localSettings.finalSummaryMaxTokens, onChange: (e) => setLocalSettings({ ...localSettings, finalSummaryMaxTokens: e.target.value }), onBlur: handleFinalSummaryMaxTokensBlur })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "info-card", children: [
@@ -22388,10 +22413,7 @@ const OptimizationView = () => {
   const missAttribution = report?.missAttribution || [];
   const changesSincePrevious = report?.changesSincePrevious || [];
   const recent = report?.recent || [];
-  const criticalActionRecall = report?.criticalActionRecall;
   const actionExperiments = report?.actionExperiments;
-  const criticalActionRows = criticalActionRecall?.byAction || [];
-  const criticalActionRecent = criticalActionRecall?.recent || [];
   const actionExperimentStages = actionExperiments?.stages || [];
   const actionUsage = byRequest.filter((item) => item.key.startsWith("action | ")).reduce((total2, item) => ({
     requests: total2.requests + item.requests,
@@ -22438,29 +22460,17 @@ const OptimizationView = () => {
     error && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-error", children: error }),
     isLoading && !report && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-loading", children: text("正在读取本地统计…", "Reading local analytics…") }),
     report && /* @__PURE__ */ jsxRuntimeExports.jsxs(React.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-metrics", children: metrics.map(([label, value, tone]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `optimization-metric ${tone}`, children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: value })] }, label)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-metrics", children: metrics.map(([label, value, tone]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `optimization-metric ${tone}`, children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "optimization" }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: value })] }, label)) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: "ACTION SYSTEM — Official VOTC 2.0.3" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("旧版动作模式与漏斗统计已停用；服务商 Token 仍按普通请求类型统计。", "Legacy action modes and funnel analytics are disabled; provider tokens remain available in the standard request tables.") })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("关键动作召回", "Critical Action Recall") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("旁路记录 9 个重点官方动作的可用性、合法目标、Selector 选择与执行结果。可用但未选择不自动算 SELECTOR_MISS，必须由带 Ground Truth 的实机或回归样例裁定。", "Observes availability, valid targets, selector choices, and execution for nine critical official actions. Available-but-unselected is not automatically a SELECTOR_MISS; a labeled in-game or regression ground truth is required.") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metrics", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("诊断轮次", "Diagnostic turns") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: formatTokens(criticalActionRecall?.requests) })] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("动作观测", "Action observations") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: formatTokens(criticalActionRecall?.observations) })] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("已选择", "Selected") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: formatTokens(criticalActionRecall?.selected) })] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("待 Ground Truth 裁定", "Awaiting ground truth") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: formatTokens(criticalActionRecall?.unassessedAvailableNotSelected) })] })
-        ] }),
-        criticalActionRows.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-empty", children: text("暂无关键动作诊断。完成一次 NPC 动作评估后刷新。", "No critical action diagnostics yet. Refresh after one NPC action evaluation.") }) : renderTable([text("动作", "Action"), text("可用 / 观测", "Available / observed"), text("已选择", "Selected"), text("可用时选择率", "Selection rate when available"), text("执行失败", "Effect failed")], criticalActionRows.map((item) => [item.actionId, `${formatTokens(item.available)} / ${formatTokens(item.observations)}`, formatTokens(item.selected), formatPercent(item.selectionRateWhenAvailable), formatTokens(item.effectFailed)]), "critical-action"),
-        criticalActionRecent.length > 0 && renderTable([text("时间", "Time"), text("动作", "Action"), text("来源 → 目标", "Source → target"), text("可用性", "Availability"), text("校验 / 执行", "Validation / effect"), text("分类", "Category")], criticalActionRecent.slice(0, 12).map((item) => [item.timestamp ? new Date(item.timestamp).toLocaleString(isChinese ? "zh-CN" : "en-US") : "—", item.actionId, `#${item.sourceCharacterId ?? "—"} → ${item.selectedTarget == null ? "—" : `#${item.selectedTarget}`}`, item.availabilityReason || "—", item.validationResult || "—", item.missCategory || item.groundTruthCategory || (item.wasAvailable && !item.selected ? text("待裁定", "Unassessed") : "—")]), "critical-recent")
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("历史动作实验统计（已退役）", "Historical action experiments (retired)") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("仅保留旧 A/B/C 实验记录，不代表当前生产配置；正式动作由 Official VOTC 2.0.3 执行。", "Retains old A/B/C records, not the current production configuration. Official VOTC 2.0.3 executes production actions.") }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metrics", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("Overlay 请求 / 实施", "Overlay requested / applied") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${formatTokens(actionExperiments?.overlayRequested)} / ${formatTokens(actionExperiments?.overlayApplied)}` })] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("Stable 请求 / 实施", "Stable requested / applied") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${formatTokens(actionExperiments?.stablePrefixRequested)} / ${formatTokens(actionExperiments?.stablePrefixApplied)}` })] })
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "optimization" }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("Overlay 请求 / 实施", "Overlay requested / applied") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${formatTokens(actionExperiments?.overlayRequested)} / ${formatTokens(actionExperiments?.overlayApplied)}` })] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "optimization" }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("Stable 请求 / 实施", "Stable requested / applied") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${formatTokens(actionExperiments?.stablePrefixRequested)} / ${formatTokens(actionExperiments?.stablePrefixApplied)}` })] })
         ] }),
         actionExperimentStages.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-empty", children: text("暂无历史动作实验记录。", "No historical action experiment records.") }) : renderTable([text("阶段", "Stage"), text("请求", "Requests"), text("平均输入", "Average input"), text("缓存命中率", "Cache hit rate"), text("平均未命中", "Average cache miss")], actionExperimentStages.map((item) => [item.stage, formatTokens(item.requests), formatTokens(item.averageInputTokens), formatPercent(item.cacheHitRate), formatNullableTokens(item.averageCacheMissTokens)]), "action-stage"),
         Object.keys(actionExperiments?.stablePrefixFailures || {}).length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text(`Stable Prefix 已安全回退：${Object.entries(actionExperiments.stablePrefixFailures).map(([reason, count]) => `${reason} × ${count}`).join("；")}`, `Stable Prefix safely failed open: ${Object.entries(actionExperiments.stablePrefixFailures).map(([reason, count]) => `${reason} × ${count}`).join("; ")}`) })
@@ -22468,9 +22478,9 @@ const OptimizationView = () => {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("动作 Token 分析", "Action Token Analytics") }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metrics", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("动作平均输入 Token", "Action Average Input Tokens") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: formatTokens(actionUsage.requests > 0 ? actionUsage.inputTokens / actionUsage.requests : 0) })] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("动作平均输出 Token", "Action Average Output Tokens") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: formatTokens(actionUsage.requests > 0 ? actionUsage.outputTokens / actionUsage.requests : 0) })] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("动作缓存命中率", "Action Cache Hit Rate") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: formatPercent(actionUsage.cacheHitTokens + actionUsage.cacheMissTokens > 0 ? actionUsage.cacheHitTokens / (actionUsage.cacheHitTokens + actionUsage.cacheMissTokens) : null) })] })
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "optimization" }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("动作平均输入 Token", "Action Average Input Tokens") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: formatTokens(actionUsage.requests > 0 ? actionUsage.inputTokens / actionUsage.requests : 0) })] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "optimization" }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("动作平均输出 Token", "Action Average Output Tokens") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: formatTokens(actionUsage.requests > 0 ? actionUsage.outputTokens / actionUsage.requests : 0) })] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "optimization" }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("动作缓存命中率", "Action Cache Hit Rate") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: formatPercent(actionUsage.cacheHitTokens + actionUsage.cacheMissTokens > 0 ? actionUsage.cacheHitTokens / (actionUsage.cacheHitTokens + actionUsage.cacheMissTokens) : null) })] })
         ] }),
         actionPromptBlocks.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-empty", children: text("暂无动作请求记录。完成一次动作评估后刷新。", "No action request records yet. Refresh after an action evaluation.") }) : renderTable([text("动作 Prompt 区块", "Action Prompt Block"), text("请求", "Requests"), text("区块自身估算 Token", "Estimated block-self tokens")], actionPromptBlocks.map((item) => [item.key.replace(/^action_(prompt|provider_schema) \| /, ""), formatTokens(item.requests), formatTokens(item.tokens)]), "action-block")
       ] }),
@@ -22722,10 +22732,10 @@ const ProviderDiagnosticsView = () => {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("原生命中", "Native cached"), "：", cacheEvidenceValue(entry.provider?.cacheHit), " · ", text("原生 miss", "Native miss"), "：", cacheEvidenceValue(entry.provider?.cacheMiss), " · ", text("派生 miss", "Derived miss"), "：", cacheEvidenceValue(entry.provider?.derivedCacheMissTokens)] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["Plan：", entry.plan?.evidenceStatus || "UNKNOWN", " · Owner：", entry.plan?.ownerEvidence || "UNKNOWN", " · ", text("fallback", "Fallback"), "：", entry.plan?.fallbackReason || "NONE"] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["Final request：", entry.effectiveRequest?.source || "UNKNOWN", " · fingerprint:", cacheEvidenceHash(entry.effectiveRequest?.fingerprint), " · route:", cacheEvidenceHash(entry.effectiveRequest?.endpointFingerprint), " · params:", cacheEvidenceHash(entry.effectiveRequest?.payloadParametersFingerprint), " · protocol:", entry.effectiveRequest?.protocol || "UNKNOWN", " · stream:", entry.effectiveRequest?.stream === true ? "true" : entry.effectiveRequest?.stream === false ? "false" : "UNKNOWN"] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["Provider break：", entry.provider?.nativeCacheBreakPosition?.source || "UNKNOWN", " · reasoning TTFT：", cacheEvidenceTime(entry.time?.reasoningTTFTMs), " · visible TTFT：", cacheEvidenceTime(entry.time?.visibleTTFTMs), " · ", text("首个变化块 hash", "First changed block hash"), "：", entry.local?.firstChangedBlockId || text("未知／多块", "unknown / multiple blocks"), " · ", text("稳定前缀候选", "Stable-prefix candidate"), "：", cacheEvidenceTokens(entry.local?.stablePrefixCandidateTokens), " Estimated"] })
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["Provider break：", entry.provider?.nativeCacheBreakPosition?.source || "UNKNOWN", " · reasoning TTFT：", cacheEvidenceTime(entry.time?.reasoningTTFTMs), " · visible TTFT：", cacheEvidenceTime(entry.time?.visibleTTFTMs), " · ", text("首个变化块 hash", "First changed block hash"), "：", entry.local?.firstChangedBlockId || text("未知／多块", "unknown / multiple blocks"), " · ", text("稳定前缀候选", "Stable-prefix candidate"), "：", cacheEvidenceTokens(entry.local?.stablePrefixCandidateTokens), " ", text("估算", "Estimated")] })
     ] })
   ] }, `${entry.requestKey || "cache-v2"}-${index}`);
-  const metric = (label, value) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: value })] }, label);
+  const metric = (label, value) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-metric", children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "optimization" }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: value })] }, label);
   const renderEntry = (entry, index) => {
     const diff = entry.realRequestDiff || {};
     const first = diff.firstDifferentMessage;
@@ -22733,19 +22743,19 @@ const ProviderDiagnosticsView = () => {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { children: [formatTime(entry.timestamp), " · ", entry.provider || "—", " / ", entry.model || "—", " · ", alignmentLabel(entry.alignmentStatus)] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostics", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("Conversation", "Conversation"), "：", diff.conversationId || "—", " · ", text("Responder", "Responder"), "：", diff.responderId || "—", " · ", text("状态", "Status"), "：", diff.comparisonStatus || "—"] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("间隔", "Interval"), "：", formatInterval(diff.intervalMs), " · Endpoint：", diff.sameEndpoint == null ? "—" : diff.sameEndpoint ? "SAME" : "DIFFERENT", " · Effective Params：", diff.sameEffectiveParameters == null ? "—" : diff.sameEffectiveParameters ? "SAME" : "DIFFERENT"] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("对话", "Conversation"), "：", diff.conversationId || "—", " · ", text("回应者", "Responder"), "：", diff.responderId || "—", " · ", text("状态", "Status"), "：", diff.comparisonStatus || "—"] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("间隔", "Interval"), "：", formatInterval(diff.intervalMs), " · ", text("端点", "Endpoint"), "：", diff.sameEndpoint == null ? "—" : diff.sameEndpoint ? "SAME" : "DIFFERENT", " · ", text("有效参数", "Effective Params"), "：", diff.sameEffectiveParameters == null ? "—" : diff.sameEffectiveParameters ? "SAME" : "DIFFERENT"] }),
         diff.changedFields?.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("参数变化", "Changed fields"), "：", diff.changedFields.join(", ")] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("上一 Prompt", "Previous Prompt"), "：", formatTokens(diff.previousEstimatedPromptTokens), " · ", text("当前 Prompt", "Current Prompt"), "：", formatTokens(diff.currentEstimatedPromptTokens), " · Conversation Prefix：", formatTokens(diff.estimatedCommonPrefixTokens), " Estimated"] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("Prompt Profile", "Prompt Profile"), "：", diff.promptProfile?.label || "—", " · ", text("静态 Token", "Static Tokens"), "：", formatTokens(diff.staticTokens), " · ", text("动态 Token", "Dynamic Tokens"), "：", formatTokens(diff.dynamicTokens)] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("上一 Prompt", "Previous Prompt"), "：", formatTokens(diff.previousEstimatedPromptTokens), " · ", text("当前 Prompt", "Current Prompt"), "：", formatTokens(diff.currentEstimatedPromptTokens), " · ", text("对话前缀", "Conversation Prefix"), "：", formatTokens(diff.estimatedCommonPrefixTokens), " ", text("估算", "Estimated")] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("提示词配置", "Prompt Profile"), "：", diff.promptProfile?.label || "—", " · ", text("静态 Token", "Static Tokens"), "：", formatTokens(diff.staticTokens), " · ", text("动态 Token", "Dynamic Tokens"), "：", formatTokens(diff.dynamicTokens)] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["Global Static：", formatTokens(diff.globalStaticTokens), " · Conversation Frozen：", formatTokens(diff.conversationFrozenTokens), " · Responder Frozen：", formatTokens(diff.responderFrozenTokens), " · Stable Kinship：", formatTokens(diff.stableKinshipTokens)] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("声明静态 / 实际不变前缀 / 动态尾部", "Declared static / actual invariant prefix / dynamic tail"), "：", formatTokens(diff.declaredStaticTokens), " / ", formatTokens(diff.actualStablePrefixTokens), " / ", formatTokens(diff.dynamicTailTokens)] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("当前 Prefix Fingerprint", "Current Prefix Fingerprint"), "：", diff.currentPrefixFingerprint || "—", " · ", text("上一 Prefix", "Previous Prefix"), "：", diff.previousPrefixFingerprint || "—", " · ", text("Prefix 变化", "Prefix changed"), "：", diff.prefixChanged == null ? "—" : diff.prefixChanged ? "YES" : "NO"] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("Route Scope Prefix", "Route Scope Prefix"), "：", formatTokens(diff.routeScopeEstimatedCommonPrefixTokens), " Estimated · Provider Cached：", formatTokens(entry.providerUsage?.cachedTokens), " · Ratio：", formatPercent(diff.cacheToEstimatedPrefixRatio)] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("路由作用域前缀", "Route Scope Prefix"), "：", formatTokens(diff.routeScopeEstimatedCommonPrefixTokens), " ", text("估算", "Estimated"), " · ", text("服务商缓存", "Provider Cached"), "：", formatTokens(entry.providerUsage?.cachedTokens), " · ", text("比例", "Ratio"), "：", formatPercent(diff.cacheToEstimatedPrefixRatio)] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("首个语义块变化", "First semantic block difference"), "：", diff.firstDifferentBlockId || "—", " · ", text("对齐", "Alignment"), "：", alignmentLabel(entry.alignmentStatus)] }),
-        entry.cacheDiagnosticsV2 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["Cache V2 · ", text("原生命中", "Native cached"), "：", entry.cacheDiagnosticsV2.provider?.cacheHit?.value == null ? entry.cacheDiagnosticsV2.provider?.cacheHit?.source || "—" : formatTokens(entry.cacheDiagnosticsV2.provider.cacheHit.value) + " (" + entry.cacheDiagnosticsV2.provider.cacheHit.source + ")", " · ", text("原生/派生 miss", "Native/derived miss"), "：", entry.cacheDiagnosticsV2.provider?.cacheMiss?.value == null ? entry.cacheDiagnosticsV2.provider?.cacheMiss?.source || "—" : formatTokens(entry.cacheDiagnosticsV2.provider.cacheMiss.value) + " (" + entry.cacheDiagnosticsV2.provider.cacheMiss.source + ")", " · ", text("本地稳定前缀候选", "Local stable-prefix candidate"), "：", formatTokens(entry.cacheDiagnosticsV2.local?.stablePrefixCandidateTokens), " Estimated · ", text("首个变化块 hash", "First-changed block hash"), "：", entry.cacheDiagnosticsV2.local?.firstChangedBlockId || text("未知／多块", "unknown / multiple blocks"), " · Provider break：", entry.cacheDiagnosticsV2.provider?.nativeCacheBreakPosition?.source || "UNKNOWN"] }),
+        entry.cacheDiagnosticsV2 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["Cache V2 · ", text("原生命中", "Native cached"), "：", entry.cacheDiagnosticsV2.provider?.cacheHit?.value == null ? entry.cacheDiagnosticsV2.provider?.cacheHit?.source || "—" : formatTokens(entry.cacheDiagnosticsV2.provider.cacheHit.value) + " (" + entry.cacheDiagnosticsV2.provider.cacheHit.source + ")", " · ", text("原生/派生 miss", "Native/derived miss"), "：", entry.cacheDiagnosticsV2.provider?.cacheMiss?.value == null ? entry.cacheDiagnosticsV2.provider?.cacheMiss?.source || "—" : formatTokens(entry.cacheDiagnosticsV2.provider.cacheMiss.value) + " (" + entry.cacheDiagnosticsV2.provider.cacheMiss.source + ")", " · ", text("本地稳定前缀候选", "Local stable-prefix candidate"), "：", formatTokens(entry.cacheDiagnosticsV2.local?.stablePrefixCandidateTokens), " ", text("估算", "Estimated"), " · ", text("首个变化块 hash", "First-changed block hash"), "：", entry.cacheDiagnosticsV2.local?.firstChangedBlockId || text("未知／多块", "unknown / multiple blocks"), " · Provider break：", entry.cacheDiagnosticsV2.provider?.nativeCacheBreakPosition?.source || "UNKNOWN"] }),
         entry.localPrefixDiagnostics?.method === "ordered_prefix_estimate_v1" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("旧 ordered_prefix_estimate_v1 首个未命中区块仅为按序估算，不代表真实 Provider 断点。", "Legacy ordered_prefix_estimate_v1 first-miss block is an ordered estimate, not the real Provider breakpoint.") }),
-        first && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("首个变化 Message", "First changed message"), "：#", diff.firstDifferentMessagePosition, " · Shared content：", formatTokens(first.commonPrefixEstimatedTokens), " Estimated · Shared chunks：", first.commonChunkCount] }),
+        first && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("首个变化 Message", "First changed message"), "：#", diff.firstDifferentMessagePosition, " · Shared content：", formatTokens(first.commonPrefixEstimatedTokens), " ", text("估算", "Estimated"), " · Shared chunks：", first.commonChunkCount] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("Estimated 由 VOTC TokenCounter 计算；8K 只是异常诊断阈值，不是 Provider 官方缓存阈值。", "Estimated values use the VOTC TokenCounter; 8K is a diagnostic threshold, not an official Provider cache threshold.") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "provider-diagnostic-real-messages", children: messages.map((message) => {
           const same = diff.comparisonStatus === "compared" && Number.isInteger(diff.sameMessageCountBeforeBreak) && message.position < diff.sameMessageCountBeforeBreak;
@@ -22753,7 +22763,7 @@ const ProviderDiagnosticsView = () => {
           return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-message", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: ["#", message.position, " ", message.blockId || "message", " · ", message.role] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: diff.comparisonStatus !== "compared" ? "—" : same ? "SAME" : changed ? "DIFFERENT" : "not reached" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [formatTokens(message.estimatedTokens), " Estimated · ", message.chunks?.length || 0, " chunks"] })
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [formatTokens(message.estimatedTokens), " ", text("估算", "Estimated"), " · ", message.chunks?.length || 0, " chunks"] })
           ] }, message.position);
         }) }),
         first && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [
@@ -22788,11 +22798,11 @@ const ProviderDiagnosticsView = () => {
         metric(text("同 NPC 可比较", "Same responder comparable"), summary.sameNpcRequests || 0),
         metric(text("跨 NPC", "Responder switched"), summary.switchedNpcRequests || 0),
         metric(text("高价值异常", "High-value anomalies"), summary.highValueAnomalies || 0),
-        metric(text("Weighted Hit", "Weighted Hit"), formatPercent(summary.weightedHitRate))
+        metric(text("加权命中率", "Weighted Hit"), formatPercent(summary.weightedHitRate))
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostic-summary", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("自动结论", "Automatic conclusion"), "：", conclusionLabel(summary.conclusion)] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("平均 Conversation Prefix", "Average Conversation Prefix"), "：", formatTokens(summary.averageEstimatedPrefixTokens), " Estimated · ", text("参数不一致", "Parameter mismatches"), "：", summary.effectiveParameterMismatches || 0, " · Endpoint mismatches：", summary.endpointMismatches || 0] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("平均 Conversation Prefix", "Average Conversation Prefix"), "：", formatTokens(summary.averageEstimatedPrefixTokens), " ", text("估算", "Estimated"), " · ", text("参数不一致", "Parameter mismatches"), "：", summary.effectiveParameterMismatches || 0, " · Endpoint mismatches：", summary.endpointMismatches || 0] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: conclusionLabel(summary.conclusion) })
       ] })
     ] }),
@@ -22801,7 +22811,7 @@ const ProviderDiagnosticsView = () => {
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("仅 Provider 原生 cached 与 input Token 参与同组加权率；缺失、非法、零输入、失败和取消均排除并计数。DERIVED miss、本地连续前缀候选与首个变化块是不同证据；真实 Provider 断点在未明确上报时为 UNKNOWN。旧 ordered_prefix_estimate_v1 是历史按序估算。", "Only provider-reported cached and input tokens enter the grouped weighted rate; missing, invalid, zero-input, failed, and cancelled requests are excluded and counted. DERIVED miss, local stable-prefix candidate, and first changed block are separate evidence. The real Provider breakpoint is UNKNOWN unless explicitly reported. Legacy ordered_prefix_estimate_v1 remains an ordered estimate.") }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: [text("样本", "Samples"), "：", cacheV2.summary?.sampleCount || 0, " · ", formatTime(cacheV2.summary?.window?.start), " – ", formatTime(cacheV2.summary?.window?.end)] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-table", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-row provider-diagnostic-real-head", children: [text("Provider / Model / Route / Mode", "Provider / Model / Route / Mode"), text("Requests / included", "Requests / included"), text("Weighted native hit", "Weighted native hit"), text("Zero / missing / invalid / inconsistent", "Zero / missing / invalid / inconsistent"), text("Unknown / excluded", "Unknown / excluded"), text("Failed / cancelled · derived miss", "Failed / cancelled · derived miss"), text("Avg reasoning / visible TTFT", "Avg reasoning / visible TTFT")] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-row provider-diagnostic-real-head", children: [text("服务商 / 模型 / 路由 / 模式", "Provider / Model / Route / Mode"), text("请求 / 纳入统计", "Requests / included"), text("原生加权命中率", "Weighted native hit"), text("零值 / 缺失 / 无效 / 不一致", "Zero / missing / invalid / inconsistent"), text("未知 / 已排除", "Unknown / excluded"), text("失败 / 已取消 · 派生未命中", "Failed / cancelled · derived miss"), text("平均推理 / 可见 TTFT", "Avg reasoning / visible TTFT")] }),
         ...cacheV2Groups.map((row) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-row", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: [row.route?.providerType || "—", " / ", row.route?.modelId || "—", " / ", row.route?.requestType || "—", " / ", row.stream === true ? "stream" : row.stream === false ? "non-stream" : "mode unknown", " / route:", row.route?.routeKey?.slice(0, 8) || "unknown", " / params:", row.effectiveParametersKey?.slice(0, 8) || "unknown"] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: [row.requestCount, " / ", row.hitRateIncludedRequests] }),
@@ -22813,7 +22823,7 @@ const ProviderDiagnosticsView = () => {
         ] }, row.groupKey))
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: text("匿名单次请求证据", "Anonymous per-request evidence") }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: [text("显示最近", "Showing latest"), " ", Math.min(cacheV2Entries.length, 30), " / ", cacheV2Entries.length, " · UNKNOWN 保持为 UNKNOWN；仅显示脱敏字段与哈希。"] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: [text("显示最近", "Showing latest"), " ", Math.min(cacheV2Entries.length, 30), " / ", cacheV2Entries.length, " · ", text("UNKNOWN 保持为 UNKNOWN；仅显示脱敏字段与哈希。", "UNKNOWN remains UNKNOWN; only redacted fields and hashes.")] }),
       ...cacheV2Entries.slice(0, 30).map(renderCacheV2Entry)
     ] }) || null,
     status && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
@@ -22848,9 +22858,9 @@ const ProviderDiagnosticsView = () => {
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("只捕获 requestType=chat；Action、Summary、Memory 和旧 Synthetic Probe 不进入此分析。进程重启后的第一条同 Scope 请求标记为 cold_local_baseline。", "Only requestType=chat is captured; Action, Summary, Memory, and old synthetic probes are excluded. The first same-scope request after restart is marked cold_local_baseline.") })
     ] }),
     providerRows.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("Provider A/B", "Provider A/B") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("服务商 A/B", "Provider A/B") }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-table", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-row provider-diagnostic-real-head", children: [text("Provider / Model", "Provider / Model"), text("请求", "Requests"), text("平均 Prefix", "Avg Prefix"), text("Weighted Hit", "Weighted Hit"), text("异常", "Anomalies")] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-row provider-diagnostic-real-head", children: [text("服务商 / 模型", "Provider / Model"), text("请求", "Requests"), text("平均 Prefix", "Avg Prefix"), text("加权命中率", "Weighted Hit"), text("异常", "Anomalies")] }),
         ...providerRows.map((row) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-row", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: row.provider + " / " + row.model }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: row.requests }),
@@ -22861,10 +22871,10 @@ const ProviderDiagnosticsView = () => {
       ] })
     ] }) || null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("Prefix Length Buckets", "Prefix Length Buckets") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("前缀长度分档", "Prefix Length Buckets") }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("按 Conversation / Responder Scope 的 Estimated 公共 Prefix 分桶；Provider Usage 是唯一账单级真值。", "Buckets use the Estimated Conversation / Responder shared prefix; Provider Usage is the only billing-grade truth.") }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-table", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-row provider-diagnostic-real-head", children: [text("Prefix", "Prefix"), text("请求", "Requests"), text("有缓存", "Cached"), text("0 命中", "Zero hit"), text("Weighted Hit", "Weighted Hit"), text("平均 Cached", "Avg cached")] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-row provider-diagnostic-real-head", children: [text("前缀", "Prefix"), text("请求", "Requests"), text("有缓存", "Cached"), text("0 命中", "Zero hit"), text("加权命中率", "Weighted Hit"), text("平均 Cached", "Avg cached")] }),
         ...prefixRows.map((row) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-row", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: row.label }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: row.requests }),
@@ -22878,7 +22888,7 @@ const ProviderDiagnosticsView = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "optimization-section", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("时间间隔 Buckets", "Interval Buckets") }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-table", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-row provider-diagnostic-real-head", children: [text("间隔", "Interval"), text("请求", "Requests"), text("Prefix", "Prefix"), text("0 命中", "Zero hit"), text("Weighted Hit", "Weighted Hit")] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-row provider-diagnostic-real-head", children: [text("间隔", "Interval"), text("请求", "Requests"), text("前缀", "Prefix"), text("0 命中", "Zero hit"), text("加权命中率", "Weighted Hit")] }),
         ...intervalRows.map((row) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-row", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: row.label }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: row.requests }),
@@ -22898,7 +22908,7 @@ const ProviderDiagnosticsView = () => {
       ] }),
       entries.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "optimization-empty", children: text("暂无真实 Chat Request Diff。开始一轮真实对话后这里会出现脱敏记录。", "No real Chat Request Diff yet. Start a real conversation to capture redacted records.") }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-table", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-row provider-diagnostic-real-head", children: [text("时间", "Time"), text("Provider", "Provider"), text("Responder", "Responder"), text("间隔", "Interval"), text("Prefix", "Prefix"), text("Cached", "Cached"), text("对齐", "Alignment")] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-row provider-diagnostic-real-head", children: [text("时间", "Time"), text("服务商", "Provider"), text("回应者", "Responder"), text("间隔", "Interval"), text("前缀", "Prefix"), text("缓存量", "Cached"), text("对齐", "Alignment")] }),
           ...entries.slice(0, 30).map((entry, index) => {
             const diff = entry.realRequestDiff || {};
             return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "provider-diagnostic-real-row", children: [
@@ -22995,7 +23005,17 @@ function WorldlineView() {
   const [usageReport, setUsageReport] = reactExports.useState(null);
   const [usageReportLoading, setUsageReportLoading] = reactExports.useState(false);
   const [usageReportError, setUsageReportError] = reactExports.useState("");
-  const [officialRecollection, setOfficialRecollection] = reactExports.useState(null);
+  const officialReaderRef = reactExports.useRef(null);
+  const [officialState, setOfficialState] = reactExports.useState({ status: "idle", value: null, responderId: null });
+  reactExports.useEffect(() => {
+    if (!window.worldlineAPI?.getOfficialRecollection) return;
+    const reader = createOfficialRecollectionReader({ runtime: v95Runtime, worldlineApi: window.worldlineAPI });
+    officialReaderRef.current = reader;
+    const unsubscribe = reader.subscribe(setOfficialState);
+    return () => { unsubscribe(); reader.dispose(); officialReaderRef.current = null; };
+  }, []);
+  reactExports.useEffect(() => { officialReaderRef.current?.setResponder(String(subjectiveResponderId || "")); }, [subjectiveResponderId]);
+  const officialRecollection = officialReaderRef.current?.getStateFor(String(subjectiveResponderId || ""), contextVersion)?.value || null;
   const [supplemental, setSupplemental] = reactExports.useState([]);
   const [activeTab, setActiveTab] = reactExports.useState("overview");
   const [showAdvancedSource, setShowAdvancedSource] = reactExports.useState(false);
@@ -23418,7 +23438,7 @@ function WorldlineView() {
     const rows = resolved.length ? resolved : matches;
     return rows?.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: rows.map((match, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row worldline-prompt-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${display(match.displayName || match.rawKey)}${match.id ? ` (#${match.id})` : ""}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(match.rawKey) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display((match.matchSources || []).join(", ")) })] }, `${match.id || match.rawKey || "match"}-${index}`)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: emptyText });
   };
-  const identityCandidateRows = (candidates, emptyText) => candidates?.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: candidates.map((candidate, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-candidate-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${text("身份候选", "Identity candidate")} #${display(candidateField(candidate, "runtimeId", "id"))}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("Runtime", "Runtime")}: ${display(candidateField(candidate, "runtimeId", "id"))}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("Definition", "Definition")}: ${display(candidateField(candidate, "definitionId"))}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("Raw", "Raw")}: ${display(candidateField(candidate, "rawName", "rawKey"))}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("Alias candidate", "Alias candidate")}: ${display(candidateField(candidate, "aliasCandidate"))}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("Score", "Score")}: ${display(candidateField(candidate, "score"))}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("Evidence", "Evidence")}: ${candidateEvidence(candidate)}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("Conflict", "Conflict")}: ${candidateConflicts(candidate)}` })] }, `${candidateField(candidate, "runtimeId", "id") || "candidate"}-${index}`)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: emptyText });
+  const identityCandidateRows = (candidates, emptyText) => candidates?.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: candidates.map((candidate, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-candidate-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${text("身份候选", "Identity candidate")} #${display(candidateField(candidate, "runtimeId", "id"))}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("运行时", "Runtime")}: ${display(candidateField(candidate, "runtimeId", "id"))}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("定义", "Definition")}: ${display(candidateField(candidate, "definitionId"))}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("原始值", "Raw")}: ${display(candidateField(candidate, "rawName", "rawKey"))}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("别名候选", "Alias candidate")}: ${display(candidateField(candidate, "aliasCandidate"))}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("评分", "Score")}: ${display(candidateField(candidate, "score"))}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("证据", "Evidence")}: ${candidateEvidence(candidate)}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("冲突", "Conflict")}: ${candidateConflicts(candidate)}` })] }, `${candidateField(candidate, "runtimeId", "id") || "candidate"}-${index}`)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: emptyText });
   const promptTokenBreakdownRows = (items, emptyText) => items?.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list worldline-token-breakdown", children: items.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row worldline-prompt-row worldline-token-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: display(item.label || item.id) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(item.id) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-token-count", children: `${display(item.tokens)} Token` })] }, `${item.id || "token"}-${index}`)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: emptyText });
   const resolverTraceValue = (value) => Array.isArray(value) ? value.map((item) => typeof item === "object" && item ? JSON.stringify(item) : item).join(" · ") : display(value);
   const promptResolverTraceRows = (resolverTrace) => {
@@ -23428,19 +23448,19 @@ function WorldlineView() {
     const historicalIndex = promptDiagnostics?.historicalIndex || {};
     const historicalCoverage = promptDiagnostics?.historicalCoverage || [];
     const rows = [
-      [text("Localization Reverse Lookup", "Localization Reverse Lookup"), localization.status],
-      [text("sourceComplete", "sourceComplete"), localization.sourceComplete],
-      [text("scannedFiles", "scannedFiles"), localization.scannedFiles],
-      [text("missingDescriptors", "missingDescriptors"), localization.missingDescriptors],
-      [text("matchedRawKeys", "matchedRawKeys"), localization.matchedRawKeys],
-      [text("Historical Alias Resolver", "Historical Alias Resolver"), historical.aliases],
-      [text("definitionId", "definitionId"), historical.matchedDefinitionIds],
-      [text("runtimeId", "runtimeId"), historical.matchedRuntimeIds],
-      [text("matchSource", "matchSource"), historical.matchSources || runtime.matchSource],
-      [text("Runtime Identity Resolution", "Runtime Identity Resolution"), runtime.status || historical.status],
-      [text("Historical Index", "Historical Index"), historicalIndex.status],
-      [text("Index sourceComplete", "Index sourceComplete"), historicalIndex.sourceComplete],
-      [text("Historical coverage", "Historical coverage"), historicalCoverage]
+      [text("本地化反向查找", "Localization Reverse Lookup"), localization.status],
+      [text("来源完整", "sourceComplete"), localization.sourceComplete],
+      [text("已扫描文件数", "scannedFiles"), localization.scannedFiles],
+      [text("缺失描述符", "missingDescriptors"), localization.missingDescriptors],
+      [text("匹配的原始键", "matchedRawKeys"), localization.matchedRawKeys],
+      [text("历史别名解析器", "Historical Alias Resolver"), historical.aliases],
+      [text("定义 ID", "definitionId"), historical.matchedDefinitionIds],
+      [text("运行时 ID", "runtimeId"), historical.matchedRuntimeIds],
+      [text("匹配来源", "matchSource"), historical.matchSources || runtime.matchSource],
+      [text("运行时身份解析", "Runtime Identity Resolution"), runtime.status || historical.status],
+      [text("历史索引", "Historical Index"), historicalIndex.status],
+      [text("索引来源完整", "Index sourceComplete"), historicalIndex.sourceComplete],
+      [text("历史覆盖范围", "Historical coverage"), historicalCoverage]
     ];
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-diagnostics worldline-resolver-trace", children: rows.map(([label, value], index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: label }), "：", resolverTraceValue(value)] }, `resolver-${index}`)) });
   };
@@ -23506,9 +23526,9 @@ function WorldlineView() {
     usageReportError && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-error", children: usageReportError }),
     latestChatObservation ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-observability-body", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-metric-grid", children: [observationMetric(text("最新对话输入", "Latest chat input"), formatObservationTokens(latestChatObservation.promptTokens || latestChatObservation.estimatedPromptTokens)), observationMetric(text("Provider 缓存命中", "Provider cache hit"), formatObservationTokens(latestChatObservation.cacheHitTokens)), observationMetric(text("Provider 缓存未命中", "Provider cache miss"), formatObservationTokens(latestChatObservation.cacheMissTokens)), observationMetric(text("Provider 缓存率", "Provider cache rate"), observationCacheRate), observationMetric(text("输出", "Output"), formatObservationTokens(latestChatObservation.completionTokens)), observationMetric(text("稳定前缀 / 动态后缀", "Stable prefix / dynamic suffix"), `${formatObservationTokens(latestChatObservation.stablePrefixTokens)} / ${formatObservationTokens(latestChatObservation.dynamicSuffixTokens)}`)] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("Memory / Worldline Token", "Memory / Worldline Tokens") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("记忆 / 世界线 Token", "Memory / Worldline Tokens") }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-metric-grid", children: [observationMetric(text("Memory 稳定", "Memory stable"), formatObservationTokens(latestChatObservation.memoryStableTokens)), observationMetric(text("Memory 直接关系", "Memory direct"), formatObservationTokens(latestChatObservation.memoryDirectTokens)), observationMetric(text("Memory 主题锚点", "Memory topic"), formatObservationTokens(latestChatObservation.memoryTopicTokens)), observationMetric(text("Memory 回合召回", "Memory turn recall"), formatObservationTokens(latestChatObservation.memoryTurnRecallTokens)), observationMetric(text("Worldline 稳定", "Worldline stable"), formatObservationTokens(latestChatObservation.worldStableTokens)), observationMetric(text("Worldline 回合召回", "Worldline turn recall"), formatObservationTokens(latestChatObservation.worldTurnRecallTokens))] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("Cache / Latency", "Cache / Latency") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("缓存 / 延迟", "Cache / Latency") }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-metric-grid", children: [observationMetric(text("Worldline shared 缓存", "Worldline shared cache"), formatObservationCache(latestChatObservation.worldSharedCacheHit)), observationMetric(text("Worldline subjective 缓存", "Worldline subjective cache"), formatObservationCache(latestChatObservation.worldSubjectiveCacheHit)), observationMetric(text("Memory 召回耗时", "Memory recall"), formatObservationMs(latestChatObservation.memoryRecallMs)), observationMetric(text("Worldline 检索耗时", "Worldline retrieval"), formatObservationMs(latestChatObservation.worldRetrievalMs)), observationMetric(text("Worldline policy 耗时", "Worldline policy"), formatObservationMs(latestChatObservation.worldPolicyMs)), observationMetric(text("Prompt 构建耗时", "Prompt build"), formatObservationMs(latestChatObservation.promptBuildMs))] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-observability-caption", children: `${text("来源", "Source")}: ${display(latestChatObservation.character || latestChatObservation.characterId)} · ${latestChatObservation.timestamp ? new Date(latestChatObservation.timestamp).toLocaleString(isChinese ? "zh-CN" : "en-US") : "—"} · ${text("已识别", "recognized")} ${instrumentedChatObservations.length} ${text("条带观测字段的对话记录", "instrumented chat records")}` })
     ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: text("尚无带观测字段的对话记录；完成一次对话后刷新。", "No instrumented chat records yet. Complete a chat, then refresh.") })
@@ -23532,7 +23552,7 @@ function WorldlineView() {
       ].map(([metricLabel, value]) => metric(metricLabel, value)) }),
       Number(view.secretBlockedCount || 0) > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-note worldline-secret-filtered", children: text("有若干内容因该角色未知而未提供。", "Some content was withheld because this responder is not authorized to know it.") }),
       view.candidateSetComplete === false && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-note worldline-semantic-warning", children: text("候选集不完整；未将缺失项当作已知事实。", "The candidate set is incomplete; missing items were not treated as known facts.") }),
-      facts.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: text("当前没有可向该角色展示的已知事实。", "No allowed facts are available for this responder.") }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list worldline-subjective-facts", children: facts.map((fact, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [
+      facts.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: text("当前没有可向该角色展示的已知事实。", "No allowed facts are available for this responder.") }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list worldline-subjective-facts", children: facts.map((fact, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "worldbook" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: subjectiveLevelLabel(fact.knowledgeLevel) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(fact.field) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: fact.value === null || fact.value === undefined || fact.value === "" ? text("已授权事实（正文未在此处展开）", "Authorized fact (content not expanded here)") : display(fact.value) }),
@@ -23540,7 +23560,7 @@ function WorldlineView() {
       ] }, `${keyPrefix}-${fact.factId || index}`)) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details worldline-subjective-developer", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("展开开发者诊断（仅 opaque ID / reason）", "Developer diagnostics (opaque ID / reason only)") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: diagnosticsRows.length ? diagnosticsRows.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(item.factId) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(item.decision) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(item.reason) })] }, `${keyPrefix}-diagnostic-${item.factId || index}`)) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: text("没有需要展开的过滤诊断。", "No filtered diagnostics to expand.") }) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: diagnosticsRows.length ? diagnosticsRows.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "worldbook" }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(item.factId) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(item.decision) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(item.reason) })] }, `${keyPrefix}-diagnostic-${item.factId || index}`)) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: text("没有需要展开的过滤诊断。", "No filtered diagnostics to expand.") }) })
       ] })
     ] });
   };
@@ -23548,13 +23568,13 @@ function WorldlineView() {
   const inspectorRelationStatusLabel = (status) => ({ RELATION_AMBIGUOUS: text("亲属关系存在多个候选", "Multiple relation candidates"), RELATION_GENDER_CONFLICT: text("亲属性别证据冲突", "Relation gender conflict"), RELATION_SOURCE_INCOMPLETE: text("亲属候选过多，未作唯一判定", "Relation candidate set is incomplete") }[status] || inspectorStatusLabel(status));
   const inspectorDifferenceLabel = (code) => ({ AGE_WORLDLINE_SHIFT: text("年龄 / 出生日期差异", "Age / birth-date difference"), FATHER_DIFFERENT: text("父系差异", "Father differs"), MOTHER_DIFFERENT: text("母系差异", "Mother differs"), SPOUSE_DIFFERENT: text("配偶差异", "Spouse differs"), CHILDREN_DIFFERENT: text("子女差异", "Children differ") }[code] || display(code));
   const entityKinshipInspectorPanel = () => !developerMode ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-entity-inspector", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-section-heading", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("Entity & Kinship Inspector", "Entity & Kinship Inspector") }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-scope-note", children: text("仅开发者诊断", "Developer diagnostics only") })] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-section-heading", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("人物与亲属关系检查器", "Entity & Kinship Inspector") }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-scope-note", children: text("仅开发者诊断", "Developer diagnostics only") })] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-note", children: text("先以 Runtime ID 确定人物，再读取当前状态与 CK3 亲属关系；历史差异不会替换当前游戏事实。", "Resolve the runtime entity first, then inspect current state and CK3 kinship; historical differences never replace current game truth.") }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-prompt-query worldline-subjective-query", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: inspectorQuery, onChange: (event) => setInspectorQuery(event.target.value), placeholder: text("输入人物姓名或 Definition ID（可选）", "Enter a name or Definition ID (optional)") }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: inspectorResponderId, onChange: (event) => setInspectorResponderId(event.target.value), placeholder: text("Responder Runtime ID", "Responder Runtime ID") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: inspectorResponderId, onChange: (event) => setInspectorResponderId(event.target.value), placeholder: text("回应者 Runtime ID", "Responder Runtime ID") }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: inspectorResponderId, onChange: (event) => setInspectorResponderId(event.target.value), "aria-label": text("检查回应角色", "Inspector responder"), children: [/* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: text("选择回应角色", "Select responder") }), subjectiveResponders.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: item.responderId, children: `${item.displayName || `#${item.responderId}`} · ${item.responderId}` }, `inspector-responder-${item.responderId}`))] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: inspectorTargetId, onChange: (event) => setInspectorTargetId(event.target.value), placeholder: text("Target Runtime ID", "Target Runtime ID") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: inspectorTargetId, onChange: (event) => setInspectorTargetId(event.target.value), placeholder: text("目标 Runtime ID", "Target Runtime ID") }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: inspectorTargetId, onChange: (event) => setInspectorTargetId(event.target.value), "aria-label": text("检查目标角色", "Inspector target"), children: [/* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: text("选择目标角色", "Select target") }), subjectiveResponders.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: item.responderId, children: `${item.displayName || `#${item.responderId}`} · ${item.responderId}` }, `inspector-target-${item.responderId}`))] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: runEntityKinshipInspector, disabled: entityInspectorLoading, children: entityInspectorLoading ? text("读取中…", "Reading…") : text("运行人物检查器", "Inspect entity") })
     ] }),
@@ -23567,8 +23587,8 @@ function WorldlineView() {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-semantic-item", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: text("历史差异", "Historical difference") }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: inspectorStatusLabel(entityInspector.difference?.status) }), /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: `${text("条目", "Items")}：${entityInspector.difference?.items?.length || 0}` })] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-metric-grid", children: [
-        [text("Responder", "Responder"), `${display(entityInspector.responder?.displayName)} (#${display(entityInspector.responder?.runtimeId)})`],
-        [text("Target", "Target"), `${display(entityInspector.target?.displayName)} (#${display(entityInspector.target?.runtimeId)})`],
+        [text("回应者", "Responder"), `${display(entityInspector.responder?.displayName)} (#${display(entityInspector.responder?.runtimeId)})`],
+        [text("目标", "Target"), `${display(entityInspector.target?.displayName)} (#${display(entityInspector.target?.runtimeId)})`],
         [text("存活状态", "Life status"), inspectorStatusLabel(entityInspector.state?.lifeStatus)],
         [text("性别", "Gender"), `${display(entityInspector.state?.gender)} · ${display(entityInspector.state?.genderStatus)}`],
         [text("年龄", "Age"), `${display(entityInspector.state?.age)} (${display(entityInspector.state?.ageLabel)})`],
@@ -23581,10 +23601,10 @@ function WorldlineView() {
         [text("Kinship 缓存范围", "Kinship cache scope"), display(entityInspector.profiling.kinshipCacheScope)]
       ].map(([label, value]) => metric(label, value)) }),
       entityInspector.state?.death && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-note worldline-semantic-warning", children: `${text("已故亲属", "Deceased relative")}：${display(entityInspector.state.death)}` }),
-      entityInspector.identity?.runtimeCandidates?.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-list", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("同名候选", "Same-name candidates") }), entityInspector.identity.runtimeCandidates.map((candidate, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row worldline-candidate-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${display(candidate.displayName)} (#${display(candidate.runtimeId)})` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("Definition", "Definition")}: ${display(candidate.definitionId)}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("依据", "Evidence")}: ${display((candidate.evidence || []).map(item => item?.code || item).join(" · "))}` }), candidate.conflicts?.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-semantic-warning", children: `${text("冲突", "Conflict")}: ${display(candidate.conflicts.join(" · "))}` })] }, `inspector-candidate-${candidate.runtimeId}-${index}`))] }),
-      entityInspector.relation?.candidates?.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-list worldline-relation-candidates", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("关系候选", "Relation candidates") }), entityInspector.relation.candidates.map((candidate, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${display(candidate.name)} (#${display(candidate.runtimeId)})` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: inspectorRelationStatusLabel(entityInspector.relation.status) })] }, `inspector-relation-candidate-${candidate.runtimeId}-${index}`))] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-list", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("Relation Path", "Relation Path") }), entityInspector.relation?.path?.length ? entityInspector.relation.path.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: display(step.type) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${display(step.from)} → ${display(step.to)}` })] }, `inspector-path-${index}`)) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: text("没有结构化关系路径。", "No structured relation path.") })] }),
-      entityInspector.difference?.items?.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-list", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("历史差异（不改变当前身份）", "Historical differences (do not change current identity)") }), entityInspector.difference.items.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: inspectorDifferenceLabel(item.code) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(item.severity) })] }, `inspector-difference-${index}`))] }),
+      entityInspector.identity?.runtimeCandidates?.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-list", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("同名候选", "Same-name candidates") }), entityInspector.identity.runtimeCandidates.map((candidate, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row worldline-candidate-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${display(candidate.displayName)} (#${display(candidate.runtimeId)})` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("定义", "Definition")}: ${display(candidate.definitionId)}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("依据", "Evidence")}: ${display((candidate.evidence || []).map(item => item?.code || item).join(" · "))}` }), candidate.conflicts?.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-semantic-warning", children: `${text("冲突", "Conflict")}: ${display(candidate.conflicts.join(" · "))}` })] }, `inspector-candidate-${candidate.runtimeId}-${index}`))] }),
+      entityInspector.relation?.candidates?.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-list worldline-relation-candidates", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("关系候选", "Relation candidates") }), entityInspector.relation.candidates.map((candidate, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "worldbook" }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${display(candidate.name)} (#${display(candidate.runtimeId)})` }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: inspectorRelationStatusLabel(entityInspector.relation.status) })] }, `inspector-relation-candidate-${candidate.runtimeId}-${index}`))] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-list", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("关系路径", "Relation Path") }), entityInspector.relation?.path?.length ? entityInspector.relation.path.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "worldbook" }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: display(step.type) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${display(step.from)} → ${display(step.to)}` })] }, `inspector-path-${index}`)) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: text("没有结构化关系路径。", "No structured relation path.") })] }),
+      entityInspector.difference?.items?.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-list", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("历史差异（不改变当前身份）", "Historical differences (do not change current identity)") }), entityInspector.difference.items.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "worldbook" }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: inspectorDifferenceLabel(item.code) }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: display(item.severity) })] }, `inspector-difference-${index}`))] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("开发者原始检查数据", "Developer raw inspector data") }), /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { children: JSON.stringify(entityInspector, null, 2) })] })
     ] })
   ] });
@@ -23605,7 +23625,7 @@ function WorldlineView() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-view", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("世界书", "Worldline") }), /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text(`${VOTC_FEATURE_VERSION} · CK3 当前事实只读；历史检索与长期世界记忆按战役和存档分支隔离。`, `${VOTC_FEATURE_VERSION} · Current CK3 facts are read-only; historical retrieval and durable world memories are scoped by campaign and save branch.`) })] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `worldline-status worldline-status-${String(pipelineStatus || loadState).toLowerCase()}`, children: apiReady ? player.status(pipelineStatus) : text("暂不可用", "Unavailable") })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `worldline-status worldline-status-${String(pipelineStatus || loadState).toLowerCase()}`, children: jsxRuntimeExports.jsx(V95PageVisuals.StatusBadge, { code: apiReady ? pipelineStatus : "UNKNOWN", label: apiReady ? player.status(pipelineStatus) : text("暂不可用", "Unavailable") }) })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-source-card", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("年度存档", "Annual Save") }),
@@ -23623,7 +23643,7 @@ function WorldlineView() {
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("容器", "Container"), "：", display(source.container)] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("最后解析", "Last parse"), "：", display(source.lastParsedAt)] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: text("Checkpoint Status", "Checkpoint Status") }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: text("检查点状态", "Checkpoint Status") }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-metric-grid", children: [
           [text("状态", "Status"), statusLabel(checkpoint.status)], [text("检查点", "Checkpoint"), source.checkpointId || diagnostics?.checkpointId], [text("游戏日期", "Game Date"), checkpoint.gameDate], [text("总天数", "Total Days"), checkpoint.totalDays], [text("容器", "Container"), checkpoint.container], [text("文件大小", "File Size"), checkpoint.fileSize], [text("人物", "Characters"), checkpoint.characters], [text("头衔", "Titles"), checkpoint.titles], [text("进行中的战争", "Active Wars"), checkpoint.activeWars], [text("历史绑定", "Historical Bindings"), checkpoint.historicalBindings], [text("解析耗时", "Parse Duration"), checkpoint.parseDurationMs == null ? null : `${checkpoint.parseDurationMs} ms`]
         ].map(([label, value]) => metric(label, value)) })
@@ -23650,9 +23670,9 @@ function WorldlineView() {
       showAdvancedOverview && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-overview-advanced", children: [semanticDetails(text("主头衔详细信息", "Primary title details"), primaryTitleReference), semanticDetails(text("直属领主详细信息", "Direct liege details"), directLiegeReference), semanticDetails(text("最高领地详细信息", "Top realm details"), topRealmTitleReference), semanticDetails(text("最高领地统治者详细信息", "Top realm ruler details"), topRealmRulerReference)] })
     ] }),
     activeTab === "delta" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-tab-panel", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("年度变化", "Annual Delta") }), annualDelta.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-empty", children: text("当前检查点暂无年度变化数据。", "No annual-delta data exists for the current checkpoint.") }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: annualDelta.map((item, index) => { const semanticEvent = player.event(item); return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row worldline-delta-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: semanticEvent.title }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: player.date(item.date) }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { title: text("无法确认的参与者不会显示为数字人物。", "Unconfirmed participants are not shown as numeric characters."), children: [text("参与者：", "Actors: "), actorsLabel(item.actors)] }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag", children: semanticEvent.source }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semanticEvent.status }), semanticEvent.detail && /* @__PURE__ */ jsxRuntimeExports.jsx("small", { className: "worldline-delta-detail", children: semanticEvent.detail })] }, item.id || index); }) })] }),
-    activeTab === "knowledge" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-tab-panel", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("世界知识", "World Knowledge") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-source-legend", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag game-truth", children: player.source("GAME_TRUTH") }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag supplemental", children: player.source("SYSTEM_SUPPLEMENTAL") }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag player-canon", children: player.source("PLAYER_SUPPLEMENTAL") })] }), worldKnowledge.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-empty", children: text("暂无世界知识数据。", "No world-knowledge data yet.") }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: worldKnowledge.map((item, index) => { const semanticKnowledge = player.knowledge(item); return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: semanticKnowledge.title }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semanticKnowledge.value }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag", children: semanticKnowledge.source }), semanticKnowledge.visibility && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semanticKnowledge.visibility })] }, item.id || index); }) })] }),
-    activeTab === "historical" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-tab-panel", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("历史人物映射", "Historical Character Mapping") }), /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-note", children: text("系统尝试把 CK3 当前角色与历史人物定义对应起来。存在歧义时不会自动猜测。", "The system maps current CK3 characters to historical figures without guessing when evidence is ambiguous.") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-binding-controls", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: bindingSearch, onChange: (event) => setBindingSearch(event.target.value), placeholder: text("搜索历史人物 / 当前角色", "Search historical figure / current character") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: bindingStatusFilter, onChange: (event) => setBindingStatusFilter(event.target.value), "aria-label": text("映射状态筛选", "Mapping status filter"), children: [/* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "ALL", children: text("全部状态", "All statuses") }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "DIRECT", children: player.identity("DIRECT") }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "LIVE_CONFIRMED", children: player.identity("LIVE_CONFIRMED") }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "CONFLICT", children: player.identity("CONFLICT") }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "AMBIGUOUS_PROVENANCE", children: player.identity("AMBIGUOUS_PROVENANCE") })] })] }), historicalBindingTotal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-binding-count", children: text(`显示 ${filteredHistoricalBindings.length} / ${historicalBindingTotal} 条映射`, `${filteredHistoricalBindings.length} / ${historicalBindingTotal} mappings shown`) }), historicalIdentity || identityCandidates.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-identity-resolution", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: text("身份判定", "Identity result") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("状态", "Status"), "：", identityStatusLabel(historicalIdentity?.status || (identityCandidates.length ? "AMBIGUOUS" : "NO_MATCH"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("候选数量", "Candidate count"), "：", identityCandidates.length] }), developerMode && /* @__PURE__ */ jsxRuntimeExports.jsx("details", { className: "worldline-advanced-details", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("开发者原始数据（Historical Identity Resolution）", "Developer raw data (Historical Identity Resolution)") }), historicalIdentity?.reason && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["reason：", display(historicalIdentity.reason)] }), identityCandidates.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: identityCandidates.map((candidate, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-candidate-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${text("身份候选", "Identity candidate")} #${display(candidateField(candidate, "runtimeId", "id"))}` }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Runtime", "Runtime"), "：", display(candidateField(candidate, "runtimeId", "id"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Definition", "Definition"), "：", display(candidateField(candidate, "definitionId"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Raw", "Raw"), "：", display(candidateField(candidate, "rawName", "rawKey"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Alias candidate", "Alias candidate"), "：", display(candidateField(candidate, "aliasCandidate"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Score", "Score"), "：", display(candidateField(candidate, "score"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Evidence", "Evidence"), "：", candidateEvidence(candidate)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("Conflict", "Conflict"), "：", candidateConflicts(candidate)] })] }, `${candidateField(candidate, "runtimeId", "id") || "candidate"}-${index}`)) })] }) ] }) : null, historicalBindings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-empty", children: bindingSearch && historicalCoverageStatus ? player.coverage(historicalCoverageStatus) : text("当前检查点暂无历史人物映射。", "No historical-character mappings exist for the current checkpoint.") }) : filteredHistoricalBindings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-empty", children: text("没有匹配当前筛选条件的映射。", "No mappings match the current filters.") }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: filteredHistoricalBindings.map((item, index) => { const semantic = player.historical(item); return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row worldline-binding-row worldline-semantic-binding-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: semantic.figure }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semantic.character }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semantic.status }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semantic.confidence }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semantic.note || "—" }), developerMode && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("开发者原始数据", "Developer raw data") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["figureKey：", display(item.figureKey)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["definitionId：", display(item.definitionId)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["runtimeId：", display(item.runtimeId)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["liveHistoryId：", display(item.liveHistoryId)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["provenance：", display(item.sourceMod || item.conflict)] })] })] })] }, item.figureKey || index); }) })] }),
-    activeTab === "diagnostics" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-tab-panel", children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-section-heading", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("诊断", "Diagnostics") }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-scope-note", children: text("高级 / 开发诊断", "Advanced / developer diagnostics") })] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("前端状态", "Frontend state"), "：", apiReady ? player.status(loadState === "ready" ? "ACTIVE" : loadState) : player.status("UNAVAILABLE")] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("检查点状态", "Checkpoint state"), "：", player.status(checkpoint.status)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("解析器", "Parser"), "：", statusLabel(diagnostics?.parserState)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("目录索引", "Definition catalog"), "：", statusLabel(diagnostics?.catalogStatus)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("分支边界", "Branch boundary"), "：", display(diagnostics?.branchStatus)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("当前 Delta / 总存储", "Current delta / stored"), "：", `${display(diagnostics?.deltaRevision)} / ${display(diagnostics?.deltaStoredTotal)}`] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("最近错误", "Last error"), "：", display(checkpoint.lastError || diagnostics?.lastError)] })] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-prompt-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: text("Prompt / World Recall 诊断", "Prompt / World Recall Diagnostics") }), /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-note", children: text("只读检查，不会启用 Prompt Default On，也不会修改存档或补充知识。", "Read-only inspection; it does not enable Prompt Default On or modify saves or supplemental knowledge.") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-prompt-query", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: promptQuery, onChange: (event) => setPromptQuery(event.target.value), placeholder: text("输入要检查的查询，例如：岳飞现在在哪里", "Enter a query, for example: Where is Yue Fei now?") }), /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: runPromptDiagnostics, disabled: promptDiagnosticsLoading, children: promptDiagnosticsLoading ? text("诊断中…", "Inspecting…") : text("运行诊断", "Run Diagnostics") })] }), promptDiagnostics?.available === false ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostic-summary worldline-error", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: text("结果摘要", "Result summary") }), /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: text("当前无法安全读取世界知识。", "World knowledge cannot be read safely right now.") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("展开原始原因", "Show raw reason") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("原因", "Reason"), "：", display(promptDiagnostics.reason)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("检查点", "Checkpoint"), "：", display(promptDiagnostics.checkpointAsOf)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("实时日期", "Live date"), "：", display(promptDiagnostics.liveDate)] })] })] }) : promptDiagnostics?.available ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-prompt-result", children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostic-summary", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: text("结果摘要", "Result summary") }), /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-metric-grid", children: [[text("查询", "Query"), promptSemantic.query], [text("识别对象", "Recognized object"), promptSemantic.recognizedObject || promptSemantic.query || "—"], [text("身份判定", "Identity"), promptSemantic.identity], [text("候选数量", "Candidate count"), promptSemantic.candidateCount], [text("查询结论", "Conclusion"), promptSemantic.conclusion], [text("原因", "Reason"), promptSemantic.reason || "—"]].map(([label, value]) => metric(label, value)) })] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostic-sources", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("命中来源", "Matched sources") }), /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-metric-grid", children: [[text("存档事实", "Save facts"), promptSemantic.sourceFacts], [text("玩家补充", "Player supplement"), promptSemantic.sourceSupplemental], [text("World Prompt Token", "World Prompt Token"), promptSemantic.tokens], [text("缓存", "Cache"), promptDiagnostics.cacheHit ? text("已命中", "Hit") : text("未命中", "Miss")]].map(([label, value]) => metric(label, value)) })] }), promptEntityResolutionPanel, promptHistoricalExplanationPanel, /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", onToggle: (event) => setShowPromptDetails(event.currentTarget.open), children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("展开开发者原始数据", "Show developer raw data") }), showPromptDetails && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [ /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("Query Analyzer 解析实体", "Query Analyzer Entities") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("Terms", "Terms"), "：", display((promptDiagnostics.queryAnalysis?.terms || []).join(" · "))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("Matched aliases", "Matched aliases"), "：", display((promptDiagnostics.queryAnalysis?.matchedAliases || []).join(" · "))] })] }), /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("Resolver 诊断", "Resolver Diagnostics") }), promptResolverTraceRows(promptDiagnostics.resolverTrace), identityCandidateRows((promptIdentityResolution?.candidates || []).slice(0, 50), text("没有身份候选。", "No identity candidates.")), /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { children: JSON.stringify(promptDiagnostics.queryPlan, null, 2) }), promptMatchRows(promptDiagnostics.queryAnalysis?.characters, text("未命中人物。", "No character matched.")), promptMatchRows(promptDiagnostics.queryAnalysis?.titles, text("未命中头衔。", "No title matched.")), /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("命中的 Game Truth", "Matched Game Truth") }), promptMatchRows(promptDiagnostics.gameTruth?.characters, text("未命中人物事实。", "No character Game Truth matched.")), promptMatchRows(promptDiagnostics.gameTruth?.titles, text("未命中头衔事实。", "No title Game Truth matched.")), /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("命中的 Supplemental", "Matched Supplemental") }), promptDiagnosticList(promptDiagnostics.supplemental, text("未命中 Supplemental。", "No Supplemental matched.")), /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("World Prompt Token 明细", "World Prompt Token Breakdown") }), promptTokenBreakdownRows(promptDiagnostics.tokenBreakdown, text("没有可计量的 World Prompt 区块。", "No measurable World Prompt blocks.")), /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("被裁剪条目", "Trimmed Items") }), promptDiagnosticList(promptDiagnostics.trimmedItems, text("没有被裁剪条目。", "No items were trimmed.")), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-actions", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("裁剪总数", "Trimmed total")}: ${promptDiagnostics.trimmedTotal ?? promptDiagnostics.trimmedItems?.length ?? 0} · ${text("页", "Page")} ${(promptDiagnostics.trimmedPage || 0) + 1}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: promptDiagnosticsLoading || !(promptDiagnostics.trimmedPage > 0), onClick: () => runPromptDiagnostics(promptDiagnostics.trimmedPage - 1), children: text("上一页", "Previous") }), /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: promptDiagnosticsLoading || ((promptDiagnostics.trimmedPage || 0) + 1) * (promptDiagnostics.trimmedPageSize || 50) >= Math.max(promptDiagnostics.trimmedTotal || 0, promptDiagnostics.candidateTotal || 0), onClick: () => runPromptDiagnostics((promptDiagnostics.trimmedPage || 0) + 1), children: text("下一页", "Next") })] })] })] })] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: text("输入查询后运行只读诊断。", "Enter a query and run the read-only diagnostics.") })] })] }),
+    activeTab === "knowledge" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-tab-panel", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("世界知识", "World Knowledge") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-source-legend", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag game-truth", children: player.source("GAME_TRUTH") }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag supplemental", children: player.source("SYSTEM_SUPPLEMENTAL") }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag player-canon", children: player.source("PLAYER_SUPPLEMENTAL") })] }), worldKnowledge.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-empty", children: text("暂无世界知识数据。", "No world-knowledge data yet.") }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: worldKnowledge.map((item, index) => { const semanticKnowledge = player.knowledge(item); return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row", children: [jsxRuntimeExports.jsx(V95PageVisuals.Icon, { name: "worldbook" }), /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: semanticKnowledge.title }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semanticKnowledge.value }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-source-tag", children: semanticKnowledge.source }), semanticKnowledge.visibility && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semanticKnowledge.visibility })] }, item.id || index); }) })] }),
+    activeTab === "historical" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-tab-panel", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("历史人物映射", "Historical Character Mapping") }), /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-note", children: text("系统尝试把 CK3 当前角色与历史人物定义对应起来。存在歧义时不会自动猜测。", "The system maps current CK3 characters to historical figures without guessing when evidence is ambiguous.") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-binding-controls", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: bindingSearch, onChange: (event) => setBindingSearch(event.target.value), placeholder: text("搜索历史人物 / 当前角色", "Search historical figure / current character") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: bindingStatusFilter, onChange: (event) => setBindingStatusFilter(event.target.value), "aria-label": text("映射状态筛选", "Mapping status filter"), children: [/* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "ALL", children: text("全部状态", "All statuses") }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "DIRECT", children: player.identity("DIRECT") }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "LIVE_CONFIRMED", children: player.identity("LIVE_CONFIRMED") }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "CONFLICT", children: player.identity("CONFLICT") }), /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "AMBIGUOUS_PROVENANCE", children: player.identity("AMBIGUOUS_PROVENANCE") })] })] }), historicalBindingTotal > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-binding-count", children: text(`显示 ${filteredHistoricalBindings.length} / ${historicalBindingTotal} 条映射`, `${filteredHistoricalBindings.length} / ${historicalBindingTotal} mappings shown`) }), historicalIdentity || identityCandidates.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-identity-resolution", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: text("身份判定", "Identity result") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("状态", "Status"), "：", identityStatusLabel(historicalIdentity?.status || (identityCandidates.length ? "AMBIGUOUS" : "NO_MATCH"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("候选数量", "Candidate count"), "：", identityCandidates.length] }), developerMode && /* @__PURE__ */ jsxRuntimeExports.jsx("details", { className: "worldline-advanced-details", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("开发者原始数据（Historical Identity Resolution）", "Developer raw data (Historical Identity Resolution)") }), historicalIdentity?.reason && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["reason：", display(historicalIdentity.reason)] }), identityCandidates.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: identityCandidates.map((candidate, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-candidate-card", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: `${text("身份候选", "Identity candidate")} #${display(candidateField(candidate, "runtimeId", "id"))}` }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("运行时", "Runtime"), "：", display(candidateField(candidate, "runtimeId", "id"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("定义", "Definition"), "：", display(candidateField(candidate, "definitionId"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("原始值", "Raw"), "：", display(candidateField(candidate, "rawName", "rawKey"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("别名候选", "Alias candidate"), "：", display(candidateField(candidate, "aliasCandidate"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("评分", "Score"), "：", display(candidateField(candidate, "score"))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("证据", "Evidence"), "：", candidateEvidence(candidate)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [text("冲突", "Conflict"), "：", candidateConflicts(candidate)] })] }, `${candidateField(candidate, "runtimeId", "id") || "candidate"}-${index}`)) })] }) ] }) : null, historicalBindings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-empty", children: bindingSearch && historicalCoverageStatus ? player.coverage(historicalCoverageStatus) : text("当前检查点暂无历史人物映射。", "No historical-character mappings exist for the current checkpoint.") }) : filteredHistoricalBindings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-empty", children: text("没有匹配当前筛选条件的映射。", "No mappings match the current filters.") }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-list", children: filteredHistoricalBindings.map((item, index) => { const semantic = player.historical(item); return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "worldline-row worldline-binding-row worldline-semantic-binding-row", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: semantic.figure }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semantic.character }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semantic.status }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semantic.confidence }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: semantic.note || "—" }), developerMode && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("开发者原始数据", "Developer raw data") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["figureKey：", display(item.figureKey)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["definitionId：", display(item.definitionId)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["runtimeId：", display(item.runtimeId)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["liveHistoryId：", display(item.liveHistoryId)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: ["provenance：", display(item.sourceMod || item.conflict)] })] })] })] }, item.figureKey || index); }) })] }),
+    activeTab === "diagnostics" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-tab-panel", children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-section-heading", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("诊断", "Diagnostics") }), /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "worldline-scope-note", children: text("高级 / 开发诊断", "Advanced / developer diagnostics") })] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("前端状态", "Frontend state"), "：", apiReady ? player.status(loadState === "ready" ? "ACTIVE" : loadState) : player.status("UNAVAILABLE")] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("检查点状态", "Checkpoint state"), "：", player.status(checkpoint.status)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("解析器", "Parser"), "：", statusLabel(diagnostics?.parserState)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("目录索引", "Definition catalog"), "：", statusLabel(diagnostics?.catalogStatus)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("分支边界", "Branch boundary"), "：", display(diagnostics?.branchStatus)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("当前 Delta / 总存储", "Current delta / stored"), "：", `${display(diagnostics?.deltaRevision)} / ${display(diagnostics?.deltaStoredTotal)}`] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("最近错误", "Last error"), "：", display(checkpoint.lastError || diagnostics?.lastError)] })] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-prompt-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: text("Prompt / World Recall 诊断", "Prompt / World Recall Diagnostics") }), /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-note", children: text("只读检查，不会启用 Prompt Default On，也不会修改存档或补充知识。", "Read-only inspection; it does not enable Prompt Default On or modify saves or supplemental knowledge.") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-prompt-query", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: promptQuery, onChange: (event) => setPromptQuery(event.target.value), placeholder: text("输入要检查的查询，例如：岳飞现在在哪里", "Enter a query, for example: Where is Yue Fei now?") }), /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: runPromptDiagnostics, disabled: promptDiagnosticsLoading, children: promptDiagnosticsLoading ? text("诊断中…", "Inspecting…") : text("运行诊断", "Run Diagnostics") })] }), promptDiagnostics?.available === false ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostic-summary worldline-error", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: text("结果摘要", "Result summary") }), /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: text("当前无法安全读取世界知识。", "World knowledge cannot be read safely right now.") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("展开原始原因", "Show raw reason") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("原因", "Reason"), "：", display(promptDiagnostics.reason)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("检查点", "Checkpoint"), "：", display(promptDiagnostics.checkpointAsOf)] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("实时日期", "Live date"), "：", display(promptDiagnostics.liveDate)] })] })] }) : promptDiagnostics?.available ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-prompt-result", children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostic-summary", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h5", { children: text("结果摘要", "Result summary") }), /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-metric-grid", children: [[text("查询", "Query"), promptSemantic.query], [text("识别对象", "Recognized object"), promptSemantic.recognizedObject || promptSemantic.query || "—"], [text("身份判定", "Identity"), promptSemantic.identity], [text("候选数量", "Candidate count"), promptSemantic.candidateCount], [text("查询结论", "Conclusion"), promptSemantic.conclusion], [text("原因", "Reason"), promptSemantic.reason || "—"]].map(([label, value]) => metric(label, value)) })] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostic-sources", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("命中来源", "Matched sources") }), /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-metric-grid", children: [[text("存档事实", "Save facts"), promptSemantic.sourceFacts], [text("玩家补充", "Player supplement"), promptSemantic.sourceSupplemental], [text("世界提示词 Token", "World Prompt Token"), promptSemantic.tokens], [text("缓存", "Cache"), promptDiagnostics.cacheHit ? text("已命中", "Hit") : text("未命中", "Miss")]].map(([label, value]) => metric(label, value)) })] }), promptEntityResolutionPanel, promptHistoricalExplanationPanel, /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "worldline-advanced-details", onToggle: (event) => setShowPromptDetails(event.currentTarget.open), children: [/* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: text("展开开发者原始数据", "Show developer raw data") }), showPromptDetails && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [ /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("Query Analyzer 解析实体", "Query Analyzer Entities") }), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-diagnostics", children: [/* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("词项", "Terms"), "：", display((promptDiagnostics.queryAnalysis?.terms || []).join(" · "))] }), /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [text("匹配别名", "Matched aliases"), "：", display((promptDiagnostics.queryAnalysis?.matchedAliases || []).join(" · "))] })] }), /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("Resolver 诊断", "Resolver Diagnostics") }), promptResolverTraceRows(promptDiagnostics.resolverTrace), identityCandidateRows((promptIdentityResolution?.candidates || []).slice(0, 50), text("没有身份候选。", "No identity candidates.")), /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { children: JSON.stringify(promptDiagnostics.queryPlan, null, 2) }), promptMatchRows(promptDiagnostics.queryAnalysis?.characters, text("未命中人物。", "No character matched.")), promptMatchRows(promptDiagnostics.queryAnalysis?.titles, text("未命中头衔。", "No title matched.")), /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("命中的 Game Truth", "Matched Game Truth") }), promptMatchRows(promptDiagnostics.gameTruth?.characters, text("未命中人物事实。", "No character Game Truth matched.")), promptMatchRows(promptDiagnostics.gameTruth?.titles, text("未命中头衔事实。", "No title Game Truth matched.")), /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("命中的 Supplemental", "Matched Supplemental") }), promptDiagnosticList(promptDiagnostics.supplemental, text("未命中 Supplemental。", "No Supplemental matched.")), /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("World Prompt Token 明细", "World Prompt Token Breakdown") }), promptTokenBreakdownRows(promptDiagnostics.tokenBreakdown, text("没有可计量的 World Prompt 区块。", "No measurable World Prompt blocks.")), /* @__PURE__ */ jsxRuntimeExports.jsx("h6", { children: text("被裁剪条目", "Trimmed Items") }), promptDiagnosticList(promptDiagnostics.trimmedItems, text("没有被裁剪条目。", "No items were trimmed.")), /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-actions", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: `${text("裁剪总数", "Trimmed total")}: ${promptDiagnostics.trimmedTotal ?? promptDiagnostics.trimmedItems?.length ?? 0} · ${text("页", "Page")} ${(promptDiagnostics.trimmedPage || 0) + 1}` }), /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: promptDiagnosticsLoading || !(promptDiagnostics.trimmedPage > 0), onClick: () => runPromptDiagnostics(promptDiagnostics.trimmedPage - 1), children: text("上一页", "Previous") }), /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: promptDiagnosticsLoading || ((promptDiagnostics.trimmedPage || 0) + 1) * (promptDiagnostics.trimmedPageSize || 50) >= Math.max(promptDiagnostics.trimmedTotal || 0, promptDiagnostics.candidateTotal || 0), onClick: () => runPromptDiagnostics((promptDiagnostics.trimmedPage || 0) + 1), children: text("下一页", "Next") })] })] })] })] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "worldline-empty", children: text("输入查询后运行只读诊断。", "Enter a query and run the read-only diagnostics.") })] })] }),
     activeTab === "diagnostics" && promptHistoricalRetrievalPanel,
     activeTab === "diagnostics" && entityKinshipInspectorPanel(),
     activeTab === "diagnostics" && usageObservabilityPanel(),
@@ -23676,9 +23696,9 @@ function WorldlineView() {
       } }), text("读取存档追忆诊断（Shadow）", "Read save recollection diagnostics (Shadow)")] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "worldline-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: subjectiveResponderId, onChange: (event) => setSubjectiveResponderId(event.target.value), placeholder: text("回应角色 Runtime ID", "Responder Runtime ID") }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: !/^\d+$/.test(subjectiveResponderId), onClick: async () => setOfficialRecollection(await invoke("getOfficialRecollection", subjectiveResponderId)), children: text("读取追忆诊断", "Inspect recollection") })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: !/^\d+$/.test(subjectiveResponderId), onClick: () => { void officialReaderRef.current?.refresh(String(subjectiveResponderId || "")); }, children: text("读取追忆诊断", "Inspect recollection") })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere" }, children: JSON.stringify(officialRecollection || { status: "NOT_RUN", officialMemoryCount: diagnostics?.memoryEngine3?.officialMemoryCount || 0 }, null, 2) })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere" }, children: officialRecollection ? JSON.stringify(officialRecollection, null, 2) : v95Runtime.t(officialState.status === "loading" ? "common.loading" : officialState.errorCode ? `errors.${officialState.errorCode}` : "common.noResults") })
     ] }),
     activeTab === "diagnostics" && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("时间归档与历史检索", "Temporal Archive & Historical Retrieval") }),
@@ -23743,6 +23763,8 @@ function WorldlineView() {
   ] });
 }
 function ConfigPanel({ onClose }) {
+  const [viewport, setViewport] = reactExports.useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  reactExports.useEffect(() => { const resize = () => setViewport({ width: window.innerWidth, height: window.innerHeight }); window.addEventListener("resize", resize); return () => window.removeEventListener("resize", resize); }, []);
   const v95Preferences = useV95Preferences();
   const { t } = useTranslation();
   const loadSettings = useConfigStore((state) => state.loadSettings);
@@ -23820,10 +23842,10 @@ function ConfigPanel({ onClose }) {
       style: {
         pointerEvents: "auto",
         position: "absolute",
-        left: `${position.x}px`,
-        top: `${position.y}px`,
-        width: `${size.width}px`,
-        height: `${size.height}px`,
+        left: `${Math.max(8, Math.min(position.x, viewport.width - Math.min(size.width, viewport.width - 16) - 8))}px`,
+        top: `${Math.max(8, Math.min(position.y, viewport.height - Math.min(size.height, viewport.height - 16) - 8))}px`,
+        width: `${Math.min(size.width, viewport.width - 16)}px`,
+        height: `${Math.min(size.height, viewport.height - 16)}px`,
         cursor: isDragging ? "grabbing" : isResizing ? "nwse-resize" : "default"
       },
       children: [
@@ -24046,7 +24068,7 @@ function ConfigPanel({ onClose }) {
               onClick: () => setCurrentTab("optimization"),
               className: currentTab === "optimization" ? "active" : "",
               style: { zIndex: 12 },
-              children: v95Runtime.t("legacyUi.nav.optimization")
+              children: jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [jsxRuntimeExports.jsx(V95TabIcon, { name: "optimization" }), v95Runtime.t("legacyUi.nav.optimization") ] })
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -24055,7 +24077,7 @@ function ConfigPanel({ onClose }) {
               onClick: () => setCurrentTab("worldline"),
               className: currentTab === "worldline" ? "active" : "",
               style: { zIndex: 12 },
-              children: v95Runtime.t("legacyUi.nav.worldline")
+              children: jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [jsxRuntimeExports.jsx(V95TabIcon, { name: "worldbook" }), v95Runtime.t("legacyUi.nav.worldline") ] })
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(

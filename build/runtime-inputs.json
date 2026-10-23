@@ -1310,8 +1310,16 @@
       "target": "out/renderer/v95/state/read-boundary.js"
     },
     {
+      "source": "renderer/v95/state/official-recollection-reader.js",
+      "target": "out/renderer/v95/state/official-recollection-reader.js"
+    },
+    {
       "source": "renderer/v95/state/context-epoch.js",
       "target": "out/renderer/v95/state/context-epoch.js"
+    },
+    {
+      "source": "renderer/v95/integration/react-visuals.js",
+      "target": "out/renderer/v95/integration/react-visuals.js"
     },
     {
       "source": "renderer/v95/package.json",
@@ -1372,6 +1380,10 @@
     {
       "source": "renderer/v95/containers/domain-container.js",
       "target": "out/renderer/v95/containers/domain-container.js"
+    },
+    {
+      "source": "renderer/v95/i18n/locales/v9-5-1-legacy-ui.js",
+      "target": "out/renderer/v95/i18n/locales/v9-5-1-legacy-ui.js"
     }
   ]
 }

@@ -20,6 +20,12 @@ const filled = (tag, attrs) => Object.freeze([tag, Object.freeze({ fill: "curren
 
 /* Canonical contract IDs first. */
 const DEFINITIONS = {
+  optimization: icon("navigation", "legacyUi.nav.optimization", "Performance gauge", [
+    path("M4 18a9 9 0 1 1 16 0"), path("M12 13l5-5"), circle(12, 13, 1.5), path("M5 20h14")
+  ]),
+  worldbook: icon("navigation", "legacyUi.nav.worldline", "Open world book", [
+    path("M12 5c-3-2-6-2-9-1v15c3-1 6-1 9 1 3-2 6-2 9-1V4c-3-1-6-1-9 1v15"), path("M6 8h3M15 8h3M6 12h3M15 12h3")
+  ]),
   conversation: icon("conversation", "navigation.conversation", "Speech bubble", [
     path("M4.5 5.5h15v9.5H9l-4.5 3.5z"),
     path("M8 9h8M8 11.7h5")

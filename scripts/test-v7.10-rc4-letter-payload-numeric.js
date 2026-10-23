@@ -91,8 +91,10 @@ function createManager(parseLog = async () => null, retryDelays = []) {
     assert(!fs.existsSync(path.join(dataDir, "pending-letters.json")), "invalid numeric payload must never enter pending persistence");
 
     const renderer = fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
-    assert(renderer.includes('if (!Number.isFinite(letter.daysUntilDelivery)) return "日期数据异常"'));
-    assert(renderer.includes('Number.isFinite(letter.expectedDeliveryDay) ? letter.expectedDeliveryDay : "日期数据异常"'));
+    const locale = fs.readFileSync(path.join(__dirname, "..", "src", "app", "renderer", "v95", "i18n", "locales", "v9-5-1-legacy-ui.js"), "utf8");
+    assert(renderer.includes('if (!Number.isFinite(letter.daysUntilDelivery)) return tV951("status.dateDataInvalid")'));
+    assert(renderer.includes('Number.isFinite(letter.expectedDeliveryDay) ? letter.expectedDeliveryDay : tV951("status.dateDataInvalid")'));
+    assert(locale.includes('dateDataInvalid: "日期数据异常"') && locale.includes('dateDataInvalid: "Date data is invalid"'), "invalid-date UI copy must remain bilingual");
     console.log("VOTC v7.10-RC4 Letter Payload Numeric: PASS (N01-N10, retry, quarantine, persistence, no NaN UI)");
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
