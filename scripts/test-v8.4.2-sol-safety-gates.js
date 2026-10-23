@@ -68,7 +68,7 @@ try {
   const renderer = fs.readFileSync(path.join(__dirname, "..", "resources", "app", "out", "renderer", "assets", "index-Dn3qWlAB.js"), "utf8");
   const candidateRenderer = renderer.slice(renderer.indexOf("const identityCandidateRows"), renderer.indexOf("const promptTokenBreakdownRows"));
   assert.ok(candidateRenderer.includes('text("身份候选", "Identity candidate")} #'), "candidate cards must use a neutral Runtime-labelled heading");
-  assert.ok(candidateRenderer.includes('text("Alias candidate", "Alias candidate")'), "the historical alias must be shown only as candidate metadata");
+  assert.ok(candidateRenderer.includes('text("别名候选", "Alias candidate")'), "the historical alias must be shown only as bilingual candidate metadata");
   assert.ok(!candidateRenderer.includes('candidateField(candidate, "displayName", "aliasCandidate")'), "candidate cards must not promote alias/displayName to an authoritative heading");
   assert.ok(renderer.includes("promptIdentityResolution || null"), "the Historical Definition page must consume the latest read-only identity diagnostic");
 

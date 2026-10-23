@@ -27,6 +27,8 @@
 
 代码 `2ae3ee300c1cb451500f636ad83073fb30ddd057` 的 [CI 39936362209](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39936362209) 首轮 FAILED：新增导航测试用 `innerText` 精确比较摘要标题，骑士主题的 CSS uppercase 把 Token 显示为 TOKEN，触发文案断言；原始 DOM 文案和实际双语接线正确。测试改用 `textContent` 检验原文，不改 CSS 或弱化图标、焦点和小视口断言，本机默认入口路径重跑 PASS。该失败保留；同轮完整 EXE 冷启动／重启／媒体检查 PASS，但不抵消 release regression 的失败。最终精确代码的完整门禁另记。
 
+测试修正提交 `70e7c9e627a9064e7063ee301dbeaaaefe91bd75` 的 [CI 39938529633](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39938529633) 第二轮 FAILED 于旧 `v8.4-luna-worldline-ui`：旧断言仍要求官方追忆走直接 invoke，而本版已按规格移至 scoped reader。更新为更小的直接调用白名单，并新增禁止绕过 reader、按钮 refresh 及同步 getStateFor 投影的接线断言，本机专项 PASS；Main 权限与其他白名单检查保持。同轮完整 EXE 检查 PASS。
+
 ## 资源与剩余Gate
 
 用户先允许提高负载，随后明确另一项目正在运行；本机改为一次一个测试进程、384MB Node 堆，浏览器单实例，不再本机重跑大型收集或完整分发复制。此前768MB／最多两项仅代表早先执行条件。EXE启动前可用物理内存实测约2458MiB；未无限并发测试或修改系统安全策略。

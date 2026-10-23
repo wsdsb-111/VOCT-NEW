@@ -117,7 +117,6 @@ const directInvokeMethods = Array.from(worldlineSource.matchAll(/(?:^|[^A-Za-z])
 assert.deepStrictEqual([...new Set(directInvokeMethods)].sort(), [
   "createSupplemental",
   "deleteSupplemental",
-  "getOfficialRecollection",
   "rebuildCheckpoint",
   "selectAutosaveFile",
   "setAutosavePath",
@@ -125,7 +124,11 @@ assert.deepStrictEqual([...new Set(directInvokeMethods)].sort(), [
   "temporalArchive",
   "updateSupplemental",
   "validateAutosavePath"
-].sort(), "direct Worldline invoke calls must stay within the explicit UI intent/legacy diagnostic allowlist");
+].sort(), "direct Worldline invoke calls must stay within the explicit UI intent allowlist");
+assert.ok(!directInvokeMethods.includes("getOfficialRecollection"), "official recollection must not bypass the scoped reader");
+assert.ok(worldlineSource.includes("createOfficialRecollectionReader({ runtime: v95Runtime, worldlineApi: window.worldlineAPI })"), "the production page must mount the scoped reader");
+assert.ok(worldlineSource.includes('officialReaderRef.current?.refresh(String(subjectiveResponderId || ""))'), "the diagnostic button must use the scoped reader");
+assert.ok(worldlineSource.includes('getStateFor(String(subjectiveResponderId || ""), contextVersion)'), "the render path must hide old responder/context results synchronously");
 
 for (const method of [
   "setAutosavePath",
