@@ -74,7 +74,7 @@ function guard(result, { publicCloseFamily = false } = {}) {
   assert(result.messages.some(message => message.role === "system" && message.content === entry.content));
   if (["v813", "glm_cache_v2"].includes(layout)) assert.strictEqual(entry.block.lifecycle, "DYNAMIC");
   if (publicCloseFamily) {
-    assert.match(entry.content, /当前可靠公开的亲属关系允许双方.*互知姓名、头衔与特质/);
+    assert.match(entry.content, /当前可靠公开的亲属关系允许双方.*互知姓名、年龄、头衔与特质/);
     assert.match(entry.content, /不授权秘密、过往记忆或其他人物资料/);
   } else {
     assert.match(entry.content, /后台标签，不构成本角色已经知道玩家身份的证据/);
@@ -101,7 +101,7 @@ for (const id of ["v5", "v6", "v7", "glm_cache_v2", "v813"]) {
       const result = build(sample);
       assert.strictEqual(result.promptProfile.layoutId, id);
       const all = result.messages.map(message => message.content).join("\n");
-      assert(all.includes(sample.player.fullName) && all.includes(sample.player.primaryTitle), "reproduce the raw runtime dossier that previously leaked identity");
+      assert(!all.includes(sample.player.firstName) && !all.includes(sample.player.primaryTitle), "unknown player identity is absent from the actual provider input");
       assert.match(guard(result), /身份识别关系证据：未提供/);
       assert.match(guard(result), /尚未识别的对方/);
       assert.doesNotMatch(guard(result), /从未见过玩家|这是第一次相识|此前不认识玩家/);

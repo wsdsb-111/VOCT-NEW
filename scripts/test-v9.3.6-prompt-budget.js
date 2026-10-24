@@ -276,6 +276,7 @@ function assertDryRunPreservesLiveMentionCurrentTruth() {
   memoryContext.campaignToken = "v936-current-truth-campaign";
   currentGameData.campaignToken = memoryContext.campaignToken;
   memoryContext.disclosureProfiles = new Map([[3, [
+    { campaignToken: memoryContext.campaignToken, ownerId: 2, entityId: 3, factType: "NAME", value: "NPC-C", current: true, effectiveKnown: true, status: "AUTO_DISCLOSED", firstAcquiredDate: "1200年1月1日" },
     { campaignToken: memoryContext.campaignToken, ownerId: 2, entityId: 3, factType: "AGE", current: true, effectiveKnown: true, status: "AUTO_DISCLOSED", firstAcquiredDate: "1200年1月1日" },
     { campaignToken: memoryContext.campaignToken, ownerId: 2, entityId: 3, factType: "TITLE", value: "伯爵", current: true, effectiveKnown: true, status: "AUTO_DISCLOSED", firstAcquiredDate: "1200年1月1日" }
   ]]]);

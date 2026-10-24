@@ -2,8 +2,9 @@
 
 const { normalizeGameDate, resolveLifeStatus } = require("../worldline/character-temporal-facts");
 const { getCharacterPersonalName } = require("../memory-system/character-identity");
-const { currentDirectParentFilter, currentPublicParentFilter } = require("../worldline/kinship-graph-cache");
+const { currentDirectParentFilter, currentPublicParentFilter, getTargetedKinshipGraph } = require("../worldline/kinship-graph-cache");
 const PRIVATE_FIELDS = ["personality", "sexuality", "boldness", "compassion", "energy", "greed", "honor", "rationality", "sociability", "vengefulness", "zeal", "capitalLocation"];
+const profileViewSources = new WeakMap();
 
 const { NON_OBSERVABLE_TO_OTHERS, OBSERVABLE_TO_OTHERS, getTraitAliases, normalizeTraitKey, resolveTraitVisibility } = require("./trait-visibility-policy");
 
@@ -236,10 +237,25 @@ function knownTitle(observer, target, value, context) {
   return "";
 }
 
+function knownPersonalName(observer, target, context) {
+  const source = context.identitySource?.characters?.get(Number(target.id)) || context.identitySource?.characters?.get(String(target.id))
+    || context.gameData?.characters?.get(Number(target.id)) || context.gameData?.characters?.get(String(target.id)) || target;
+  const personalName = getCharacterPersonalName(source, target.name);
+  const normalize = value => String(value || "").normalize("NFKC").trim();
+  const aliases = new Set([personalName, source.name, source.firstName, source.shortName, source.fullName].filter(Boolean).map(normalize));
+  const facts = scopedDisclosureFacts(observer, target, context).filter(fact => fact.factType === "NAME" && aliases.has(normalize(fact.value)));
+  const known = facts.find(fact => fact.effectiveKnown === true && fact.status !== "MANUAL_HIDDEN"
+    && !facts.some(hidden => hidden.status === "MANUAL_HIDDEN" && normalize(hidden.value) === normalize(fact.value)));
+  return known ? normalize(known.value) : null;
+}
+
 // A per-request presentation copy protects custom templates and scripts as well as bundled ones.
 function createTraitProfileView(gameData, character, memoryContext = null, { includeStepFamily = false } = {}) {
   const observer = gameData?.characters?.get(Number(character?.id)) || character;
-  const knowledge = { ...memoryContext, campaignToken: gameData?.campaignToken, currentGameDate: gameData?.date, gameData };
+  const identityData = profileViewSources.get(gameData) || gameData;
+  const sourceProfiles = getTargetedKinshipGraph(identityData, [...(identityData?.characters?.keys?.() || [])], { maxDepth: 3, maxNodes: 4096 }).nodes;
+  const identitySource = { ...identityData, characters: sourceProfiles };
+  const knowledge = { ...memoryContext, campaignToken: gameData?.campaignToken, currentGameDate: gameData?.date, gameData, identitySource };
   const copies = new Map();
   const relativeFields = new Set(["parents", "children", "siblings", "spouses", "concubines", "otherParent", "concubineOf", "betrothed"]);
   const currentParentBindings = new Set();
@@ -345,7 +361,8 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
         const isSelf = Number(value.id) > 0 && Number(value.id) === Number(observer?.id);
         if (Array.isArray(value.traits)) result.traits = (isSelf ? getTraitsForSelfProfile(value) : getTraitsForKnownProfile(observer, value, knowledge)).map(trait => copy(trait));
         if (!isSelf) {
-          const knowsAge = isPublicCloseFamily(runtimeCharacterId(observer), runtimeCharacterId(value), gameData)
+          const closeFamily = isPublicCloseFamily(runtimeCharacterId(observer), runtimeCharacterId(value), identitySource);
+          const knowsAge = closeFamily
             || scopedDisclosureFacts(observer, value, knowledge).some(fact => fact.factType === "AGE"
             && fact.effectiveKnown === true && fact.status !== "MANUAL_HIDDEN");
           if (!knowsAge) {
@@ -357,11 +374,12 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
               ? String(value[key] || "").split(/[,，、;；\n|]/).map(title => knownTitle(observer, value, title.trim(), knowledge)).filter(Boolean).join("、")
               : knownTitle(observer, value, String(value[key] || ""), knowledge);
           }
-          if (!isPublicCloseFamily(runtimeCharacterId(observer), runtimeCharacterId(value), gameData)) {
-            const personalName = getCharacterPersonalName(gameData?.characters?.get(Number(value.id)) || value, value.name);
-            if ("name" in result) result.name = personalName;
+          if (!closeFamily) {
+            const personalName = knownPersonalName(observer, value, knowledge) || "未获知姓名的人物";
+            for (const key of ["name", "firstName", "shortName"]) if (key in result) result[key] = personalName;
             result.shortName = personalName;
             result.fullName = value.nickname ? `${personalName} '${value.nickname}'` : personalName;
+            if ("house" in result) result.house = "未获知家族";
           }
           for (const key of PRIVATE_FIELDS) delete result[key];
           for (const key of ["secrets", "knownSecrets", "memories", "conversationSummaries"]) if (key in result) result[key] = [];
@@ -371,6 +389,55 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
     return result;
   };
   const view = copy(gameData);
+  profileViewSources.set(view, identityData);
+  const projectedCharacter = copy(character);
+  // Scrub generated CK3 display metadata, never spoken text or authorized memories.
+  const hiddenAliases = new Map();
+  const relationAliases = new Map();
+  const projectedById = new Map();
+  for (const [source, projected] of copies) if (runtimeCharacterId(source)) projectedById.set(runtimeCharacterId(source), projected);
+  for (const person of sourceProfiles.values()) {
+    const projected = view.characters?.get(Number(person.id)) || projectedById.get(runtimeCharacterId(person));
+    if (!projected) continue;
+    const fullIdentity = Number(person.id) === Number(observer.id) || isPublicCloseFamily(Number(observer.id), Number(person.id), identitySource);
+    for (const alias of [person.name, person.firstName, person.shortName, person.fullName].filter(value => typeof value === "string" && value.length > 1)) {
+      const names = relationAliases.get(alias) || new Set();
+      names.add(projected.shortName || projected.name || "未获知姓名的人物");
+      relationAliases.set(alias, names);
+      if (!fullIdentity && ![projected.name, projected.firstName, projected.shortName, projected.fullName].includes(alias)) hiddenAliases.set(alias, projected.shortName || "未获知姓名的人物");
+    }
+    for (const key of ["primaryTitle", "heldCourtAndCouncilPositions", "titleRankConcept", "house"]) {
+      const allowed = new Set(String(projected[key] || "").split(/[,，、;；\n|]/).map(value => value.trim()));
+      for (const title of String(person[key] || "").split(/[,，、;；\n|]/).map(value => value.trim())) {
+        if (title.length > 1 && !allowed.has(title) && !/^(?:none(?:\b|$)|concept_none$)/i.test(title)) hiddenAliases.set(title, "未获知身份");
+      }
+    }
+  }
+  const replacements = [...hiddenAliases].sort(([left], [right]) => right.length - left.length);
+  const scrubDisplay = text => replacements.reduce((result, [alias, replacement]) => {
+    if (/^[\p{Script=Latin}\d .'-]+$/u.test(alias)) {
+      const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return result.replace(new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, "gu"), replacement);
+    }
+    return result.replaceAll(alias, replacement);
+  }, text);
+  const visited = new WeakSet();
+  const scrubMetadata = value => {
+    if (!value || typeof value !== "object" || visited.has(value)) return;
+    visited.add(value);
+    if (value instanceof Map) { for (const item of value.values()) scrubMetadata(item); return; }
+    for (const key of Object.keys(value)) {
+      if (["memories", "conversationSummaries", "secrets", "knownSecrets", "evidence"].includes(key)) continue;
+      const item = value[key];
+      if (typeof item === "string" && ["desc", "description", "scene", "location"].includes(key)) value[key] = scrubDisplay(item);
+      else if (typeof item === "string" && ["liege", "consort"].includes(key) && item) {
+        const names = relationAliases.get(item);
+        value[key] = names?.size === 1 ? [...names][0] : "身份未获知";
+      } else scrubMetadata(item);
+    }
+  };
+  scrubMetadata(view);
+  scrubMetadata(projectedCharacter);
   for (const [alias, id] of [["playerName", gameData?.playerID], ["aiName", gameData?.aiID]]) {
     if (alias in view) view[alias] = view.characters?.get(Number(id))?.fullName || "";
   }
@@ -388,7 +455,7 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
     const sources = people.filter(person => person.fullName === gameData.locationController);
     view.locationController = sources.length === 1 ? view.characters.get(Number(sources[0].id))?.shortName || "" : "";
   }
-  return { gameData: view, character: copy(character) };
+  return { gameData: view, character: projectedCharacter };
 }
 
 module.exports = { NON_OBSERVABLE_TO_OTHERS, OBSERVABLE_TO_OTHERS, normalizeTraitKey, getTraitAliases, resolveTraitVisibility,

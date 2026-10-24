@@ -176,6 +176,7 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.6-first-meeting-identity", script: "test-v9.6-first-meeting-identity.js" },
   { group: "v9.6-family-age-independent-qa", script: "test-v9.6-family-age-independent-qa.js" },
   { group: "v9.6-ck3-bridge-contract", script: "test-ck3-bridge-contract.js" },
   { group: "v9.6-bridge-service", script: "test-v9.6-bridge-service.js" },

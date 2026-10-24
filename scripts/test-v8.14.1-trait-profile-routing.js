@@ -79,7 +79,7 @@ check("production custom template includes only scoped direct observations for o
   const result = build(sample, directObservationContext(sample));
   const text = result.blocks.find(item => item.content.startsWith("SELF=")).content;
   assert(text.includes(`SELF=Beautiful,${hidden.join(",")},One-eyed,`));
-  assert(text.includes("OTHER=Target:Beautiful,One-eyed,||"), text);
+  assert(text.includes("OTHER=未获知姓名的人物:Beautiful,One-eyed,||"), text);
   assert.equal(JSON.stringify([...sample.data.characters]), before, "prompt routing must not alter runtime character data");
 });
 check("raw observable traits remain absent without actual presence or disclosure", () => {

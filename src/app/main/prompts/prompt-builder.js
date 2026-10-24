@@ -887,7 +887,15 @@ ${nameAccessRule}
       const cacheV2LiveText = glmCacheV2 || v813Layout ? formatLiveProfile(createLiveProfile(char, promptGameData, memoryContext?.activeParticipantIds)) : null;
       const normalizedHistory = history.map((m) => ({
         role: m.role,
-        name: m.name,
+        name: (() => {
+          if (!m.name) return m.name;
+          let speakerId = m.role === "user" ? Number(gameData.playerID) : numericRuntimeId(m.speakerCharacterId);
+          if (!speakerId) {
+            const matches = [...ageAuthorityGameData.characters.values()].filter(person => [person.fullName, person.shortName, person.firstName].includes(m.name));
+            if (matches.length === 1) speakerId = Number(matches[0].id);
+          }
+          return (gameData.characters.get(speakerId) || gameData.characters.get(String(speakerId)))?.fullName || "未获知姓名的人物";
+        })(),
         content: m.content
       })).filter((m) => !!m.content);
       const workingHistory = Number.isInteger(promptProfile.historyWindow) ? normalizedHistory.slice(-promptProfile.historyWindow) : normalizedHistory;
@@ -1452,16 +1460,12 @@ ${nameAccessRule}
           const descScriptPath = promptConfigManager.resolvePath(block.scriptPath);
           try {
             const profileCache = baseContext.memoryContext?.stableDescriptionCache;
-            const traitScope = [...(gameData.characters || [])].filter(([id]) => Number(id) !== Number(character.id))
-              .map(([id, person]) => [id, person.traits || [], person.primaryTitle || "", person.titleRankConcept || "",
-                person.heldCourtAndCouncilPositions || "", person.nickname || ""]);
+            // Scripts may read any projected field; re-render before retaining text so
+            // a cached full description cannot bypass a later disclosure revocation.
+            const descriptionBlock = this.scriptLoader.executeDescription(descScriptPath, gameData, character.id);
             const cacheKey = options.runtimeProfileSplit ? `v7:${descScriptPath}:${character.id}`
-              : `v8.14.2:${descScriptPath}:${character.id}:${createPromptFingerprint(this.stableStringify(traitScope))}`;
-            let descriptionBlock = !options.runtimeProfileSplit && profileCache instanceof Map ? profileCache.get(cacheKey) : null;
-            if (!descriptionBlock) {
-              descriptionBlock = this.scriptLoader.executeDescription(descScriptPath, gameData, character.id);
-              if (descriptionBlock && !options.runtimeProfileSplit && profileCache instanceof Map) profileCache.set(cacheKey, descriptionBlock);
-            }
+              : `v8.14.2:${descScriptPath}:${character.id}`;
+            if (descriptionBlock && !options.runtimeProfileSplit && profileCache instanceof Map) profileCache.set(cacheKey, descriptionBlock);
             if (descriptionBlock) {
               if (options.glmCacheV2 || options.v813Layout) {
                 const tokenBlock = {

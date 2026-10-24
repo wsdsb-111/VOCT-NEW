@@ -6,13 +6,14 @@ const path = require("node:path");
 const { Conversation } = require("../src/app/main/conversation/conversation.js");
 const { BASELINE_COMMIT, CASES, capturePromptOutput } = require("./fixtures/v9.4/legacy-layout-fixtures.js");
 const golden = require("./fixtures/v9.4/legacy-layout-golden.json");
+const { applyIdentityDelta } = require("./fixtures/v9.4/legacy-layout-v96-identity-delta.js");
 
 const mainDir = path.resolve(__dirname, "../src/app/main");
 assert.equal(golden.schemaVersion, "v9.4_legacy_prompt_golden_v1");
 assert.equal(golden.baselineCommit, BASELINE_COMMIT, "the checked-in legacy snapshot must stay pinned to the approved source SHA");
 assert.deepEqual(golden.cases.map(({ id }) => id), CASES.map(({ id }) => id), "fixture cases and frozen Golden entries must stay in sync");
 
-const outputs = new Map(golden.cases.map(({ id, output }) => [id, output]));
+const outputs = new Map(golden.cases.map(({ id, output }) => [id, applyIdentityDelta(id, output)]));
 for (const { id } of CASES) {
   const expected = outputs.get(id);
   const actual = capturePromptOutput({ mainDir, caseId: id, Conversation });
@@ -60,4 +61,4 @@ for (const marker of ["TIME_RECALL_FIXTURE", "THIRD_PARTY_RECALL_FIXTURE"]) {
 assert(queryBeforeFreeze.blockOrder.some((block) => block.id === "memory-turn-recall" && block.lifecycle === "DYNAMIC"));
 assert(queryBeforeFreeze.blockOrder.some((block) => block.id === "third-party-evidence-patch" && block.lifecycle === "DYNAMIC"));
 
-console.log(`PASS V9.4 legacy PromptBuilder Goldens (${CASES.length} layouts/profiles, full messages, anchors, spans and request budgets; baseline ${BASELINE_COMMIT})`);
+console.log(`PASS V9.4 legacy PromptBuilder Goldens with explicit V9.6 identity delta (${CASES.length} layouts/profiles, full messages, anchors, spans and request budgets; baseline ${BASELINE_COMMIT})`);

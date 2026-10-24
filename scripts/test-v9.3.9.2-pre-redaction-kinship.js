@@ -138,6 +138,10 @@ function buildPrompt(characters, {
   ], responder, gameData, "", {
     activeParticipantIds,
     subjectiveWorldPolicyActive,
+    // These fixtures test named relationship semantics; NAME alone grants no age or kinship access.
+    disclosureProfiles: new Map(characters.map(character => [character.id, [{ factType: "NAME", value: character.shortName,
+      ownerId: responderId, entityId: character.id, campaignToken: CAMPAIGN, current: true,
+      effectiveKnown: true, status: "AUTO_DISCLOSED", firstAcquiredDate: DATE }]])),
     cacheV2FrozenSnapshots: makeCache()
   });
   const block = id => result.blocks.find(entry => entry.block?.id === id)?.content || "";
