@@ -2151,6 +2151,9 @@ class Conversation {
               try { await this.refreshGameDataForActionConfirmation(); }
               catch (error) { console.warn("[ActionConfirmation] post-verification balance refresh failed:", error.message); }
             }
+            if (bridgeEvidence?.isCurrentCommand(command.commandId) === false) {
+              return settleActionResult(result, { status: "UNCONFIRMED", stateAfter: null, commandStatus: command.status, dispatched: true });
+            }
             runFileManager.recordActionVerification?.(command.commandId, verification);
             if (verification.status === "CONFIRMED" && result.confirmation.requireCommandReadback) {
               bridgeEvidence?.observeCommand("actionReadback", command.commandId);

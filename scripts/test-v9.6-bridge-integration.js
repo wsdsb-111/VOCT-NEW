@@ -10,6 +10,8 @@ const { createBridgeBusinessEvidence } = require("../src/app/main/bridge/bridge-
 const { createActionEffectWriter } = require("../src/app/main/actions/action-effect-writer");
 const { createActionEngine } = require("../src/app/main/actions/action-engine");
 const { createRunFileManager } = require("../src/app/main/actions/run-file-manager");
+const { verifyActionConfirmation } = require("../src/app/main/actions/action-confirmation");
+const { readActionCommandReadback } = require("../src/app/main/actions/action-command-readback");
 const { createLetterManager } = require("../src/app/main/letters/letter-manager");
 // These modules use the packaged relative package.json layout; verify the real build.
 const { createGameData } = require("../.build/runtime/app/out/main/game-data/game-data");
@@ -77,7 +79,8 @@ async function main() {
     await assert.rejects(LetterManager.prototype.writeLetterEffect.call({}, "synthetic reply", {}), /bridge_feature_unavailable/);
     await assert.rejects(LetterManager.prototype.retryFailedLetter.call({}, "synthetic-letter"), /bridge_feature_unavailable/);
     const Engine = createActionEngine({ bridgeService: service });
-    await assert.rejects(Engine.evaluateForCharacter({}, {}), /bridge_feature_unavailable/, "blocked actions stop before provider/check work");
+    assert.deepEqual(await Engine.evaluateForCharacter({}, {}), { autoApproved: [], needsApproval: [] },
+      "unavailable actions skip provider/check work without failing an otherwise valid conversation");
     assert.equal(service.assertFeature("conversation"), true, "unaffected conversation remains usable");
 
     await load("votc-load-c", ["action_readback", "trait_export", "official_recollection_export"]);
@@ -135,6 +138,31 @@ async function main() {
     assert.equal(evidence.isCurrentCommand(first.commandId), false);
     assert(queue.ackCommand(first.commandId));
     assert.equal(evidence.isCurrentCommand(second.commandId), true, "queue callback records actual write generation after a load change");
+    await load("votc-load-before-readback");
+    const readbackId = "anonymous-readback-race";
+    evidence.trackDispatch(readbackId);
+    fs.appendFileSync(logPath, [
+      `VOTC:ACTION_BEGIN/ACTION_EFFECT/${readbackId}`,
+      "VOTC:ACTION_SOURCE/;/2", "VOTC:ACTION_TARGET/;/1",
+      "VOTC:IN/;/income/;/2/;/100/;/", "VOTC:IN/;/income/;/1/;/0/;/",
+      "VOTC:IN/;/income/;/2/;/90/;/", "VOTC:IN/;/income/;/1/;/10/;/",
+      `VOTC:RUN_ACK/ACTION_EFFECT/${readbackId}`, ""
+    ].join("\n"));
+    const confirmation = { type: "GOLD_TRANSFER", requireCommandReadback: true, sourceRuntimeId: 2,
+      targetRuntimeId: 1, amount: 10, dispatch: { commandId: readbackId } };
+    const commandReadback = await readActionCommandReadback(logPath, readbackId);
+    assert.equal(verifyActionConfirmation({ confirmation, commandReadback }).status, "CONFIRMED", "the race fixture contains otherwise-valid same-command gold evidence");
+    let recorded = 0;
+    let refreshed = 0;
+    Conversation.configure({ settingsRepository: { getCK3DebugLogPath: () => logPath },
+      runFileManager: { expireQueuedActions() {}, recordActionVerification() { recorded++; } } });
+    const lateRace = await Conversation.prototype.waitForActionConfirmation.call({
+      getRunCommand: () => ({ commandId: readbackId, status: "acknowledged" }),
+      async refreshGameDataForActionConfirmation() { refreshed++; await load("votc-load-during-balance-refresh"); }
+    }, { confirmation });
+    assert.equal(refreshed, 1, "the fixture changes generation inside the post-verification asynchronous refresh");
+    assert.equal(lateRace.lifecycle.status, "UNCONFIRMED");
+    assert.equal(recorded, 0, "old confirmation must not be persisted after an asynchronous load change");
     assert.match(source("main/letters/letter-manager.js"), /if \(acknowledged\) bridgeEvidence\?\.observeCommand\("runFileAck", acknowledged\.commandId\)/);
     assert.match(source("renderer/assets/index-Dn3qWlAB.js"), /jsxRuntimeExports\.jsx\(BridgeDiagnosticsView, \{ uiLanguage: isChinese/);
     console.log("V9.6 production Bridge integration: PASS (legacy, feature gates, dispatch generations, no replay, read-only preload)");

@@ -22,7 +22,11 @@ function isolateRelationshipCharacter(character) {
 function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics, llmManager, ActionPromptBuilder, ActionSandbox, ActionEffectWriter, CriticalActionRecallObserver = DefaultCriticalActionRecallObserver, buildStructuredResponseJsonSchema, buildStructuredResponseSchema, healJsonResponseWithLogging, resolveI18nString, logVerboseLLM, bridgeService = null }) {
   return class ActionEngine {
     static async evaluateForCharacter(conv, npc, signal) {
-      bridgeService?.assertFeature("action");
+      try { bridgeService?.assertFeature("action"); }
+      catch (error) {
+        if (error?.code !== "bridge_feature_unavailable") throw error;
+        return { autoApproved: [], needsApproval: [] };
+      }
       let diagnosticsObserver = null;
       let diagnosticsRecorded = false;
       const observeDiagnostics = (method, ...args) => {
