@@ -1,0 +1,19 @@
+{
+  "fixtureId": "hello-different-base-versions-v1",
+  "provenance": "synthetic_static_contract",
+  "input": {
+    "kind": "bridge-hello-line",
+    "line": "VOTC:BRIDGE_HELLO/;/schema=1/;/protocol=1.0/;/mod=2.0.4/;/upstream=2.0.3/;/revision=1/;/load=votc-load-48/;/caps=character_export:1,trait_export:1,native_date:1,load_session:1,runfile_consumer:1,run_ack:1,action_readback:1,letter_receipt:1,official_recollection_export:1"
+  },
+  "expected": {
+    "state": "SUPPORTED",
+    "features": {
+      "conversation": { "allowed": true, "reasonCode": "FEATURE_CAPABILITIES_SUPPORTED", "missing": [] },
+      "action": { "allowed": true, "reasonCode": "FEATURE_CAPABILITIES_SUPPORTED", "missing": [] },
+      "letter": { "allowed": true, "reasonCode": "FEATURE_CAPABILITIES_SUPPORTED", "missing": [] },
+      "actionConfirmation": { "allowed": true, "reasonCode": "FEATURE_CAPABILITIES_SUPPORTED", "missing": [] },
+      "traits": { "allowed": true, "reasonCode": "FEATURE_CAPABILITIES_SUPPORTED", "missing": [] },
+      "officialRecollection": { "allowed": true, "reasonCode": "FEATURE_CAPABILITIES_SUPPORTED", "missing": [] }
+    }
+  }
+}

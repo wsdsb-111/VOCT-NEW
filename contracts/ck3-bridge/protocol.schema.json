@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://voices-of-the-court.invalid/contracts/ck3-bridge/protocol.schema.json",
+  "title": "Parsed VOTC Bridge Hello v1",
+  "description": "Schema for the public parsed Hello DTO. The wire line uses schema/protocol/mod/upstream/revision/load/caps segments; the DTO does not prove CK3 emitted or loaded the declaration.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "bridgeProtocol",
+    "modBaseVersion",
+    "upstreamBaseVersion",
+    "voctBridgeRevision",
+    "loadEpoch",
+    "capabilities"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "bridgeProtocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "major",
+        "minor"
+      ],
+      "properties": {
+        "major": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "minor": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "modBaseVersion": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]{0,5})\\.(?:0|[1-9][0-9]{0,5})\\.(?:0|[1-9][0-9]{0,5})$"
+    },
+    "upstreamBaseVersion": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]{0,5})\\.(?:0|[1-9][0-9]{0,5})\\.(?:0|[1-9][0-9]{0,5})$"
+    },
+    "voctBridgeRevision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "loadEpoch": {
+      "type": "string",
+      "pattern": "^votc-load-[A-Za-z0-9_.-]{1,120}$"
+    },
+    "capabilities": {
+      "description": "The parser DTO includes declared capabilities. The wire `!` prefix maps to required:true; ordinary id:revision maps to required:false. Unknown optional declarations are ignored for compatibility, while unknown required declarations are incompatible. Runtime feature requirements are independently declared in the runtime manifest.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]{0,63}$"
+      },
+      "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "revision",
+            "required"
+          ],
+          "properties": {
+            "revision": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": {
+              "type": "boolean",
+              "default": false,
+              "description": "True only when the wire capability used a leading ! must-understand marker."
+            }
+          }
+      }
+    }
+  }
+}

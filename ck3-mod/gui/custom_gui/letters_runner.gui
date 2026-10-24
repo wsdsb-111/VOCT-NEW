@@ -1,0 +1,11 @@
+window = {
+	name = "letters_runner"
+	size = { 1% 1% }
+	parentanchor = top|right
+	movable = no
+	#position = { -80 130 }
+	layer = bottom_bottom
+	
+	# Retired target: no timers, commands, or global blur changes.
+	alwaystransparent = yes
+}

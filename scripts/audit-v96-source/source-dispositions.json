@@ -1,0 +1,280 @@
+{
+  "schema": "votc-v96-source-dispositions/v1",
+  "source": {
+    "upstreamRepository": "Voices-of-the-Court/votc_mod",
+    "upstreamRevision": "0cf4845a69f9e8633333ca04e558afe8216490f2",
+    "upstreamBaseVersion": "2.0.4",
+    "maintainedModBase": "2.0.5",
+    "workshopItem": "3346777360",
+    "maintainedSnapshotTreeSha256": "cf872f6a6d79878dc6106e312919b78f641971dda026bc3cdb1c5c926f040756",
+    "upstreamArchiveSha256": "b227f81d13b90fdb2963a1511d6951be5291746b4d28418ab18b9711e9a45d8b",
+    "sourceInventory": "docs/current/v9/v96-workshop-source-inventory.json",
+    "licensePreservation": {
+      "relativePath": "LICENSE.MD",
+      "maintainedSnapshotSha256": "fcc8a87920214067b4f9f81aceec79d4593e70184c25fe81f0e880ab30347856",
+      "upstreamSha256": "7abe19ec9bb73b36141b999b861d24ad855e808bafe0f81e84cce28556f6c297",
+      "textEqualIgnoringBomAndEol": true,
+      "disposition": "retain_license_file_from_maintained_snapshot"
+    },
+    "note": "All paths are relative. Local changes are preserved as observed; no authorship is inferred."
+  },
+  "comparisonCounts": {
+    "byteIdentical": 10,
+    "rawBytesDiffer": 82,
+    "sameTextIgnoringBomAndEol": 63,
+    "normalizedTextContentDiffers": 19,
+    "localOnly": 5,
+    "upstreamOnly": 3
+  },
+  "normalizedTextDifferences": [
+    {
+      "relativePath": "common/scripted_effects/log_character_v2_effect.txt",
+      "maintainedSnapshotSha256": "02db9044f83eb7977637288de47aff340a0109b3f699d656ad4a317e111f6580",
+      "upstreamSha256": "963723dd29d9ed392cc8c77815ed703c59c8a3e45f0eed6a56a94faeb0bbd84e",
+      "observedDiff": "Adds the trait key and emits legally sourced parent facts with age, pronoun, and public-parent markers under a parent-identity gate.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    },
+    {
+      "relativePath": "common/scripted_effects/log_gamedata_v3_effect.txt",
+      "maintainedSnapshotSha256": "e9d1cb98f23568cee144b3850fa8a46ab755eef8cfb833547c1d2e305c89a10b",
+      "upstreamSha256": "b4b1cb6a323da2405527675cc28fec7d582fb3c9e063ad868c17dbdc54f7552e",
+      "observedDiff": "Ensures a campaign identity and adds its marker to the v3 game-data export.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    },
+    {
+      "relativePath": "common/scripted_effects/log_gamedata_v3l_effect.txt",
+      "maintainedSnapshotSha256": "ca9d045bd731e41d1adc01d7d5f83f5cd6f8a802c7ba6419cd168005f1cb6aef",
+      "upstreamSha256": "1aa4cb69a6c53246bb928e6e13d8fbb4b017a5fa57586dca0db13c73d17b9d2f",
+      "observedDiff": "Ensures a campaign identity and adds its marker to the v3l game-data export.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    },
+    {
+      "relativePath": "common/scripted_effects/log_gamedata_v3s_effect.txt",
+      "maintainedSnapshotSha256": "b19b273c2a92450462fa4155f9d81385d54346af3a3a6efcc97645c394ec0db3",
+      "upstreamSha256": "f398b6b2d4fc62fe49fa34bb81051fdcd9a6c7079c8dc66a3222962c8b260af6",
+      "observedDiff": "Ensures a campaign identity and adds its marker to the v3s game-data export.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    },
+    {
+      "relativePath": "descriptor.mod",
+      "maintainedSnapshotSha256": "c77060613e6cf45e9a2aa6b2215f4d689104a90d25791aa421794199a8fefa80",
+      "upstreamSha256": "b934063e499a8a3450df25655e8fd09a7597be1e9ec0187b78df778e9d5f2b12",
+      "observedDiff": "Retains the maintained Workshop descriptor version 2.0.5.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    },
+    {
+      "relativePath": "events/message_events.txt",
+      "maintainedSnapshotSha256": "b55f3fffde18cd938ff0974f07ae4e5a7130197d8be69c3797e6aa6447e1827f",
+      "upstreamSha256": "9b1a7bbda5b9058c255b19cd05a24a9815923d4c768cd2b72f887b185302feda",
+      "observedDiff": "Dispatches message_event.361 immediately instead of waiting one day.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    },
+    {
+      "relativePath": "gui/custom_gui/letters_runner.gui",
+      "maintainedSnapshotSha256": "2181018c19f3884dc13f49252ef0caa9ffd71c9951b4192f83cea654ea1a4e1a",
+      "upstreamSha256": "fd4275a1dfdd31d8eabd93fe024ef601f8f55511a435a5bb2b95545e38d06876",
+      "observedDiff": "Retires the former timed letters runner UI while retaining its widget identity as an inert compatibility shell.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_message_clear.gui",
+      "maintainedSnapshotSha256": "162d17b1cca59a83a37fbeef1bf0f8055e6462083c1bddd6e691ca4043a89858",
+      "upstreamSha256": "2df41cc0aeedf2288982701807eb6306653c2e476ee1b9d5c80bfa2dd7a9f6e8",
+      "observedDiff": "Removes the old letters_runner_counter clear operation from the message-clear widget.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_message.gui",
+      "maintainedSnapshotSha256": "e9b611da88cf1def06cf46a4eed09c2a9e88147f92050f7ea2435abe3988faa2",
+      "upstreamSha256": "360eabede50ad73215f24318e3a0864d5a4786809aedbd68dacd3dcceed2ba33",
+      "observedDiff": "Removes old letters_runner widget creation from the message widget.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    },
+    {
+      "relativePath": "gui/event_windows/votc_invisible_event.gui",
+      "maintainedSnapshotSha256": "fbf75b792f69f047427fcffa87d2a133eeb9cfbb2ce9cff1cee88c776b6b4bd3",
+      "upstreamSha256": "34a2381f31d7e191dea17de3410e06278ab9ae330124d9bb47eceaeca8de10dd",
+      "observedDiff": "Removes old letters_runner widget creation from the VOTC invisible event.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    },
+    {
+      "relativePath": "localization/english/log_character_l_english.yml",
+      "maintainedSnapshotSha256": "9c03855a711a3f66bef1f22ce2935753d8841ff243e6bc9446ae4650d13ed99c",
+      "upstreamSha256": "7b6e5d206b216f5693171bafc828559f6499bc17186d3ee10068fbcfb0d07071",
+      "observedDiff": "Extends the VOTC character log template by one slot for character nickname data.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    },
+    {
+      "relativePath": "localization/french/log_character_l_french.yml",
+      "maintainedSnapshotSha256": "00c158d28d9b6514546da681d45fe59b83a806bf097723373364e487a1e40eb7",
+      "upstreamSha256": "7a4455aa6ab2e1bfe447b2e761a43bb245baee9f981dd8959fd920a5c97001b6",
+      "observedDiff": "Extends the VOTC character log template by one slot for character nickname data.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    },
+    {
+      "relativePath": "localization/german/log_character_l_german.yml",
+      "maintainedSnapshotSha256": "c18f2fd67f80f570b74633bbe16a3174ea949e61c8d77657a6c745f4485b3ec0",
+      "upstreamSha256": "43b66448e3c41731fe5f3712f51685170f0aca1e1085ab86246e9f0954f5222d",
+      "observedDiff": "Extends the VOTC character log template by one slot for character nickname data.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    },
+    {
+      "relativePath": "localization/japaneese/log_character_l_japanese.yml",
+      "maintainedSnapshotSha256": "3de5fdeae44f134a294a048b435e2bcad0e8de03dffb31e68f937496526b6b7d",
+      "upstreamSha256": "224b4be75f7d76db9be358d067274951234143f13cc844cfc817f698798873b8",
+      "observedDiff": "Extends the VOTC character log template by one slot for character nickname data.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    },
+    {
+      "relativePath": "localization/korean/log_l_korean.yml",
+      "maintainedSnapshotSha256": "f0337d46434927590fabef50dfa82f9193571ff49648524895aeb74271192fb1",
+      "upstreamSha256": "39011fee28f2f06a59775cc5eff5fa153ed40e7f2724dbd730a24503925ca49c",
+      "observedDiff": "Extends the VOTC character log template by one slot for character nickname data.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    },
+    {
+      "relativePath": "localization/polish/log_character_l_polish.yml",
+      "maintainedSnapshotSha256": "031e182be72615f4fe1a946535e5adb0db889f2ea7b627ca27b2846b203ba185",
+      "upstreamSha256": "9a80a981cf08a0a27cccdcd439bafdfafcf8fbfa533c074f24b6c6c082c7b077",
+      "observedDiff": "Extends the VOTC character log template by one slot for character nickname data.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    },
+    {
+      "relativePath": "localization/russian/log_character_l_russian.yml",
+      "maintainedSnapshotSha256": "a4c93068012cf81f5e7d3e39bc956bd7fd006735afbae888e7e4888a52a546df",
+      "upstreamSha256": "3067046ea9ba4e2189b12be6770d8e5c51a05af53c7cc06d829a958bbd71965f",
+      "observedDiff": "Extends the VOTC character log template by one slot for character nickname data.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    },
+    {
+      "relativePath": "localization/simp_chinese/log_character_l_simp_chinese.yml",
+      "maintainedSnapshotSha256": "3c2c45d61ff18e9f652ce30539ee0ad40ee63b2eb4886a8b1d7fe097d09551a9",
+      "upstreamSha256": "e7951692c6fdfeeaf0e5bb3e7fa3d6b7691a352f9504a5fc97cb6a0e007c536e",
+      "observedDiff": "Extends the VOTC character log template by one slot for character nickname data.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    },
+    {
+      "relativePath": "localization/spanish/log_character_l_spanish.yml",
+      "maintainedSnapshotSha256": "2d98a7bb092bb573d12720a0de709a1975414f499f2b63c576de97542f3d3aec",
+      "upstreamSha256": "e0134db12549f6c87da53f4a25968ce9b195e1913263fba0ec961c9fdeef2e8d",
+      "observedDiff": "Extends the VOTC character log template by one slot for character nickname data.",
+      "disposition": "retain_user_authorized_maintained_2.0.5_snapshot",
+      "reviewBoundary": "Observed diff summary and retention decision only; this record does not infer authorship or assert an independent semantic review."
+    }
+  ],
+  "localOnlyFiles": [
+    {
+      "relativePath": "common/on_action/votc_load_boundary.txt",
+      "maintainedSnapshotSha256": "4f14470dbbefd198bf6736eb925040e47ec3c9a73c90bec20d41294860e60df1",
+      "observedDiff": "Maintains the on_game_start load epoch and LOAD_SESSION marker plus the existing post-lobby DATE marker; the new Bridge Hello is appended after LOAD_SESSION.",
+      "disposition": "retain_local_maintained_mod_source",
+      "reviewBoundary": "Retained because it is present in the user-authorized 2.0.5 snapshot; this record does not infer authorship or claim engine verification."
+    },
+    {
+      "relativePath": "common/scripted_effects/votc_campaign_identity_effect.txt",
+      "maintainedSnapshotSha256": "e301c82a9314a5ffb323f9bc4f78e5a1a6f2e35eff3c2660b4aa616e1b058cdd",
+      "observedDiff": "Maintains the VOTC campaign-identity initialization effect referenced by game-data export hooks.",
+      "disposition": "retain_local_maintained_mod_source",
+      "reviewBoundary": "Retained because it is present in the user-authorized 2.0.5 snapshot; this record does not infer authorship or claim engine verification."
+    },
+    {
+      "relativePath": "common/scripted_guis/votc_runtime_clock.txt",
+      "maintainedSnapshotSha256": "fde0259f116a66e602b0fd7e7b14e617ec8680a35024b582f1f696e8ba1be004",
+      "observedDiff": "Maintains the VOTC runtime clock scripted GUI for native date and run-file processing.",
+      "disposition": "retain_local_maintained_mod_source",
+      "reviewBoundary": "Retained because it is present in the user-authorized 2.0.5 snapshot; this record does not infer authorship or claim engine verification."
+    },
+    {
+      "relativePath": "gui/custom_gui/votc_runtime_bridge.gui",
+      "maintainedSnapshotSha256": "4d105bb42313d8da71514cacdf394799642c29869a0e41653a5cab8947d87155",
+      "observedDiff": "Maintains the VOTC runtime bridge GUI used by the native consumer path.",
+      "disposition": "retain_local_maintained_mod_source",
+      "reviewBoundary": "Retained because it is present in the user-authorized 2.0.5 snapshot; this record does not infer authorship or claim engine verification."
+    },
+    {
+      "relativePath": "gui/scripted_widgets/votc_runtime_bridge.txt",
+      "maintainedSnapshotSha256": "dcfd3b6ddebc561f19f268f33efddf20550df0ace5d30f58bb6087ce065c9306",
+      "observedDiff": "Registers the VOTC runtime bridge GUI as a scripted widget.",
+      "disposition": "retain_local_maintained_mod_source",
+      "reviewBoundary": "Retained because it is present in the user-authorized 2.0.5 snapshot; this record does not infer authorship or claim engine verification."
+    }
+  ],
+  "upstreamOnlyFiles": [
+    {
+      "relativePath": ".gitattributes",
+      "disposition": "exclude_from_workshop_mod_payload",
+      "reason": "The fixed upstream repository contains this development or repository metadata file, but the installed Mod snapshot does not; the reviewed import is limited to the exact 97-file Workshop payload."
+    },
+    {
+      "relativePath": ".github/workflows/release.yml",
+      "disposition": "exclude_from_workshop_mod_payload",
+      "reason": "The fixed upstream repository contains this development or repository metadata file, but the installed Mod snapshot does not; the reviewed import is limited to the exact 97-file Workshop payload."
+    },
+    {
+      "relativePath": ".gitignore",
+      "disposition": "exclude_from_workshop_mod_payload",
+      "reason": "The fixed upstream repository contains this development or repository metadata file, but the installed Mod snapshot does not; the reviewed import is limited to the exact 97-file Workshop payload."
+    }
+  ],
+  "verifiedBridgePatchFiles": [
+    {
+      "relativePath": "common/on_action/votc_load_boundary.txt",
+      "sha256": "4f14470dbbefd198bf6736eb925040e47ec3c9a73c90bec20d41294860e60df1",
+      "matchesMaintainedSnapshot": true
+    },
+    {
+      "relativePath": "common/scripted_guis/votc_runtime_clock.txt",
+      "sha256": "fde0259f116a66e602b0fd7e7b14e617ec8680a35024b582f1f696e8ba1be004",
+      "matchesMaintainedSnapshot": true
+    },
+    {
+      "relativePath": "gui/custom_gui/letters_runner.gui",
+      "sha256": "2181018c19f3884dc13f49252ef0caa9ffd71c9951b4192f83cea654ea1a4e1a",
+      "matchesMaintainedSnapshot": true
+    },
+    {
+      "relativePath": "gui/custom_gui/votc_runtime_bridge.gui",
+      "sha256": "4d105bb42313d8da71514cacdf394799642c29869a0e41653a5cab8947d87155",
+      "matchesMaintainedSnapshot": true
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_message_clear.gui",
+      "sha256": "162d17b1cca59a83a37fbeef1bf0f8055e6462083c1bddd6e691ca4043a89858",
+      "matchesMaintainedSnapshot": true
+    },
+    {
+      "relativePath": "gui/event_windows/votc_invisible_event.gui",
+      "sha256": "fbf75b792f69f047427fcffa87d2a133eeb9cfbb2ce9cff1cee88c776b6b4bd3",
+      "matchesMaintainedSnapshot": true
+    },
+    {
+      "relativePath": "gui/scripted_widgets/votc_runtime_bridge.txt",
+      "sha256": "dcfd3b6ddebc561f19f268f33efddf20550df0ace5d30f58bb6087ce065c9306",
+      "matchesMaintainedSnapshot": true
+    }
+  ],
+  "bridgeHelloChange": {
+    "relativePath": "common/on_action/votc_load_boundary.txt",
+    "insertion": "One read-only VOTC:BRIDGE_HELLO debug_log line immediately after LOAD_SESSION in the same effect.",
+    "effectBoundary": "No probe, Effect, exporter, existing body, ACK, or receipt changes are made by this insertion.",
+    "runtimeOrEngineVerification": "NOT_RUN"
+  }
+}

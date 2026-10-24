@@ -8,7 +8,7 @@ const IDLE_RUN_FILE_EFFECT = 'if = { limit = { always = no } debug_log = "VOTC:I
 const PENDING_COMMAND_STATUSES = ["queued", "blocked", "awaiting_ack", "stalled"];
 const TERMINAL_COMMAND_STATUSES = ["failed", "acknowledged", "cancelled", "expired", "quarantined"];
 
-function createRunFileManager({ settingsRepository, path, fs, dataDir = null, now = () => Date.now(), random = () => Math.random() }) {
+function createRunFileManager({ settingsRepository, path, fs, dataDir = null, now = () => Date.now(), random = () => Math.random(), onCommandWritten = null }) {
   const fs$1 = fs;
   const renameAtomically = (source, target) => {
     for (let attempt = 0; ; attempt += 1) {
@@ -331,6 +331,7 @@ ${payload}
         this.saveStateOrThrow();
         dispatchPrepared = true;
         this.writeCarrierFile(this.composeCommandText(command));
+        try { onCommandWritten?.(this.snapshot(command)); } catch (_error) { /* Diagnostics cannot change queue recovery. */ }
         this.logRunCommand("dispatch", command, previous.status);
         return this.snapshot(command);
       } catch (error) {

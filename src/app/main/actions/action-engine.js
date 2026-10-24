@@ -19,9 +19,10 @@ function isolateRelationshipCharacter(character) {
   });
 }
 
-function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics, llmManager, ActionPromptBuilder, ActionSandbox, ActionEffectWriter, CriticalActionRecallObserver = DefaultCriticalActionRecallObserver, buildStructuredResponseJsonSchema, buildStructuredResponseSchema, healJsonResponseWithLogging, resolveI18nString, logVerboseLLM }) {
+function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics, llmManager, ActionPromptBuilder, ActionSandbox, ActionEffectWriter, CriticalActionRecallObserver = DefaultCriticalActionRecallObserver, buildStructuredResponseJsonSchema, buildStructuredResponseSchema, healJsonResponseWithLogging, resolveI18nString, logVerboseLLM, bridgeService = null }) {
   return class ActionEngine {
     static async evaluateForCharacter(conv, npc, signal) {
+      bridgeService?.assertFeature("action");
       let diagnosticsObserver = null;
       let diagnosticsRecorded = false;
       const observeDiagnostics = (method, ...args) => {
@@ -99,6 +100,7 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
         console.log(`[DEBUG] ActionEngine: Using minimized schema: ${useMinimizedSchema}`);
         const jsonSchema = buildStructuredResponseJsonSchema({ availableActions: available }, useMinimizedSchema);
         const zodSchema = buildStructuredResponseSchema({ availableActions: available });
+        bridgeService?.assertFeature("action");
         const output = await llmManager.sendActionsRequest(messages, "votc_actions", jsonSchema, signal, {
           characterId: npc.id,
           responderId: npc.id,

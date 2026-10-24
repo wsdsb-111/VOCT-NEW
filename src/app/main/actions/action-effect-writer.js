@@ -1,6 +1,6 @@
 "use strict";
 
-function createActionEffectWriter({ runFileManager }) {
+function createActionEffectWriter({ runFileManager, bridgeService = null }) {
   return class ActionEffectWriter {
     static composeScopePrelude(sourceIndex, targetIndex, isPlayerTarget, isPlayerSource = false) {
       let prelude = "";
@@ -60,6 +60,7 @@ ordered_in_global_list = {
     }
 
     static writeEffect(gameData, sourceCharacterId, targetCharacterId, effectBody, context = {}) {
+      bridgeService?.assertFeature("action");
       runFileManager.releaseStalledActionForNewAction?.();
       if (runFileManager.getQueueHealth?.()?.queueBlocked) throw new Error("action_queue_blocked");
       const sourceIndex = this.getCharacterIndex(gameData, sourceCharacterId);

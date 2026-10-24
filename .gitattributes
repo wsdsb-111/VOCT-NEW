@@ -34,3 +34,7 @@ docs/current/v9/V9_3_3_1_FIX_SPEC.md whitespace=-blank-at-eol
 /docs/current/v9/patches/V9_3_9_KIDS_DIRECT_PARENT_EVIDENCE.patch -text whitespace=-space-before-tab
 # Preserve the user's supplied V9.4 design, including Markdown hard line breaks.
 /docs/current/v9/V9_4_DESIGN.md whitespace=-blank-at-eol
+
+# Preserve imported Mod bytes, including upstream whitespace; do not reformat this vendor baseline.
+/ck3-mod/** -text -whitespace
+/docs/current/v9/V9_6_DESIGN.md whitespace=-blank-at-eol

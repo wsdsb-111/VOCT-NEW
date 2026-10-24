@@ -1,0 +1,86 @@
+window = {
+	name = "talk_window_v2"
+	size = { 100% 100% }
+	parentanchor = center
+	movable = no
+	#position = { -80 130 }
+	layer = royal_court
+	
+	state = {
+		name = itsshowtime
+		trigger_on_create = yes
+		on_finish = "[GetVariableSystem.Set( 'blur', '1' )]"
+		
+	}
+	datacontext = "[GetIllustration('talk_background')]"
+	background = {
+		texture = "[Illustration.GetTexture(GetPlayer.MakeScope)]"
+	}
+	
+	conversation_partner_v2 = {
+		visible = "[GetGlobalVariable('mcc_character_0').IsSet]"
+		datacontext = "[GetGlobalVariable('mcc_character_0').GetCharacter]"
+		parentanchor = bottom|hcenter
+		position = { 450 50}
+	}
+	conversation_partner_v2 = {
+		visible = "[GetGlobalVariable('mcc_character_1').IsSet]"
+		datacontext = "[GetGlobalVariable('mcc_character_1').GetCharacter]"
+		parentanchor = bottom|hcenter
+		position = { 750 50}
+	}
+	conversation_partner_v2 = {
+		visible = "[GetGlobalVariable('mcc_character_3').IsSet]"
+		datacontext = "[GetGlobalVariable('mcc_character_3').GetCharacter]"
+		parentanchor = bottom|hcenter
+		position = { 50 40}
+	}
+	conversation_partner_v2_front = {
+		visible = "[GetGlobalVariable('mcc_character_2').IsSet]"
+		datacontext = "[GetGlobalVariable('mcc_character_2').GetCharacter]"
+		parentanchor = bottom|hcenter
+		position = { 250 50}
+	}
+	conversation_partner_v2 = {
+		visible = "[GetGlobalVariable('mcc_character_4').IsSet]"
+		datacontext = "[GetGlobalVariable('mcc_character_4').GetCharacter]"
+		parentanchor = bottom|hcenter
+		position = { 150 50}
+	}
+	conversation_partner_v2 = {
+		visible = "[GetGlobalVariable('mcc_character_5').IsSet]"
+		datacontext = "[GetGlobalVariable('mcc_character_5').GetCharacter]"
+		parentanchor = bottom|hcenter
+		position = { 0 50}
+	}
+	
+
+	
+	button_standard = {
+		parentanchor = top|left
+		position = { 0 0}
+		size = { 60 20 }
+		raw_text = "exit"
+		
+		onclick = "[ExecuteConsoleCommand('event mcc_event_v2.9002')]"		
+		onclick = "[ExecuteConsoleCommand('GUI.ClearWidgets talk_window_v2 talk_window_counter')]"		
+	}
+	
+	#close window
+	hbox = {
+		name = "talk_window_counter"
+	
+		state = {
+			name = _show
+			trigger_on_create = yes
+			on_finish = "[ExecuteConsoleCommand('run votc.txt')]"
+		}
+	
+		state = {
+			name = _show2
+			trigger_on_create = yes
+			duration = 0.4
+			on_finish = "[ExecuteConsoleCommand('gui.createwidget gui/custom_gui/talk_window_v2.gui talk_window_counter')]"
+		}
+	}
+}

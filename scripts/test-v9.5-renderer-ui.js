@@ -269,6 +269,10 @@ function mockPreloadSource({ presentationEnabled = false } = {}) {
     window.worldlineAPI = worldlineAPI;
     window.characterKnowledgeAPI = characterKnowledgeAPI;
     window.usageAPI = usageAPI;
+    window.bridgeAPI = api("bridgeAPI", {
+      getState: async () => { read("bridgeAPI", "getState"); return { status: "UNKNOWN", reasonCode: "LEGACY_UNVERIFIED", runtimeVersion: "9.6.0", sessionEvidence: {}, capabilities: {}, features: {}, channels: {} }; },
+      redetect: async () => { read("bridgeAPI", "redetect"); return { status: "UNKNOWN", reasonCode: "LEGACY_UNVERIFIED", runtimeVersion: "9.6.0", sessionEvidence: {}, capabilities: {}, features: {}, channels: {} }; }
+    });
     window.providerDiagnosticsAPI = api("providerDiagnosticsAPI", {
       getStatus: async () => { read("providerDiagnosticsAPI", "getStatus"); return { status: "READY" }; },
       getRealRequestDiff: async () => { read("providerDiagnosticsAPI", "getRealRequestDiff"); return { summary: { conclusion: "insufficient_data" }, entries: [] }; },

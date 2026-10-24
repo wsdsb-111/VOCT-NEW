@@ -1,5 +1,7 @@
 # V9.6 探索架构决策：同仓可审计，交付统一，工件解耦
 
+> Historical exploration: unified Workshop distribution and Bootstrap proposals are superseded by the user-authorized independent Mod/Runtime design. See [V9.6 implementation](V9_6_IMPLEMENTATION.md), [verification](V9_6_VERIFICATION.md) and [pairing](V9_6_RELEASE_PAIRING.md).
+
 日期：2026-10-24。状态：**探索推荐，非迁移／发布批准**。用户将统一交付作为9.6目标；本轮不实现安装器、自动更新或Workshop发布。
 
 ## 决策与依据

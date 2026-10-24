@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://voices-of-the-court.invalid/contracts/ck3-bridge/manifest.schema.json",
+  "title": "VOTC CK3 Mod source inputs manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "source",
+    "gameCompatibility",
+    "fileCount",
+    "totalBytes",
+    "treeHashRule",
+    "sourceRevision",
+    "modPayloadTreeSha256",
+    "artifactSha256",
+    "artifactHashScope",
+    "files"
+  ],
+  "properties": {
+    "schema": {
+      "const": "votc-ck3-mod-inputs/v1"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "upstreamRepository",
+        "upstreamRevision",
+        "upstreamBaseVersion",
+        "maintainedModBase",
+        "bridgeRevision"
+      ],
+      "properties": {
+        "upstreamRepository": {
+          "const": "Voices-of-the-Court/votc_mod"
+        },
+        "upstreamRevision": {
+          "const": "0cf4845a69f9e8633333ca04e558afe8216490f2"
+        },
+        "upstreamBaseVersion": {
+          "const": "2.0.4"
+        },
+        "maintainedModBase": {
+          "const": "2.0.5"
+        },
+        "bridgeRevision": {
+          "const": 1
+        }
+      }
+    },
+    "gameCompatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "verifiedVersions"
+      ],
+      "properties": {
+        "target": {
+          "const": "CK3 1.20.*"
+        },
+        "verifiedVersions": {
+          "const": []
+        }
+      }
+    },
+    "fileCount": {
+      "const": 97
+    },
+    "totalBytes": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "treeHashRule": {
+      "const": "SHA-256 of UTF-8 relativePath + NUL + decimal size + NUL + lowercase file SHA-256 + LF, sorted by relativePath.localeCompare(en)."
+    },
+    "sourceRevision": {
+      "$ref": "#/$defs/sha256"
+    },
+    "modPayloadTreeSha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "artifactSha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "artifactHashScope": {
+      "const": "mod-payload-tree; no archive or ZIP is implied"
+    },
+    "files": {
+      "type": "array",
+      "minItems": 97,
+      "maxItems": 97,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "relativePath",
+          "size",
+          "sha256"
+        ],
+        "properties": {
+          "relativePath": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*:)(?!.*//)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))[^\\x00-\\x1F]+$"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "$ref": "#/$defs/sha256"
+          }
+        }
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

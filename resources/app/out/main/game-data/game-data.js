@@ -490,6 +490,7 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
     }
     
     syncOfficialRecollectionSummaries(sessionId) {
+      if (this.bridgeFeatureAvailable?.("officialRecollection") === false || this.bridgeUnavailableFeatures?.includes("officialRecollection")) return;
       for (const character of this.characters.values()) {
         if (character.id === this.playerID) continue;
         const summary = buildOfficialRecollectionSummary({ character, gameData: this, sessionId,
@@ -507,6 +508,7 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
     }
 
     getOfficialRecollectionSummary(characterId, sessionId) {
+      if (this.bridgeFeatureAvailable?.("officialRecollection") === false || this.bridgeUnavailableFeatures?.includes("officialRecollection")) return null;
       const character = this.characters.get(Number(characterId));
       if (!character || character.id === this.playerID) return null;
       const filePath = path.join(this.getCharacterFolderPath(character.id, character.shortName), "官方追忆摘要.json");

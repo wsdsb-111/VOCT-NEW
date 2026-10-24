@@ -1,0 +1,144 @@
+﻿window = {
+    visible = "[GetVariableSystem.Exists('votc_scene_selector_opened')]"
+	name = "votc_scene_selector"
+	size = { 100% 100% }
+	parentanchor = center
+	movable = no
+	layer = top
+    
+    using = Background_Letter_No_Frame
+    background = {
+        using = Background_Area_Dark
+        alpha = 0.8
+        modify_texture = {
+            texture = "gfx/interface/component_masks/mask_fade_horizontal_extended.dds"
+            blend_mode = alphamultiply
+        }
+    }
+
+    vbox = {
+        header_standard = {
+            layoutpolicy_horizontal = expanding
+
+            blockoverride "header_text"
+            {
+                text = votc_scene_selector_title
+            }
+
+            blockoverride "button_close"
+            {
+                onclick = "[GetVariableSystem.Clear('votc_scene_selector_opened')]"
+            }
+        }
+        hbox = {
+            layoutpolicy_horizontal = expanding
+            layoutpolicy_vertical = expanding
+            
+            vbox = {
+                layoutpolicy_horizontal = expanding
+                layoutpolicy_vertical = expanding
+                
+                scrollbox = {
+                    name = "votc_select_start_scene"
+                    layoutpolicy_horizontal = expanding
+                    layoutpolicy_vertical = expanding
+                    blockoverride "scrollbox_content"
+                    {
+
+                        dynamicgridbox = {
+                            datamodel = "[GetPlayer.MakeScope.GetList('talk_scene_flags')]"
+                            datamodel_wrap = 6
+                            flipdirection = yes
+                            setitemsizefromcell = no
+                            
+                            item = {
+                                container = {
+                                    size = { 324 184 }
+                                        button_standard_clean = {
+                                            size = { 320 180 }
+                                            onclick = "[GetScriptedGui('votc_select_talk_scene').Execute(GuiScope.SetRoot(GetPlayer.MakeScope).AddScope('selected_scene', MakeScopeFlag(Scope.GetFlagName)).End)]"
+                                            onclick = "[GetVariableSystem.Clear('votc_scene_selector_opened')]"
+                                            vbox = {
+                                                layoutpolicy_horizontal = expanding
+                                                layoutpolicy_vertical = expanding
+
+                                                background = {
+                                                    name = "votc_scene_background"
+                                                    texture = "[GetIllustration(Scope.GetFlagName).GetTexture( GetPlayer.MakeScope )]"
+                                                    using = Mask_Rough_Edges
+                                                    fittype = centercrop
+                                                    margin = { -1 -1 }
+                                                    size = { 100% 100% }
+                                                }
+
+                                                hbox = {
+                                                    visible = yes
+                                                    layoutpolicy_horizontal = expanding
+
+                                                    margin = { 0 5 }
+
+                                                    header_text = {
+                                                        visible = yes
+                                                        max_width = 576
+                                                        margin = { 0 5 }
+                                                        
+                                                        text = "[Localize(Concatenate(Scope.GetFlagName, '_title'))]"
+                                                        default_format = "#high"
+                                                        align = center
+                                                    }
+
+                                                    background = {
+                                                        using = Background_Area_Dark
+                                                    }
+                                                }
+
+                                                expand = {}
+
+                                                hbox = {
+                                                    layoutpolicy_horizontal = growing
+
+                                                    background =  {
+                                                        using = Background_Area_Dark
+
+                                                        modify_texture = {
+                                                            texture = "gfx/interface/component_masks/mask_fade_vertical.dds"
+                                                            blend_mode = alphamultiply
+                                                            mirror = vertical
+                                                        }
+                                                    }
+
+                                                    background = {
+                                                        texture ="gfx/interface/skinned/mask_pattern.dds"
+                                                        texture_density = 3
+                                                        spriteType = Corneredtiled
+                                                        color = { 0.6 0.7 0.65 0.2 }
+                                                        alpha = 0.7
+
+                                                        modify_texture = {
+                                                            texture = "gfx/interface/component_masks/mask_fade_vertical_up.dds"
+                                                            blend_mode = alphamultiply
+                                                        }
+                                                    }
+
+                                                    text_single = {
+                                                        margin = { 0 15 }
+                                                    }
+                                                }
+                                            }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    
+                }
+            }
+        }
+    }
+
+    
+
+    
+}
+

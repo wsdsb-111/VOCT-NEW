@@ -1,6 +1,6 @@
 # VOTC 文档索引
 
-**V9.6 前置探索（2026-10-24，未施工）**：[总览](current/v9/V9_6_PRE_EXPLORATION.md)、[源码取证](current/v9/V9_6_SOURCE_INVENTORY.md)、[通信依赖矩阵](current/v9/V9_6_BRIDGE_PROTOCOL_MATRIX.md)、[兼容候选](current/v9/V9_6_COMPATIBILITY_MATRIX.md)、[架构决策](current/v9/V9_6_ARCHITECTURE_DECISION.md)、[原型与实机计划](current/v9/V9_6_CK3_LIVE_TEST_PLAN.md)。本机97文件哈希、七补丁对照及固定上游差异已记录；统一交付目标按用户最新说明纳入9.6前置研究。Runtime仍9.5.1，没有导入完整Mod、改协议或发布Workshop。
+**V9.6.0 双模块候选（2026-10-24）**：[设计原文](current/v9/V9_6_DESIGN.md)、[实施](current/v9/V9_6_IMPLEMENTATION.md)、[验证](current/v9/V9_6_VERIFICATION.md)、[独立分发与配对](current/v9/V9_6_RELEASE_PAIRING.md)。官方上游 2.0.4／维护 Mod 2.0.5／Bridge 1 与 Runtime 分开版本；完整 97 文件源码、只读 Hello、能力门禁和双语诊断已实施。本轮只推送 GitHub，Steam 及真实 CK3／Soak 未发布或验收。前置探索的统一交付建议已被双模块方案取代；[探索总览](current/v9/V9_6_PRE_EXPLORATION.md)、[来源取证](current/v9/V9_6_SOURCE_INVENTORY.md)、[通信依赖](current/v9/V9_6_BRIDGE_PROTOCOL_MATRIX.md)、[旧架构建议](current/v9/V9_6_ARCHITECTURE_DECISION.md)保留历史。以下为历史版本证据。
 
 当前入口 **V9.5.1 候选**：[实施与验证](current/v9/V9_5_1_VERIFICATION.md)、[页面迁移矩阵](current/v9/V9_5_1_PAGE_MIGRATION_MATRIX.md)、[双语覆盖](current/v9/V9_5_1_I18N_COVERAGE.md)。原页面共享组件、官方追忆 scoped read、英文标题与标签、导航专属图标；完整门禁和实机状态按本版记录。以下 V9.5.0 及更早为历史批次。
 

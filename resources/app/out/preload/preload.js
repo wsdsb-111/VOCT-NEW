@@ -1,5 +1,9 @@
 "use strict";
 const electron = require("electron");
+electron.contextBridge.exposeInMainWorld("bridgeAPI", {
+  getState: () => electron.ipcRenderer.invoke("bridge:getState"),
+  redetect: () => electron.ipcRenderer.invoke("bridge:redetect")
+});
 electron.contextBridge.exposeInMainWorld("electronAPI", {
   /**
    * Sends a message to the main process to set the window's mouse event ignoring state.

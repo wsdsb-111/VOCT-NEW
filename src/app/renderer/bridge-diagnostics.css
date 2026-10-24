@@ -1,0 +1,141 @@
+.bridge-diagnostics {
+  color: var(--text-color, inherit);
+  padding: 0.4rem 0;
+}
+
+.bridge-diagnostics__header,
+.bridge-diagnostics__channel-heading,
+.bridge-diagnostics__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 0.8rem;
+  justify-content: space-between;
+}
+
+.bridge-diagnostics__header h4,
+.bridge-diagnostics__section h5,
+.bridge-diagnostics__guide h5 {
+  margin: 0.3rem 0;
+}
+
+.bridge-diagnostics__intro,
+.bridge-diagnostics__capability span,
+.bridge-diagnostics__channel p,
+.bridge-diagnostics__timestamp,
+.bridge-diagnostics__guide p {
+  color: var(--muted-text-color, inherit);
+  opacity: 0.82;
+}
+
+.bridge-diagnostics__status,
+.bridge-diagnostics__channel,
+.bridge-diagnostics__capability,
+.bridge-diagnostics__feature,
+.bridge-diagnostics__reason,
+.bridge-diagnostics__next-step,
+.bridge-diagnostics__guide {
+  border: 1px solid var(--border-color, rgba(127, 127, 127, 0.28));
+  background: rgba(127, 127, 127, 0.07);
+}
+
+.bridge-diagnostics__status {
+  border-left: 3px solid var(--accent-color, #bd8c42);
+  border-radius: 0.25rem;
+  padding: 0.35rem 0.55rem;
+}
+
+.bridge-diagnostics__status--incompatible {
+  border-left-color: var(--danger-color, #a33);
+}
+
+.bridge-diagnostics__status--degraded,
+.bridge-diagnostics__status--unknown,
+.bridge-diagnostics__status--unverified {
+  border-left-color: var(--warning-color, #b87922);
+}
+
+.bridge-diagnostics__versions,
+.bridge-diagnostics__evidence-grid,
+.bridge-diagnostics__capabilities,
+.bridge-diagnostics__features,
+.bridge-diagnostics__channels {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  list-style: none;
+  margin: 0.45rem 0;
+  padding: 0;
+}
+
+.bridge-diagnostics__versions > div,
+.bridge-diagnostics__evidence-grid > div,
+.bridge-diagnostics__capability,
+.bridge-diagnostics__feature,
+.bridge-diagnostics__channel,
+.bridge-diagnostics__reason,
+.bridge-diagnostics__next-step,
+.bridge-diagnostics__guide {
+  border-radius: 0.25rem;
+  padding: 0.45rem 0.6rem;
+}
+
+.bridge-diagnostics__versions > div,
+.bridge-diagnostics__evidence-grid > div {
+  background: rgba(127, 127, 127, 0.045);
+}
+
+.bridge-diagnostics__versions span,
+.bridge-diagnostics__evidence-grid dt {
+  display: block;
+  font-size: 0.9em;
+  opacity: 0.78;
+}
+
+.bridge-diagnostics__evidence-grid dd {
+  margin: 0.15rem 0 0;
+}
+
+.bridge-diagnostics__section {
+  margin-top: 0.9rem;
+}
+
+.bridge-diagnostics__capability,
+.bridge-diagnostics__feature {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.bridge-diagnostics__channel p,
+.bridge-diagnostics__reason p,
+.bridge-diagnostics__next-step p,
+.bridge-diagnostics__guide p {
+  margin: 0.25rem 0 0;
+}
+
+.bridge-diagnostics__actions {
+  justify-content: flex-start;
+  margin-top: 0.7rem;
+}
+
+.bridge-diagnostics__actions button {
+  background: rgba(127, 127, 127, 0.1);
+  border: 1px solid var(--border-color, rgba(127, 127, 127, 0.35));
+  border-radius: 0.25rem;
+  color: inherit;
+  cursor: pointer;
+  padding: 0.35rem 0.55rem;
+}
+
+.bridge-diagnostics__actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.bridge-diagnostics__feedback--error {
+  color: var(--danger-color, #a33);
+}
+
+.bridge-diagnostics__guide {
+  margin-top: 0.75rem;
+}

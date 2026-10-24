@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "runtimeVersion": "9.6.0",
+  "mod": {
+    "upstreamBaseVersion": "2.0.4",
+    "maintainedModBase": "2.0.5"
+  },
+  "bridgeProtocol": {
+    "major": 1,
+    "minMinor": 0,
+    "maxMinor": 0
+  },
+  "capabilities": {
+    "character_export": {
+      "minRevision": 1,
+      "maxRevision": 1
+    },
+    "trait_export": {
+      "minRevision": 1,
+      "maxRevision": 1
+    },
+    "native_date": {
+      "minRevision": 1,
+      "maxRevision": 1
+    },
+    "load_session": {
+      "minRevision": 1,
+      "maxRevision": 1
+    },
+    "runfile_consumer": {
+      "minRevision": 1,
+      "maxRevision": 1
+    },
+    "run_ack": {
+      "minRevision": 1,
+      "maxRevision": 1
+    },
+    "action_readback": {
+      "minRevision": 1,
+      "maxRevision": 1
+    },
+    "letter_receipt": {
+      "minRevision": 1,
+      "maxRevision": 1
+    },
+    "official_recollection_export": {
+      "minRevision": 1,
+      "maxRevision": 1
+    }
+  },
+  "features": {
+    "conversation": {
+      "required": [
+        "character_export",
+        "load_session"
+      ]
+    },
+    "action": {
+      "required": [
+        "runfile_consumer",
+        "run_ack"
+      ]
+    },
+    "letter": {
+      "required": [
+        "native_date",
+        "load_session",
+        "runfile_consumer",
+        "run_ack",
+        "letter_receipt"
+      ]
+    },
+    "actionConfirmation": {
+      "required": [
+        "action_readback"
+      ]
+    },
+    "traits": {
+      "required": [
+        "trait_export"
+      ]
+    },
+    "officialRecollection": {
+      "required": [
+        "official_recollection_export"
+      ]
+    }
+  }
+}

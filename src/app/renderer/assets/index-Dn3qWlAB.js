@@ -1,3 +1,4 @@
+import { createBridgeDiagnostics } from "../bridge-diagnostics.js";
 import { WorldMemoryEditor } from "../world-memory-editor.js";
 import { getLegacySummaryPage, getSummaryDisplayEntries, getSummaryImportantMatters } from "../summary-date-order.js";
 import { createRendererRuntime } from "../v95/containers/renderer-runtime.js";
@@ -58,7 +59,7 @@ function V95UiSettings() {
     error && jsxRuntimeExports.jsx("p", { role: "status", children: error })
   ] });
 }
-const VOTC_FEATURE_VERSION = "V9.5.1";
+const VOTC_FEATURE_VERSION = "V9.6.0";
 const VOTC_WORKSHOP_MOD_VERSION = "2.0.5";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -565,6 +566,7 @@ function requireReact() {
   return react.exports;
 }
 var reactExports = requireReact();
+const BridgeDiagnosticsView = createBridgeDiagnostics({ React: reactExports, jsxRuntime: jsxRuntimeExports });
 const React = /* @__PURE__ */ getDefaultExportFromCjs(reactExports);
 var client = { exports: {} };
 var reactDomClient_production = {};
@@ -22782,6 +22784,7 @@ const ProviderDiagnosticsView = () => {
   const prefixRows = Array.isArray(summary.prefixBuckets) ? summary.prefixBuckets : [];
   const intervalRows = Array.isArray(summary.intervalBuckets) ? summary.intervalBuckets : [];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-view provider-diagnostics-view", children: [
+    jsxRuntimeExports.jsx(BridgeDiagnosticsView, { uiLanguage: isChinese ? "zh-CN" : "en-US" }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "optimization-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("真实请求差异诊断", "Real Request Diff Diagnostics") }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text("只分析真实 VOCT Chat outbound request；比较 Route、Conversation 和 Responder scope。只持久化 hash、Token、ID、时间与 Provider Usage，不保存 Prompt 正文。", "Analyzes real VOCT Chat outbound requests across Route, Conversation, and Responder scopes. Only hashes, token counts, IDs, timing, and Provider Usage are persisted; prompt text is never stored.") }),

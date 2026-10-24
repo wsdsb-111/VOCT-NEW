@@ -1,3 +1,10 @@
+# V9.6.0 候选（2026-10-24）
+
+- Workshop Mod 与 Runtime 分开维护、构建和发布；完整 Mod 源纳管到 `ck3-mod/`，保留官方 2.0.4 与维护 2.0.5 的来源差异和许可证。
+- 新增 Bridge 1.0 只读 Hello、当前载入绑定、逐能力兼容判定和双语诊断；旧无 Hello 保持未验证旧路径，诊断不发送 Effect。
+- 模型工作流及写入前检查能力，ACK／回读／Receipt 独立记录实际发送 generation；跨载入不复用旧确认，保留原队列与未知效果不重放。
+- 本轮只推送 GitHub，未发布 Steam；详见[实施](docs/current/v9/V9_6_IMPLEMENTATION.md)、[验证](docs/current/v9/V9_6_VERIFICATION.md)、[配对说明](docs/current/v9/V9_6_RELEASE_PAIRING.md)。真实 CK3／Provider／Soak 单列，候选不是 Full Freeze。
+
 # V9.5.1 候选（2026-10-23）
 
 - 原功能页接入共享离线图标及状态组件，优化／世界书导航增加专属图标，保留透明主题与既有业务控件。

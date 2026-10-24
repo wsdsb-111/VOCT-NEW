@@ -1,5 +1,7 @@
 # V9.6 无副作用原型与实机验收计划
 
+> Historical exploration: unified Workshop distribution and Bootstrap proposals are superseded by the user-authorized independent Mod/Runtime design. See [V9.6 implementation](V9_6_IMPLEMENTATION.md), [verification](V9_6_VERIFICATION.md) and [pairing](V9_6_RELEASE_PAIRING.md).
+
 日期：2026-10-24。状态：**计划，全部新原型与实机项NOT_RUN**。本轮只做[源与协议探索](V9_6_PRE_EXPLORATION.md)，没有调用真实Provider或游戏Effect。
 
 ## 逐层验证

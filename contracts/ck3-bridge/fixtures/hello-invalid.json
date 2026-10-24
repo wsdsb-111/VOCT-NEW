@@ -1,0 +1,12 @@
+{
+  "fixtureId": "hello-unsupported-major",
+  "provenance": "synthetic_static_contract",
+  "input": {
+    "kind": "bridge-hello-line",
+    "line": "VOTC:BRIDGE_HELLO/;/schema=1/;/protocol=2.0/;/mod=2.0.5/;/upstream=2.0.4/;/revision=1/;/load=votc-load-43/;/caps=character_export:1,trait_export:1,native_date:1,load_session:1,runfile_consumer:1,run_ack:1,action_readback:1,letter_receipt:1,official_recollection_export:1"
+  },
+  "expected": {
+    "state": "INCOMPATIBLE",
+    "reason": "UNSUPPORTED_PROTOCOL_OR_SCHEMA"
+  }
+}

@@ -1,0 +1,132 @@
+﻿log_gamedata_v3l = {
+	votc_ensure_campaign_identity = yes
+	log_backgrounds = yes
+	debug_log = "VOTC:IN/;/init/;/[GetPlayer.GetID]/;/[GetPlayer.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/[recipient.GetID]/;/[recipient.GetTitledFirstNameNicknamedNoTooltipRegnal]/;/[GetCurrentDate.GetStringShort]/;/[GetGlobalVariable('talk_scene').GetFlagName]/;/[recipient.GetCurrentLocation.GetName]/;/[recipient.GetCurrentLocation.GetController.GetFullNameNicknamedNoTooltipRegnal]/;/[GetCurrentDate.GetDateAsTotalDays]"
+
+	debug_log = log_character_header
+	debug_log = "VOTC:CAMPAIGN/votc8c-[GetGlobalVariable('votc_campaign_digit_01').GetFlagName][GetGlobalVariable('votc_campaign_digit_02').GetFlagName][GetGlobalVariable('votc_campaign_digit_03').GetFlagName][GetGlobalVariable('votc_campaign_digit_04').GetFlagName][GetGlobalVariable('votc_campaign_digit_05').GetFlagName][GetGlobalVariable('votc_campaign_digit_06').GetFlagName][GetGlobalVariable('votc_campaign_digit_07').GetFlagName][GetGlobalVariable('votc_campaign_digit_08').GetFlagName][GetGlobalVariable('votc_campaign_digit_09').GetFlagName][GetGlobalVariable('votc_campaign_digit_10').GetFlagName][GetGlobalVariable('votc_campaign_digit_11').GetFlagName][GetGlobalVariable('votc_campaign_digit_12').GetFlagName]"
+	
+	scope:recipient = {
+		add_to_global_variable_list = {
+			name = mcc_characters_list_v2
+			target = this
+		}
+	}
+    scope:actor = {
+		add_to_global_variable_list = {
+			name = mcc_characters_list_v2
+			target = this
+		}
+	}
+
+		every_in_global_list = {
+		variable = mcc_characters_list_v2
+		limit = {
+			NOT = { this = scope:actor }
+		}
+		log_character_v2 = yes
+	}
+	scope:actor = {
+		log_character_v2 = yes
+	}
+
+	scope:actor = {
+		if = {
+			limit = { 
+				global_variable_list_size = {
+					name = mcc_characters_list_v2
+					value > 0
+				}
+			}
+			ordered_in_global_list = {
+				variable = mcc_characters_list_v2
+				position = 0
+				set_global_variable = {
+					name = mcc_character_0
+					value = this
+				}
+			}
+		}
+		if = {
+			limit = { 
+				global_variable_list_size = {
+					name = mcc_characters_list_v2
+					value > 1
+				}
+			}
+			ordered_in_global_list = {
+				variable = mcc_characters_list_v2
+				position = 1
+				set_global_variable = {
+					name = mcc_character_1
+					value = this
+				}
+			}
+		}
+		if = {
+			limit = { 
+				global_variable_list_size = {
+					name = mcc_characters_list_v2
+					value > 2
+				}
+			}
+			ordered_in_global_list = {
+				variable = mcc_characters_list_v2
+				position = 2
+				set_global_variable = {
+					name = mcc_character_2
+					value = this
+				}
+			}
+		}
+		if = {
+			limit = { 
+				global_variable_list_size = {
+					name = mcc_characters_list_v2
+					value > 3
+				}
+			}
+			ordered_in_global_list = {
+				variable = mcc_characters_list_v2
+				position = 3
+				set_global_variable = {
+					name = mcc_character_3
+					value = this
+				}
+			}
+		}
+		if = {
+			limit = { 
+				global_variable_list_size = {
+					name = mcc_characters_list_v2
+					value > 4
+				}
+			}
+			ordered_in_global_list = {
+				variable = mcc_characters_list_v2
+				position = 4
+				set_global_variable = {
+					name = mcc_character_4
+					value = this
+				}
+			}
+		}
+		if = {
+			limit = { 
+				global_variable_list_size = {
+					name = mcc_characters_list_v2
+					value > 5
+				}
+			}
+			ordered_in_global_list = {
+				variable = mcc_characters_list_v2
+				position = 5
+				set_global_variable = {
+					name = mcc_character_5
+					value = this
+				}
+			}
+		}
+	}
+
+}

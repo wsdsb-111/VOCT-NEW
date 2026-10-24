@@ -1384,6 +1384,30 @@
     {
       "source": "renderer/v95/i18n/locales/v9-5-1-legacy-ui.js",
       "target": "out/renderer/v95/i18n/locales/v9-5-1-legacy-ui.js"
+    },
+    {
+      "source": "main/bridge/bridge-business-evidence.js",
+      "target": "out/main/bridge/bridge-business-evidence.js"
+    },
+    {
+      "source": "main/bridge/bridge-compatibility-service.js",
+      "target": "out/main/bridge/bridge-compatibility-service.js"
+    },
+    {
+      "source": "main/bridge/bridge-hello-parser.js",
+      "target": "out/main/bridge/bridge-hello-parser.js"
+    },
+    {
+      "source": "main/bridge/runtime-manifest.json",
+      "target": "out/main/bridge/runtime-manifest.json"
+    },
+    {
+      "source": "renderer/bridge-diagnostics.css",
+      "target": "out/renderer/bridge-diagnostics.css"
+    },
+    {
+      "source": "renderer/bridge-diagnostics.js",
+      "target": "out/renderer/bridge-diagnostics.js"
     }
   ]
 }

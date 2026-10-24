@@ -223,6 +223,20 @@ async function openAllOriginalPages(browser, localeIndex, { verifyPresentation =
     assert(labels.some(label => state.label.includes(label)), `navigation should activate ${labels[localeIndex]}`);
     assert(state.contentChildren > 0, `${labels[localeIndex]} should render its original production page`);
 
+    if (verifyPresentation && page.id === "diagnostics") {
+      await browser.waitFor('document.querySelector(".provider-diagnostics-view .bridge-diagnostics")?.textContent.includes("2.0.4")', { timeout: 5000 });
+      const bridgeText = await browser.evaluate('document.querySelector(".bridge-diagnostics").innerText');
+      assert.match(bridgeText, localeIndex ? /Legacy \/ unverified/ : /旧版／未验证/);
+      assert.match(bridgeText, /2\.0\.5/);
+      assert.doesNotMatch(bridgeText, /C:\\|D:\\|votc-load-/);
+      await browser.evaluate(`(() => {
+        const label = ${JSON.stringify(localeIndex ? "Re-detect current session" : "重新检测当前会话")};
+        const button = Array.from(document.querySelectorAll(".bridge-diagnostics button")).find(node => node.textContent.trim() === label);
+        if (!button) throw new Error("Bridge redetect button missing");
+        button.click();
+      })()`);
+    }
+
     if (verifyPresentation && page.labels[0] === "优化") await assertNavIcon(browser, labels, "optimization");
     if (verifyPresentation && page.labels[0] === "世界书") await assertNavIcon(browser, labels, "worldbook");
     if (verifyPresentation && page.labels[0] === "连接" && localeIndex === 1) {
@@ -409,6 +423,7 @@ async function main() {
     assert.deepEqual(fixtureState.legacyCalls, [], "the UI locale control must not call the legacy prompt-language API");
     assert(fixtureState.reads.includes("worldlineAPI.getWorldKnowledge"), "the worldbook row must come from the explicit safe mock read");
     assert(fixtureState.reads.includes("providerDiagnosticsAPI.getRealRequestDiff"), "the diagnostics page must use its explicit safe read mock");
+    assert(fixtureState.reads.includes("bridgeAPI.getState") && fixtureState.reads.includes("bridgeAPI.redetect"), "the original diagnostics page must use both read-only Bridge methods");
     assert.deepEqual(fixtureState.unexpected, [], "all production page IPC reads should have explicit anonymous mock handlers");
     assert.deepEqual(fixtureState.blockedNetwork, [], "production UI must not attempt external network access");
     assert.equal(fixtureState.protectedSnapshot, protectedBefore, "provider, prompt and legacy-language config must remain unchanged");

@@ -1,0 +1,35 @@
+window = {
+	name = "votc_invisible_event"
+	gfxtype = windowgfx
+	parentanchor = top|right
+	layer = tutorial
+	allow_outside = yes
+	size = { 1 1 }           ############ SIZES NEED TO MATCH
+	position = { 0 0 }
+
+	datacontext = "[EventWindow.AccessEventWindowData]"
+
+
+#	state = {
+#		name = _hide
+#		duration = 0.1
+#	}
+
+	### CONTENT ###
+	widget = {
+		name = "letter_content"
+		size = { 100% 100% }
+		alpha = 0
+		allow_outside = yes
+
+		background = { using = Background_Area_Border_Solid }
+
+		hbox = {
+			layoutpolicy_vertical = expanding
+
+			widget = {
+			    size = { 30 0 }
+			}
+        }
+	}
+}

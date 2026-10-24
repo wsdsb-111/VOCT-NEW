@@ -1,0 +1,508 @@
+{
+  "schema": "votc-ck3-mod-inputs/v1",
+  "source": {
+    "upstreamRepository": "Voices-of-the-Court/votc_mod",
+    "upstreamRevision": "0cf4845a69f9e8633333ca04e558afe8216490f2",
+    "upstreamBaseVersion": "2.0.4",
+    "maintainedModBase": "2.0.5",
+    "bridgeRevision": 1
+  },
+  "gameCompatibility": {
+    "target": "CK3 1.20.*",
+    "verifiedVersions": []
+  },
+  "fileCount": 97,
+  "totalBytes": 12996288,
+  "treeHashRule": "SHA-256 of UTF-8 relativePath + NUL + decimal size + NUL + lowercase file SHA-256 + LF, sorted by relativePath.localeCompare(en).",
+  "sourceRevision": "d3bd9b0ecca796f5cbe404672e3b10ff2fbb1ad51fb31698f51f4f0a1ede58fd",
+  "modPayloadTreeSha256": "d3bd9b0ecca796f5cbe404672e3b10ff2fbb1ad51fb31698f51f4f0a1ede58fd",
+  "artifactSha256": "d3bd9b0ecca796f5cbe404672e3b10ff2fbb1ad51fb31698f51f4f0a1ede58fd",
+  "artifactHashScope": "mod-payload-tree; no archive or ZIP is implied",
+  "files": [
+    {
+      "relativePath": "common/activities/activity_types/votc_council_gathering.txt",
+      "size": 19646,
+      "sha256": "61c145e6bf469cce568d1b0af411dad5f2abaffc5f0120953c510ba9ee108328"
+    },
+    {
+      "relativePath": "common/activities/intents/votc_activity_intents.txt",
+      "size": 271,
+      "sha256": "214248e795c04468e02ebb19e6b0f9c041241ebf35a243f20a1293cda46d8326"
+    },
+    {
+      "relativePath": "common/character_interactions/invite_to_talk_interactions.txt",
+      "size": 4616,
+      "sha256": "402b54909f32a5ee2c98ee9760d813ebf5bd51bf75e7c25a7e5106518a48b2fd"
+    },
+    {
+      "relativePath": "common/character_interactions/mcc_interactions.txt",
+      "size": 883,
+      "sha256": "ece89b1240dd593b242c0cb4dc04ec00fc71072bfbf4624c9cb17947fdaf6970"
+    },
+    {
+      "relativePath": "common/character_interactions/message_interactions.txt",
+      "size": 2516,
+      "sha256": "92a323ebff359d606cd4f74aedcfdcc4b6b5a2ae5b7298674edf16e94a0733e0"
+    },
+    {
+      "relativePath": "common/character_interactions/talk_interactions.txt",
+      "size": 4430,
+      "sha256": "9cad939f65abf9ab85af01de902ccde1b81edfcde2ffadaa7cb27176e6cb8ea2"
+    },
+    {
+      "relativePath": "common/decisions/votc_decisions.txt",
+      "size": 689,
+      "sha256": "8f243aa74d7f6ebeae371275352b117be513bc9adf0cd8e05d321fdeb7450726"
+    },
+    {
+      "relativePath": "common/defines/message_length.txt",
+      "size": 45,
+      "sha256": "9885481f8a99dff8963a5c04c4947da70a6adaa76781da1888f4ca2d253087b1"
+    },
+    {
+      "relativePath": "common/event_themes/clipboard_transfer_event_theme.txt",
+      "size": 389,
+      "sha256": "d1f5374d118253ec2774654041b273597252ecdbd488a6d09258c0aa4a091fe9"
+    },
+    {
+      "relativePath": "common/messages/votc_message.txt",
+      "size": 324,
+      "sha256": "c4d42c218c36e51a1bf878d8381e47374a8583d3a4648425e6dd6bf5cff4f430"
+    },
+    {
+      "relativePath": "common/on_action/votc_load_boundary.txt",
+      "size": 1372,
+      "sha256": "1f1803e94996013352c4a213b06aa76fde9140407062d48408eb61b2cde5ca94"
+    },
+    {
+      "relativePath": "common/opinion_modifiers/conversation_opinion.txt",
+      "size": 107,
+      "sha256": "ed88f0085c937a6b43d435a0305282dcd5425be6656acb1d7d0148f469a45daa"
+    },
+    {
+      "relativePath": "common/script_values/letter_delay.txt",
+      "size": 2225,
+      "sha256": "c12bbd7a3d85b8f257ef980439106e80ef696849d9542136411ab104843d9aab"
+    },
+    {
+      "relativePath": "common/script_values/levies_total.txt",
+      "size": 19406,
+      "sha256": "76c7d8a8306cac428124626269bcea2d4b9431ad4ac23216a0d7dd8a3eb38452"
+    },
+    {
+      "relativePath": "common/script_values/weight_memory_relevance.txt",
+      "size": 461,
+      "sha256": "27613f10f2bdc6e952a858745470cd3954e6f25ef9ca14ab63a601f4c3a1912e"
+    },
+    {
+      "relativePath": "common/scripted_effects/interaction_effects.txt",
+      "size": 515,
+      "sha256": "188256c9443acd505f2727c58c19885f221b48fd43ec416e7719299071b98d4d"
+    },
+    {
+      "relativePath": "common/scripted_effects/log_character_v2_effect.txt",
+      "size": 25095,
+      "sha256": "02db9044f83eb7977637288de47aff340a0109b3f699d656ad4a317e111f6580"
+    },
+    {
+      "relativePath": "common/scripted_effects/log_gamedata_v3_effect.txt",
+      "size": 4087,
+      "sha256": "e9d1cb98f23568cee144b3850fa8a46ab755eef8cfb833547c1d2e305c89a10b"
+    },
+    {
+      "relativePath": "common/scripted_effects/log_gamedata_v3l_effect.txt",
+      "size": 3586,
+      "sha256": "ca9d045bd731e41d1adc01d7d5f83f5cd6f8a802c7ba6419cd168005f1cb6aef"
+    },
+    {
+      "relativePath": "common/scripted_effects/log_gamedata_v3s_effect.txt",
+      "size": 3818,
+      "sha256": "b19b273c2a92450462fa4155f9d81385d54346af3a3a6efcc97645c394ec0db3"
+    },
+    {
+      "relativePath": "common/scripted_effects/votc_campaign_identity_effect.txt",
+      "size": 11077,
+      "sha256": "e301c82a9314a5ffb323f9bc4f78e5a1a6f2e35eff3c2660b4aa616e1b058cdd"
+    },
+    {
+      "relativePath": "common/scripted_guis/mcc_selection.txt",
+      "size": 1987,
+      "sha256": "e73291780338029481c81e61e005917652740b1bcd849c860d170670cb20a1a1"
+    },
+    {
+      "relativePath": "common/scripted_guis/votc_runtime_clock.txt",
+      "size": 260,
+      "sha256": "fde0259f116a66e602b0fd7e7b14e617ec8680a35024b582f1f696e8ba1be004"
+    },
+    {
+      "relativePath": "common/scripted_guis/votc_select_talk_scene.txt",
+      "size": 172,
+      "sha256": "32aad2293e123f700481fa4faf3f8ac7cd9382ca2de294eaac8f9a14c9274da3"
+    },
+    {
+      "relativePath": "common/scripted_modifiers/votc_council_gathering_modifiers.txt",
+      "size": 655,
+      "sha256": "c9a8245ac6e9a2105b3f0e7b4b2b5e77a206ff9346991927d538e7c568a59919"
+    },
+    {
+      "relativePath": "common/scripted_triggers/scene_triggers.txt",
+      "size": 2669,
+      "sha256": "0818377178942868bb93ce871f2b7b4f521446da342d7ae54bb0a4824e2dab48"
+    },
+    {
+      "relativePath": "descriptor.mod",
+      "size": 122,
+      "sha256": "c77060613e6cf45e9a2aa6b2215f4d689104a90d25791aa421794199a8fefa80"
+    },
+    {
+      "relativePath": "events/mcc_events_v2.txt",
+      "size": 15784,
+      "sha256": "4e5c2a4b20e7cc51474d64e2ee2735d729a0d69c0126b5290f01f6f67fe9c56d"
+    },
+    {
+      "relativePath": "events/message_events.txt",
+      "size": 6026,
+      "sha256": "b55f3fffde18cd938ff0974f07ae4e5a7130197d8be69c3797e6aa6447e1827f"
+    },
+    {
+      "relativePath": "events/silence_ck3_errors_events.txt",
+      "size": 25435,
+      "sha256": "d4dc446a9435ea93bf50fbdea66129cf1059ef1046d03303c595d450ab1e618f"
+    },
+    {
+      "relativePath": "gfx/0.dds",
+      "size": 144,
+      "sha256": "3b25cb963c8c03007ec9385b518f6c0292e1c9da405dca5d1dd9d6e6fc51b1b9"
+    },
+    {
+      "relativePath": "gfx/interface/icons/activities/_activity_votc_council_gathering_header.dds",
+      "size": 36656,
+      "sha256": "53243ee750cb1255b26c869220a4ab445460fba74a8562560879a925e8509087"
+    },
+    {
+      "relativePath": "gfx/interface/icons/activities/activity_votc_council_gathering_header.dds",
+      "size": 36656,
+      "sha256": "1d43731366438d2095f8a3ae4760bd00eec86ca0ccfe23fbdc51069cc2d5071e"
+    },
+    {
+      "relativePath": "gfx/interface/icons/activities/activity_votc_council_gathering.dds",
+      "size": 8768,
+      "sha256": "976e621d052a75b8990441816ecca70fb6be5b2c08b052a0cc172cde713a4214"
+    },
+    {
+      "relativePath": "gfx/interface/icons/activity_option_categories/votc_council_gathering_amenities_amount.dds",
+      "size": 15584,
+      "sha256": "184405e9b6cc8692d8d230635ee84218bc5a709fe46b0bf19bfe4465fbe0c686"
+    },
+    {
+      "relativePath": "gfx/interface/icons/activity_phases/votc_council_gathering_council_phase.dds",
+      "size": 78528,
+      "sha256": "e7cce8e7a3a20e2f6a46e648e389c119c96e100ecd6427a7c4509ddb1f45f76a"
+    },
+    {
+      "relativePath": "gfx/interface/illustrations/activity_backgrounds/activity_votc_council_gathering.dds",
+      "size": 1801648,
+      "sha256": "f693f63b341535fc6bd32bf6d284eacd68162cd4e692dda77a040eea658ee5f1"
+    },
+    {
+      "relativePath": "gfx/interface/illustrations/activity_header_backgrounds/activity_votc_council_gathering.dds",
+      "size": 1801648,
+      "sha256": "f693f63b341535fc6bd32bf6d284eacd68162cd4e692dda77a040eea658ee5f1"
+    },
+    {
+      "relativePath": "gfx/interface/illustrations/scripted_illustrations/scene_background_selector.txt",
+      "size": 124103,
+      "sha256": "3393d859961125f9fee1c73dbe1ebba224932ef54444629df8ec7223aebf8b6a"
+    },
+    {
+      "relativePath": "gfx/interface/illustrations/scripted_illustrations/scene_background.txt",
+      "size": 292561,
+      "sha256": "5b255c1d914e342852d9149facfadbe514c2cbdb449d3996b8b440c3153fa3b1"
+    },
+    {
+      "relativePath": "gfx/interface/tavern_gfx/mask_off.dds",
+      "size": 8294528,
+      "sha256": "2649283a16c47f2561bc94198237409c49c6907688558fe8154602f514ed3722"
+    },
+    {
+      "relativePath": "gfx/portraits/cameras/conversation_camera.txt",
+      "size": 708,
+      "sha256": "7689844b9eaaf936620ef332049c036cc6e9183d752ee64f71f8e815c8c2d5d7"
+    },
+    {
+      "relativePath": "gfx/portraits/portrait_animations/conversation_animations_v2.txt",
+      "size": 20550,
+      "sha256": "5f4fb9db95ec3d522c7496f129ea122d171c5488c3dac2ff4d1d78482fd940c3"
+    },
+    {
+      "relativePath": "gfx/portraits/portrait_animations/conversation_animations.txt",
+      "size": 3602,
+      "sha256": "fe05c3c27c311579b84aed963d9c977437cd4b5c6678eefdf9c043f83d391085"
+    },
+    {
+      "relativePath": "gui/custom_gui/letters_runner.gui",
+      "size": 246,
+      "sha256": "2181018c19f3884dc13f49252ef0caa9ffd71c9951b4192f83cea654ea1a4e1a"
+    },
+    {
+      "relativePath": "gui/custom_gui/mcc_characters_window.gui",
+      "size": 46330,
+      "sha256": "95dc4c5584a93529fcd18d4977d403d529b1d74293c9b525bd3c6ca801936c40"
+    },
+    {
+      "relativePath": "gui/custom_gui/talk_window_v2.gui",
+      "size": 2436,
+      "sha256": "f335c8628f4fb50178017978c4988709d5ce35f29f631c5f840b17c4af93d000"
+    },
+    {
+      "relativePath": "gui/custom_gui/votc_letter.gui",
+      "size": 6940,
+      "sha256": "a44e959238171b2d647d415618a1b310886a4b64c9b5c7ae491bba4e7bdad2d1"
+    },
+    {
+      "relativePath": "gui/custom_gui/votc_runtime_bridge.gui",
+      "size": 844,
+      "sha256": "4d105bb42313d8da71514cacdf394799642c29869a0e41653a5cab8947d87155"
+    },
+    {
+      "relativePath": "gui/custom_gui/votc_scene_selector.gui",
+      "size": 6734,
+      "sha256": "5bcd5b7d0324c24f29d40cec00c4add56ef7d12a15692884abef8c63beda17a5"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_message_clear.gui",
+      "size": 153,
+      "sha256": "162d17b1cca59a83a37fbeef1bf0f8055e6462083c1bddd6e691ca4043a89858"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_message_open.gui",
+      "size": 446,
+      "sha256": "25a963a8b1cbd6fb87a0c355579ebd41a575775a8fc9afcf1bff01f2c0580a10"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_message_write.gui",
+      "size": 606,
+      "sha256": "9265c477303c0bd99795a9fafdf86ffbe3874163e29f2d7b453021ba462faecc"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_message.gui",
+      "size": 127,
+      "sha256": "e9b611da88cf1def06cf46a4eed09c2a9e88147f92050f7ea2435abe3988faa2"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_talk_clear.gui",
+      "size": 283,
+      "sha256": "b18d9dc7534569b6c4a96cc24d127fe07107c427652dbca3c19a486e440caf78"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_talk_close_v2.gui",
+      "size": 316,
+      "sha256": "6fb4a6a17f3787120841b1c4dc9221c5faecb442337f5f1ba7beb011df18010e"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_talk_close.gui",
+      "size": 310,
+      "sha256": "b6d722c2867d72857e91dc3504f51c1e5eae57d5f9fe6d7e259b1601ec7b41a2"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_talk_v2.gui",
+      "size": 589,
+      "sha256": "dcc151b52d769e3a8d348d065224be165af9383ce41fb97f2e7db85f18ee7c8e"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_talk.gui",
+      "size": 493,
+      "sha256": "2abd85530e427c00286d6159788823fb25054906e5f62aceb64dbbd96b3b87f9"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/mcc_select_characters_widget.gui",
+      "size": 445,
+      "sha256": "02e9cbe85dbee4e855b88a438522690d329482d676df499c66a4794de3aa3097"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/votc_scene_selector_widget.gui",
+      "size": 489,
+      "sha256": "73d1a02718845e71ebf6c61de48bd51ba04b729c4585488ade0c501959244f10"
+    },
+    {
+      "relativePath": "gui/event_windows/votc_invisible_event.gui",
+      "size": 625,
+      "sha256": "fbf75b792f69f047427fcffa87d2a133eeb9cfbb2ce9cff1cee88c776b6b4bd3"
+    },
+    {
+      "relativePath": "gui/scripted_widgets/mcc_characters_window.txt",
+      "size": 69,
+      "sha256": "6f4bda753cc85ddebc666d77abbf7bf59a91cd7cc48e65069028ebe797c89853"
+    },
+    {
+      "relativePath": "gui/scripted_widgets/revotc_scene_selector.txt",
+      "size": 62,
+      "sha256": "a93893166ede246fd587350948458f3e5a75d0153d8fe4525547263791e3d222"
+    },
+    {
+      "relativePath": "gui/scripted_widgets/votc_runtime_bridge.txt",
+      "size": 61,
+      "sha256": "dcfd3b6ddebc561f19f268f33efddf20550df0ace5d30f58bb6087ce065c9306"
+    },
+    {
+      "relativePath": "gui/shared/conversation_portraits.gui",
+      "size": 2302,
+      "sha256": "e6f72f4cdaeb1fadf86dddb5b7aaa4d7114d81e583e6ca9d2ae64b9f3c355382"
+    },
+    {
+      "relativePath": "gui/shared/votc_Editboxes.gui",
+      "size": 1320,
+      "sha256": "068eaa6f2fc307e7ff8e44dd467dc5a0a35c9253643425dc4d46aae2b2cd6a5a"
+    },
+    {
+      "relativePath": "LICENSE.MD",
+      "size": 20558,
+      "sha256": "fcc8a87920214067b4f9f81aceec79d4593e70184c25fe81f0e880ab30347856"
+    },
+    {
+      "relativePath": "localization/english/clipboard_codes_l_english.yml",
+      "size": 374,
+      "sha256": "64c04b78712744bfd81fc18a1871717b3f3eefda89b57d9699ff647f333cb2e9"
+    },
+    {
+      "relativePath": "localization/english/log_character_l_english.yml",
+      "size": 1540,
+      "sha256": "9c03855a711a3f66bef1f22ce2935753d8841ff243e6bc9446ae4650d13ed99c"
+    },
+    {
+      "relativePath": "localization/english/talk_l_english.yml",
+      "size": 10515,
+      "sha256": "d2c5305ee037a62e14912a4b58a43bfe42f7568d73332f9f5d14651285081297"
+    },
+    {
+      "relativePath": "localization/french/clipboard_codes_l_french.yml",
+      "size": 373,
+      "sha256": "5b800e686f12ceff96c65e7e4b34145d0a36cd7c882487a294b3e985da1a07ce"
+    },
+    {
+      "relativePath": "localization/french/log_character_l_french.yml",
+      "size": 1539,
+      "sha256": "00c158d28d9b6514546da681d45fe59b83a806bf097723373364e487a1e40eb7"
+    },
+    {
+      "relativePath": "localization/french/talk_l_french.yml",
+      "size": 11302,
+      "sha256": "9173c14485092b6249a9da45d2b3ae65742a44cde359213307695ac70157dc23"
+    },
+    {
+      "relativePath": "localization/german/clipboard_codes_l_german.yml",
+      "size": 373,
+      "sha256": "0839e227aab7f79419a7cd24f757506f16644f47e406c3aafe5c0adceffe24f6"
+    },
+    {
+      "relativePath": "localization/german/log_character_l_german.yml",
+      "size": 1539,
+      "sha256": "c18f2fd67f80f570b74633bbe16a3174ea949e61c8d77657a6c745f4485b3ec0"
+    },
+    {
+      "relativePath": "localization/german/talk_l_german.yml",
+      "size": 11104,
+      "sha256": "dd4804db8572bf8624e1d1bfa82e942e16dd781b27c73c8bd63f19900bde8359"
+    },
+    {
+      "relativePath": "localization/japaneese/clipboard_codes_l_japanese.yml",
+      "size": 375,
+      "sha256": "7be250d50f17b5d4032b59e0845be83ffb4f847442bd3d12414ede5ca756c626"
+    },
+    {
+      "relativePath": "localization/japaneese/log_character_l_japanese.yml",
+      "size": 1541,
+      "sha256": "3de5fdeae44f134a294a048b435e2bcad0e8de03dffb31e68f937496526b6b7d"
+    },
+    {
+      "relativePath": "localization/japaneese/talk_l_japanese.yml",
+      "size": 11188,
+      "sha256": "195db5c08979d5964b45c4c70e76e6ef08e06c2fbbaa1328f0b0287c522ebabb"
+    },
+    {
+      "relativePath": "localization/korean/clipboard_codes_l_korean.yml",
+      "size": 373,
+      "sha256": "e8d4bcbb09884e531ef3f8e82778dff61f668947d5cc265d8d50d40375e552b9"
+    },
+    {
+      "relativePath": "localization/korean/log_l_korean.yml",
+      "size": 1539,
+      "sha256": "f0337d46434927590fabef50dfa82f9193571ff49648524895aeb74271192fb1"
+    },
+    {
+      "relativePath": "localization/korean/talk_l_korean.yml",
+      "size": 11050,
+      "sha256": "c9b05305afc04e138de61bf2fbf06e99bc7a5d5add0a978e3ebdd6e21269122e"
+    },
+    {
+      "relativePath": "localization/polish/clipboard_codes_l_polish.yml",
+      "size": 373,
+      "sha256": "b369c437679c7dbf38f33c4016ac26c1b785104a8e4d99862154393edc098b31"
+    },
+    {
+      "relativePath": "localization/polish/log_character_l_polish.yml",
+      "size": 1539,
+      "sha256": "031e182be72615f4fe1a946535e5adb0db889f2ea7b627ca27b2846b203ba185"
+    },
+    {
+      "relativePath": "localization/polish/talk_l_polish.yml",
+      "size": 10829,
+      "sha256": "f5df5a717b808c7c7a74a8842f47221563497ee616f07d7f768ac5078254f98f"
+    },
+    {
+      "relativePath": "localization/russian/clipboard_codes_l_russian.yml",
+      "size": 374,
+      "sha256": "b2bc5d9ff4b6dfe0f6c77f698b1b7854036f4328624abb71437a99b1c7b7d56d"
+    },
+    {
+      "relativePath": "localization/russian/log_character_l_russian.yml",
+      "size": 1540,
+      "sha256": "a4c93068012cf81f5e7d3e39bc956bd7fd006735afbae888e7e4888a52a546df"
+    },
+    {
+      "relativePath": "localization/russian/talk_l_russian.yml",
+      "size": 13992,
+      "sha256": "c938f62f7a46f6578fc67324a91e59a546dd17a540cee6a087922956126cd4c9"
+    },
+    {
+      "relativePath": "localization/simp_chinese/clipboard_codes_l_simp_chinese.yml",
+      "size": 379,
+      "sha256": "c510381838b4a21816d3aa858de51751ccaf4af4639fd4c0cca4aae612de79cf"
+    },
+    {
+      "relativePath": "localization/simp_chinese/log_character_l_simp_chinese.yml",
+      "size": 1545,
+      "sha256": "3c2c45d61ff18e9f652ce30539ee0ad40ee63b2eb4886a8b1d7fe097d09551a9"
+    },
+    {
+      "relativePath": "localization/simp_chinese/talk_l_simp_chinese.yml",
+      "size": 9885,
+      "sha256": "55b783e59685ce2e8cc84f59a47cc4aff177e11c104a89b04a447bc8d2f09c81"
+    },
+    {
+      "relativePath": "localization/spanish/clipboard_codes_l_spanish.yml",
+      "size": 374,
+      "sha256": "dcdf8706495d75759a10ef168fac515082e2d7e6105deab553d74b10ff2cc7a3"
+    },
+    {
+      "relativePath": "localization/spanish/log_character_l_spanish.yml",
+      "size": 1540,
+      "sha256": "2d98a7bb092bb573d12720a0de709a1975414f499f2b63c576de97542f3d3aec"
+    },
+    {
+      "relativePath": "localization/spanish/talk_l_spanish.yml",
+      "size": 11182,
+      "sha256": "9c9604799555583baeeb9adb724b47dd4db0321604486906e7557eb7048a6aa9"
+    },
+    {
+      "relativePath": "README.md",
+      "size": 524,
+      "sha256": "c244221a5826d0cb43a00d59f9f7c006884e483d2293bd58b261eaae2d1c581a"
+    },
+    {
+      "relativePath": "thumbnail.png",
+      "size": 110351,
+      "sha256": "570fbd57c0587390ea4478d0058882c4b5aa1ec3c57867147bae796694bb8511"
+    }
+  ]
+}

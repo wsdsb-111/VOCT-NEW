@@ -1,0 +1,13 @@
+{
+  "fixtureId": "hello-legacy-no-declaration",
+  "provenance": "synthetic_static_contract",
+  "input": {
+    "kind": "load-session-without-bridge-hello",
+    "line": "VOTC:LOAD_SESSION/;/votc-load-42"
+  },
+  "expected": {
+    "state": "LEGACY_UNVERIFIED",
+    "reason": "HELLO_NOT_RECEIVED",
+    "inheritPreviousSession": false
+  }
+}

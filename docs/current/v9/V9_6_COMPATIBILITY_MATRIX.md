@@ -1,5 +1,7 @@
 # V9.6 版本、能力与失效策略候选
 
+> Historical exploration: unified Workshop distribution and Bootstrap proposals are superseded by the user-authorized independent Mod/Runtime design. See [V9.6 implementation](V9_6_IMPLEMENTATION.md), [verification](V9_6_VERIFICATION.md) and [pairing](V9_6_RELEASE_PAIRING.md).
+
 日期：2026-10-24。**以下为待批准设计，未实现握手、未修改现有门禁。** 当前事实以[协议矩阵](V9_6_BRIDGE_PROTOCOL_MATRIX.md)为准。
 
 ## 版本必须分开

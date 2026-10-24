@@ -34,7 +34,7 @@ function traceOperation(trace, step, fields, operation) {
   return result;
 }
 
-function createLetterManager({ settingsRepository, fs, path, TailFile, readline, parseLog, letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir, letterEffectTransport = null, runFileManager = null, scanRunAcksForPendingCommands = null, autoStartLogTailing = true, sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)), letterPayloadRetryDelays = [100, 200, 350, 600, 1e3], dateHeartbeatIntervalMs = 5e3, dateStaleMs = 2e4, diagnosticExecutionTimeoutMs = 15e3, runCommandAckTimeoutMs = 3e4, runCommandWatchdogIntervalMs = 5e3, setIntervalFn = setInterval, clearIntervalFn = clearInterval, setRunCommandIntervalFn = setInterval, clearRunCommandIntervalFn = clearInterval, performanceTrace = null }) {
+function createLetterManager({ settingsRepository, fs, path, TailFile, readline, parseLog, letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir, letterEffectTransport = null, runFileManager = null, scanRunAcksForPendingCommands = null, autoStartLogTailing = true, sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)), letterPayloadRetryDelays = [100, 200, 350, 600, 1e3], dateHeartbeatIntervalMs = 5e3, dateStaleMs = 2e4, diagnosticExecutionTimeoutMs = 15e3, runCommandAckTimeoutMs = 3e4, runCommandWatchdogIntervalMs = 5e3, setIntervalFn = setInterval, clearIntervalFn = clearInterval, setRunCommandIntervalFn = setInterval, clearRunCommandIntervalFn = clearInterval, performanceTrace = null, bridgeService = null, bridgeEvidence = null }) {
   const fs$1 = fs;
   const readline$1 = readline;
   if (!scanRunAcksForPendingCommands) ({ scanRunAcksForPendingCommands } = require("../actions/run-command-recovery"));
@@ -345,6 +345,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       const runAckMatch = line.match(/VOTC:RUN_ACK\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)/);
       if (runAckMatch && runFileManager?.ackCommand) {
         const acknowledged = runFileManager.ackCommand(runAckMatch[2], runAckMatch[1]);
+        if (acknowledged) bridgeEvidence?.observeCommand("runFileAck", acknowledged.commandId);
         this.markLetterEffectCommandWritten(acknowledged);
         this.markLetterEffectCommandWritten(runFileManager.getPendingCommands?.()[0]);
         if (acknowledged?.kind === "conversation_close") this.ensureDateProducerRunning("conversation_close_ack");
@@ -871,6 +872,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
         return null;
       }
       const { gameData, letter } = context;
+      bridgeService?.assertFeature("letter");
       const pendingLetter = this.storedLetters.get(letter.letterId);
       if (pendingLetter || this.awaitingAcceptanceLetterId === letter.letterId) {
         const samePayload = pendingLetter && pendingLetter.letter.totalDays === letter.totalDays && pendingLetter.letter.delay === letter.delay && pendingLetter.letter.content === letter.content;
@@ -915,6 +917,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       let responseError = null;
       try {
         this.transitionPipeline(LetterPipelineState.REPLY_REQUESTED);
+        bridgeService?.assertFeature("letter");
         const result = await llmManager.sendChatRequest(messages, void 0, true, { requestType: "letter", character: characterName });
         reply = await this.extractReply(result);
         if (!reply) {
@@ -1202,6 +1205,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       ].join(" | ");
     }
     async retryFailedLetter(letterId) {
+      bridgeService?.assertFeature("letter");
       const normalizedLetterId = typeof letterId === "string" ? letterId.trim() : "";
       const status = this.getLetterStatus(normalizedLetterId);
       if (!status) return { success: false, error: "Letter status not found." };
@@ -1223,6 +1227,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       this.updateLetterStatus(normalizedLetterId, { responseStatus: LetterResponseStatus.GENERATING, responseError: null, responseErrorDetails: null, retryAttemptCount });
       this.transitionLetter(normalizedLetterId, LetterPipelineState.REPLY_REQUESTED, { retryAttemptCount });
       try {
+        bridgeService?.assertFeature("letter");
         const result = await llmManager.sendChatRequest(context.messages, void 0, true, { requestType: "letter", character: context.characterName, letterRetry: true, retryAttemptCount });
         const reply = await this.extractReply(result);
         if (!reply) throw new Error("Letter reply generation returned empty content.");
@@ -1485,6 +1490,7 @@ function createLetterManager({ settingsRepository, fs, path, TailFile, readline,
       }
     }
     async writeLetterEffect(reply, letter) {
+      bridgeService?.assertFeature("letter");
       const ck3Folder = settingsRepository.getCK3UserFolderPath();
       console.log(`LetterManager.writeLetterEffect: CK3 user path: ${ck3Folder}`);
       if (!ck3Folder) {
@@ -1802,6 +1808,7 @@ ${"  \t"}modifier = artifact_monthly_minor_prestige_1_modifier
           return { success: false, reason: "letter_acceptance_persist_failed" };
         }
       }
+      if (receipt && acceptedLetter.receiptToken) bridgeEvidence?.observeCommand("letterReceipt", acceptedStatus.runCommandId);
       const acceptedTransportMode = acceptedStatus?.effectTransportMode || LetterEffectTransportMode.VOTC;
       const clearResult = letterEffectTransport.clearOutboundEffect(acceptedTransportMode);
       if (!clearResult.success) console.warn(`LetterManager.clearLettersFile: ${clearResult.error}`);

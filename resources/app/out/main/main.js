@@ -27,6 +27,8 @@ const { WorldlineStore } = require("./historical-system/worldline-store");
 const { DynamicHistoryService } = require("./historical-system/dynamic-history-service");
 const { Character } = require("./game-data/character");
 const { createStartupPerformanceTrace } = require("./runtime/startup-performance-trace");
+const { BridgeCompatibilityService } = require("./bridge/bridge-compatibility-service");
+const { createBridgeBusinessEvidence } = require("./bridge/bridge-business-evidence");
 
 const performanceTrace = createStartupPerformanceTrace();
 const appLaunchSpan = performanceTrace.startSpan("app.launch", { attribution: "MAIN" });
@@ -443,6 +445,7 @@ worldlineService.setRuntimeNameSource(() => runtimeNameSource);
 const fs = require("fs");
 const { createLogParser } = require("./game-data/log-parser");
 const parseLog = createLogParser({ GameData, Character, onGameDataParsed: (gameData) => {
+  bridgeEvidence.projectGameData(gameData);
   runtimeNameSource = {
     campaignToken: gameData.campaignToken || null,
     gameDate: gameData.date,
@@ -530,10 +533,20 @@ const actionRegistry = ActionRegistryClass.getInstance();
 const { buildStructuredResponseJsonSchema, buildStructuredResponseSchema } = actionSchema;
 const { createRunFileManager } = require("./actions/run-file-manager");
 const { scanRunAcksForPendingCommands } = require("./actions/run-command-recovery");
-const RunFileManager = createRunFileManager({ settingsRepository, path, fs: fs$1, dataDir: VOTC_DATA_DIR });
+const bridgeService = new BridgeCompatibilityService({
+  getLogPath: () => {
+    const folder = settingsRepository.store.get("ck3UserFolderPath");
+    return folder ? path.join(folder, "logs", "debug.log") : null;
+  }
+});
+const bridgeEvidence = createBridgeBusinessEvidence(bridgeService);
+const RunFileManager = createRunFileManager({ settingsRepository, path, fs: fs$1, dataDir: VOTC_DATA_DIR,
+  onCommandWritten: command => bridgeEvidence.trackDispatch(command.commandId)
+});
 const runFileManager = new RunFileManager();
-const ActionEffectWriter = createActionEffectWriter({ runFileManager });
+const ActionEffectWriter = createActionEffectWriter({ runFileManager, bridgeService });
 const ActionEngine = createActionEngine({
+  bridgeService,
   actionRegistry,
   settingsRepository,
   usageAnalytics,
@@ -555,6 +568,8 @@ Conversation.configure({
   usageAnalytics,
   llmManager,
   runFileManager,
+  bridgeService,
+  bridgeEvidence,
   parseLog,
   createError,
   createMessage,
@@ -625,6 +640,7 @@ class ClipboardListener extends events.EventEmitter {
       let command = currentClipboard.split(":")[1];
       switch (command) {
         case "IN":
+          bridgeEvidence.observeClipboard();
           this.emit("VOTC:IN");
           break;
         case "EFFECT_ACCEPTED":
@@ -956,7 +972,7 @@ memoryEngine.letterSummaryFinalization = new LetterSummaryFinalization({
 const { createLetterManager } = require("./letters/letter-manager");
 const { LetterManager, LetterResponseStatus, LetterSummaryStatus } = createLetterManager({
   settingsRepository, fs: fs$1, path, TailFile: LetterLogReader, readline: readline$1, parseLog,
-  letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir: VOTC_DATA_DIR, letterEffectTransport, runFileManager, scanRunAcksForPendingCommands, autoStartLogTailing: false, performanceTrace
+  letterPromptBuilder, llmManager, PromptBuilder, TokenCounter, memoryEngine, dataDir: VOTC_DATA_DIR, letterEffectTransport, runFileManager, bridgeService, bridgeEvidence, scanRunAcksForPendingCommands, autoStartLogTailing: false, performanceTrace
 });
 const letterManager = new LetterManager();
 const initializeRunCommandQueue = async () => {
@@ -1025,6 +1041,7 @@ const createWindow = () => {
 const setupIpcHandlers = () => {
   registerIpcHandlers({
     applicationServices,
+    bridgeService,
     electron,
     settingsRepository,
     promptConfigManager,
@@ -1073,6 +1090,7 @@ electron.app.on("ready", async () => {
   if (!votcHasSingleInstanceLock) return;
   console.log(electron.app.getPath("userData"));
   clearLog();
+  await bridgeService.start();
   settingsRepository.migrateProviderSecrets();
   traceMainOperation("prompt.seed", () => promptConfigManager.seedDefaults());
   try {
@@ -1207,6 +1225,7 @@ electron.app.on("before-quit", (event) => {
     }
     return;
   }
+  bridgeService.stop();
   tray?.destroy();
   letterManager.stopLogTailing();
   worldlineService.dispose();

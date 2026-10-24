@@ -1,0 +1,183 @@
+votc_ensure_campaign_identity = {
+	if = {
+		limit = { NOT = { exists = global_var:votc_campaign_digit_01 } }
+		random_list = {
+			1 = { set_global_variable = { name = votc_campaign_digit_01 value = flag:0 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_01 value = flag:1 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_01 value = flag:2 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_01 value = flag:3 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_01 value = flag:4 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_01 value = flag:5 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_01 value = flag:6 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_01 value = flag:7 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_01 value = flag:8 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_01 value = flag:9 } }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = global_var:votc_campaign_digit_02 } }
+		random_list = {
+			1 = { set_global_variable = { name = votc_campaign_digit_02 value = flag:0 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_02 value = flag:1 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_02 value = flag:2 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_02 value = flag:3 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_02 value = flag:4 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_02 value = flag:5 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_02 value = flag:6 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_02 value = flag:7 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_02 value = flag:8 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_02 value = flag:9 } }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = global_var:votc_campaign_digit_03 } }
+		random_list = {
+			1 = { set_global_variable = { name = votc_campaign_digit_03 value = flag:0 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_03 value = flag:1 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_03 value = flag:2 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_03 value = flag:3 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_03 value = flag:4 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_03 value = flag:5 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_03 value = flag:6 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_03 value = flag:7 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_03 value = flag:8 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_03 value = flag:9 } }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = global_var:votc_campaign_digit_04 } }
+		random_list = {
+			1 = { set_global_variable = { name = votc_campaign_digit_04 value = flag:0 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_04 value = flag:1 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_04 value = flag:2 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_04 value = flag:3 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_04 value = flag:4 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_04 value = flag:5 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_04 value = flag:6 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_04 value = flag:7 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_04 value = flag:8 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_04 value = flag:9 } }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = global_var:votc_campaign_digit_05 } }
+		random_list = {
+			1 = { set_global_variable = { name = votc_campaign_digit_05 value = flag:0 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_05 value = flag:1 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_05 value = flag:2 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_05 value = flag:3 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_05 value = flag:4 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_05 value = flag:5 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_05 value = flag:6 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_05 value = flag:7 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_05 value = flag:8 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_05 value = flag:9 } }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = global_var:votc_campaign_digit_06 } }
+		random_list = {
+			1 = { set_global_variable = { name = votc_campaign_digit_06 value = flag:0 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_06 value = flag:1 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_06 value = flag:2 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_06 value = flag:3 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_06 value = flag:4 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_06 value = flag:5 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_06 value = flag:6 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_06 value = flag:7 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_06 value = flag:8 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_06 value = flag:9 } }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = global_var:votc_campaign_digit_07 } }
+		random_list = {
+			1 = { set_global_variable = { name = votc_campaign_digit_07 value = flag:0 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_07 value = flag:1 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_07 value = flag:2 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_07 value = flag:3 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_07 value = flag:4 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_07 value = flag:5 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_07 value = flag:6 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_07 value = flag:7 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_07 value = flag:8 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_07 value = flag:9 } }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = global_var:votc_campaign_digit_08 } }
+		random_list = {
+			1 = { set_global_variable = { name = votc_campaign_digit_08 value = flag:0 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_08 value = flag:1 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_08 value = flag:2 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_08 value = flag:3 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_08 value = flag:4 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_08 value = flag:5 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_08 value = flag:6 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_08 value = flag:7 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_08 value = flag:8 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_08 value = flag:9 } }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = global_var:votc_campaign_digit_09 } }
+		random_list = {
+			1 = { set_global_variable = { name = votc_campaign_digit_09 value = flag:0 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_09 value = flag:1 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_09 value = flag:2 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_09 value = flag:3 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_09 value = flag:4 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_09 value = flag:5 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_09 value = flag:6 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_09 value = flag:7 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_09 value = flag:8 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_09 value = flag:9 } }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = global_var:votc_campaign_digit_10 } }
+		random_list = {
+			1 = { set_global_variable = { name = votc_campaign_digit_10 value = flag:0 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_10 value = flag:1 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_10 value = flag:2 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_10 value = flag:3 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_10 value = flag:4 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_10 value = flag:5 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_10 value = flag:6 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_10 value = flag:7 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_10 value = flag:8 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_10 value = flag:9 } }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = global_var:votc_campaign_digit_11 } }
+		random_list = {
+			1 = { set_global_variable = { name = votc_campaign_digit_11 value = flag:0 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_11 value = flag:1 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_11 value = flag:2 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_11 value = flag:3 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_11 value = flag:4 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_11 value = flag:5 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_11 value = flag:6 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_11 value = flag:7 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_11 value = flag:8 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_11 value = flag:9 } }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = global_var:votc_campaign_digit_12 } }
+		random_list = {
+			1 = { set_global_variable = { name = votc_campaign_digit_12 value = flag:0 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_12 value = flag:1 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_12 value = flag:2 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_12 value = flag:3 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_12 value = flag:4 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_12 value = flag:5 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_12 value = flag:6 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_12 value = flag:7 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_12 value = flag:8 } }
+			1 = { set_global_variable = { name = votc_campaign_digit_12 value = flag:9 } }
+		}
+	}
+}
+

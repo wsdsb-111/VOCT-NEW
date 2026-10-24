@@ -24,6 +24,8 @@ let settingsRepository = null;
 let usageAnalytics = null;
 let llmManager = null;
 let runFileManager = null;
+let bridgeService = null;
+let bridgeEvidence = null;
 let parseLog = null;
 let createError = null;
 let createMessage = null;
@@ -122,6 +124,8 @@ class Conversation {
     usageAnalytics = dependencies.usageAnalytics || usageAnalytics;
     llmManager = dependencies.llmManager || llmManager;
     runFileManager = dependencies.runFileManager || runFileManager;
+    bridgeService = dependencies.bridgeService || bridgeService;
+    bridgeEvidence = dependencies.bridgeEvidence || bridgeEvidence;
     parseLog = dependencies.parseLog || parseLog;
     createError = dependencies.createError || createError;
     createMessage = dependencies.createMessage || createMessage;
@@ -776,6 +780,7 @@ class Conversation {
    * Create a rolling summary of older messages to compress context
    */
   async createRollingSummary(contextLimit) {
+    bridgeService?.assertFeature("conversation");
     if (!memoryEngine) throw new Error("memory_engine_not_configured");
     const summaryCapabilities = typeof llmManager.getProviderCapabilities === "function"
       ? await llmManager.getProviderCapabilities("SUMMARY")
@@ -1476,6 +1481,9 @@ class Conversation {
     let streamCompleted = false;
     let settleContextUsageAfterFailure = null;
     try {
+      await bridgeService?.redetect();
+      bridgeService?.assertFeature("conversation");
+      bridgeEvidence?.projectGameData(this.gameData);
       const memoryContext = await this.checkAndSummarizeIfNeeded(npc, diagnosticsContext);
       if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
       const promptBuildStartedAt = Date.now();
@@ -1762,6 +1770,7 @@ class Conversation {
           rollingSegmentCount: this.memoryState?.rollingState?.segments?.length || 0,
           cacheEpoch: this.memoryState?.rollingState?.cacheEpoch || 0
       };
+      bridgeService?.assertFeature("conversation");
       const result = await llmManager.sendChatRequest(
         llmMessages,
         isOpenRouter ? void 0 : controller.signal,
@@ -1969,6 +1978,7 @@ class Conversation {
       { role: "user", content: "请从刚才截断的位置继续完成上一条回复，不要重复已写内容。" }
     ];
     onContinuationRequest?.(continuationMessages);
+    bridgeService?.assertFeature("conversation");
     const response = await llmManager.sendChatRequest(continuationMessages, responseState.controller.signal, true, {
       ...initialRequestMetadata,
       requestType: "chat_continuation",
@@ -2113,6 +2123,13 @@ class Conversation {
       const command = this.getRunCommand(result.confirmation.dispatch?.commandId);
       if (!command) return settleActionResult(result, { status: "UNCONFIRMED", stateAfter: null, dispatched: hasPhysicalDispatchEvidence() });
       if (command?.status === "acknowledged") {
+        if (bridgeEvidence?.isCurrentCommand(command.commandId) === false) {
+          return settleActionResult(result, { status: "UNCONFIRMED", stateAfter: null, commandStatus: command.status, dispatched: true });
+        }
+        if (result.confirmation.requireCommandReadback && bridgeService) {
+          try { bridgeService.assertFeature("actionConfirmation"); }
+          catch (_error) { return settleActionResult(result, { status: "UNCONFIRMED", stateAfter: null, commandStatus: command.status, dispatched: true }); }
+        }
         if (dispatches.length > 1) {
           return settleActionResult(result, { status: "UNCONFIRMED", stateAfter: null, revisionAfter: this.gameDataRevision, confirmedStateChange: null, commandStatus: command.status, dispatched: true });
         }
@@ -2126,12 +2143,18 @@ class Conversation {
             gameDataRevision: this.gameDataRevision,
             commandReadback
           });
+          if (bridgeEvidence?.isCurrentCommand(command.commandId) === false) {
+            return settleActionResult(result, { status: "UNCONFIRMED", stateAfter: null, commandStatus: command.status, dispatched: true });
+          }
           if (verification.status !== "PENDING") {
             if (result.confirmation.requireCommandReadback && ["GOLD_TRANSFER", "OPINION_CHANGE"].includes(result.confirmation.type)) {
               try { await this.refreshGameDataForActionConfirmation(); }
               catch (error) { console.warn("[ActionConfirmation] post-verification balance refresh failed:", error.message); }
             }
             runFileManager.recordActionVerification?.(command.commandId, verification);
+            if (verification.status === "CONFIRMED" && result.confirmation.requireCommandReadback) {
+              bridgeEvidence?.observeCommand("actionReadback", command.commandId);
+            }
             return settleActionResult(result, { ...verification, commandStatus: command.status, dispatched: true });
           }
         } catch (error) {

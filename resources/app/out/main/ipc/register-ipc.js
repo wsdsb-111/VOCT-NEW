@@ -48,6 +48,10 @@ function safeModelListErrorCode(error) {
 function registerIpcHandlers(runtime) {
   const { electron, settingsRepository, promptConfigManager, uuid, VOTC_PROMPTS_DIR, TemplateEngine, exportPromptsZip, letterManager, runFileManager, llmManager, providerRegistry, usageAnalytics, providerDiagnostics, actionRegistry, VOTC_ACTIONS_DIR, resolveI18nString, conversationManager, ActionEngine, VOTC_SUMMARIES_DIR, SummariesManager, memoryEngine, worldlineService, characterKnowledgeService } = runtime;
 
+  const bridgeService = runtime.bridgeService;
+  electron.ipcMain.handle("bridge:getState", () => bridgeService?.getState() || null);
+  electron.ipcMain.handle("bridge:redetect", () => bridgeService?.redetect() || null);
+
   const performanceTrace = runtime.performanceTrace;
   const services = runtime.applicationServices;
   const conversationService = services?.conversation || conversationManager;

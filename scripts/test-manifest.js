@@ -176,6 +176,10 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.6-ck3-bridge-contract", script: "test-ck3-bridge-contract.js" },
+  { group: "v9.6-bridge-service", script: "test-v9.6-bridge-service.js" },
+  { group: "v9.6-bridge-ui", script: "test-v9.6-bridge-ui.js" },
+  { group: "v9.6-bridge-integration", script: "test-v9.6-bridge-integration.js" },
   { group: "v9.5.1-i18n-coverage", script: "test-v9.5.1-i18n-coverage.js" },
   { group: "v9.5.1-page-integration", script: "test-v9.5.1-page-integration.js" },
   { group: "v9.5-canon-state-context", script: "test-v9.5-canon-state-context.js" },

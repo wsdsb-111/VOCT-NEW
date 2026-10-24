@@ -1,5 +1,7 @@
 # V9.6 前置探索：统一交付、独立运行
 
+> Historical exploration: unified Workshop distribution and Bootstrap proposals are superseded by the user-authorized independent Mod/Runtime design. See [V9.6 implementation](V9_6_IMPLEMENTATION.md), [verification](V9_6_VERIFICATION.md) and [pairing](V9_6_RELEASE_PAIRING.md).
+
 日期：2026-10-24。Runtime 基线 `060e336ce64d844dc32a122038b38bc02fb3a134`，Core/App/UI 仍为9.5.1。本轮是只读源码与分发可行性探索，未实施9.6、未变更版本、协议或安装内容。
 
 用户最新目标优先：订阅 Workshop 后取得必要程序，不再单独去 GitHub 下载 VOTC；包内 Mod 和 Runtime 保持职责与版本边界。原探索文档／路线图将统一分发排在9.7，本报告将它作为9.6目标的前置研究，不据此提前实现 Bootstrap 或发布。

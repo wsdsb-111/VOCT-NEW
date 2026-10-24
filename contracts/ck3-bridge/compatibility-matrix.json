@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "runtimeVersion": "9.6.0",
+  "bridgeProtocol": {
+    "major": 1,
+    "minMinor": 0,
+    "maxMinor": 0
+  },
+  "mod": {
+    "upstreamBaseVersion": "2.0.4",
+    "maintainedModBase": "2.0.5",
+    "bridgeRevision": 1
+  },
+  "modVersionMetadata": {
+    "purpose": "Describe the upstream source base and the locally maintained Mod baseline.",
+    "affectsProtocolCompatibility": false,
+    "displayObservedHelloValues": true,
+    "compatibilityAuthority": "schema version, protocol range, and declared capability revisions"
+  },
+  "wireContract": {
+    "marker": "VOTC:BRIDGE_HELLO",
+    "separator": "/;/",
+    "segments": [
+      "schema",
+      "protocol",
+      "mod",
+      "upstream",
+      "revision",
+      "load",
+      "caps"
+    ],
+    "currentLine": "VOTC:BRIDGE_HELLO/;/schema=1/;/protocol=1.0/;/mod=2.0.5/;/upstream=2.0.4/;/revision=1/;/load=votc-load-[GetGlobalVariable('votc_load_epoch').GetValue]/;/caps=character_export:1,trait_export:1,native_date:1,load_session:1,runfile_consumer:1,run_ack:1,action_readback:1,letter_receipt:1,official_recollection_export:1",
+    "capabilitySyntax": "[!]id:revision comma-separated; ! means the capability is required for protocol understanding, not that every Runtime feature requires it.",
+    "currentCapabilitiesUseRequiredMarker": false
+  },
+  "legacyWithoutHello": {
+    "state": "LEGACY_UNVERIFIED",
+    "reason": "HELLO_NOT_RECEIVED",
+    "inheritPreviousSession": false
+  },
+  "invalidProtocol": {
+    "state": "INCOMPATIBLE",
+    "reason": "UNSUPPORTED_PROTOCOL_OR_SCHEMA"
+  },
+  "missingRequiredCapability": {
+    "state": "INCOMPATIBLE",
+    "scope": "dependent-feature-only",
+    "reason": "REQUIRED_CAPABILITY_MISSING"
+  },
+  "optionalCapabilityMissing": {
+    "state": "DEGRADED",
+    "scope": "dependent-feature-only",
+    "reason": "OPTIONAL_CAPABILITY_MISSING"
+  },
+  "unknownRequiredCapability": {
+    "state": "INCOMPATIBLE",
+    "reason": "UNKNOWN_REQUIRED_CAPABILITY"
+  },
+  "unknownOptionalCapability": {
+    "state": "SUPPORTED",
+    "behavior": "ignored"
+  },
+  "featureRequirements": {
+    "conversation": [
+      "character_export",
+      "load_session"
+    ],
+    "action": [
+      "runfile_consumer",
+      "run_ack"
+    ],
+    "letter": [
+      "native_date",
+      "load_session",
+      "runfile_consumer",
+      "run_ack",
+      "letter_receipt"
+    ],
+    "actionConfirmation": [
+      "action_readback"
+    ],
+    "traits": [
+      "trait_export"
+    ],
+    "officialRecollection": [
+      "official_recollection_export"
+    ]
+  },
+  "evidenceBoundary": "Static declarations and fixtures are contract inputs only; they do not establish CK3 engine emission, current-session log evidence, game compatibility, or successful business effects."
+}

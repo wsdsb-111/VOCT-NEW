@@ -1,0 +1,12 @@
+{
+  "fixtureId": "hello-unknown-required-capability",
+  "provenance": "synthetic_static_contract",
+  "input": {
+    "kind": "bridge-hello-line",
+    "line": "VOTC:BRIDGE_HELLO/;/schema=1/;/protocol=1.0/;/mod=2.0.5/;/upstream=2.0.4/;/revision=1/;/load=votc-load-46/;/caps=character_export:1,trait_export:1,native_date:1,load_session:1,runfile_consumer:1,run_ack:1,action_readback:1,letter_receipt:1,official_recollection_export:1,!future_capability:1"
+  },
+  "expected": {
+    "state": "INCOMPATIBLE",
+    "reason": "UNKNOWN_REQUIRED_CAPABILITY"
+  }
+}
