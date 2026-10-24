@@ -4,6 +4,7 @@
 - 新增 Bridge 1.0 只读 Hello、当前载入绑定、逐能力兼容判定和双语诊断；旧无 Hello 保持未验证旧路径，诊断不发送 Effect。
 - 模型工作流及写入前检查能力，ACK／回读／Receipt 独立记录实际发送 generation；跨载入不复用旧确认，保留原队列与未知效果不重放。
 - 本轮只推送 GitHub，未发布 Steam；详见[实施](docs/current/v9/V9_6_IMPLEMENTATION.md)、[验证](docs/current/v9/V9_6_VERIFICATION.md)、[配对说明](docs/current/v9/V9_6_RELEASE_PAIRING.md)。真实 CK3／Provider／Soak 单列，候选不是 Full Freeze。
+- 最终代码 `f38bb52`／[CI 40085792003](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40085792003) 通过 509 组、352 项、独立 Mod 核验及完整 EXE 冷启动／重启／媒体检查；Runtime payload 与本机一致。
 
 # V9.5.1 候选（2026-10-23）
 

@@ -8,6 +8,8 @@ VOTC 是面向《Crusader Kings III》（CK3）的 Windows Electron 宫廷对话
 
 2026-10-24 当前为 **V9.6.0 候选**：完整 Workshop Mod 源码纳入 `ck3-mod/`，Runtime 与 Mod 独立构建和分发；官方上游 2.0.4、本地维护基线 2.0.5、Bridge 修订 1 分别记录。新增当前载入 Hello、逐能力兼容判定和原诊断页双语只读状态，保留旧无 Hello 路径及现有 ACK／回读／回执。详见[实施](docs/current/v9/V9_6_IMPLEMENTATION.md)、[验证](docs/current/v9/V9_6_VERIFICATION.md)、[双模块配对](docs/current/v9/V9_6_RELEASE_PAIRING.md)。本轮只推送 GitHub，不发布 Steam；真实 CK3 和 Soak 未验收。此前统一分发[前置探索](docs/current/v9/V9_6_PRE_EXPLORATION.md)已由用户新的双模块方案取代。以下为历史版本证据。
 
+V9.6 最终代码 `f38bb52` 的 [Windows CI 40085792003](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40085792003) 已通过 **509 组完整回归、352 项构建部署、独立 Mod 核验及完整 EXE 冷启动／重启／媒体检查**，Runtime payload 与本机一致。只读诊断不写 Effect；动作降级保留聊天，跨载入回读不确认旧命令。真实 CK3／Provider／Soak 仍待验收。
+
 2026-10-23 当前为 **V9.5.1 候选**：原功能页接入共享离线图标与状态组件，官方追忆按会话、回应者和快照治理异步读取，补齐双语及优化／世界书导航图标。英文动作列表读取模组已有英文标题，前端显示 GLM；移除关键动作召回面板，保留按请求类型的 action 用量。详见[实施与验证](docs/current/v9/V9_5_1_VERIFICATION.md)、[页面矩阵](docs/current/v9/V9_5_1_PAGE_MIGRATION_MATRIX.md)、[双语覆盖](docs/current/v9/V9_5_1_I18N_COVERAGE.md)。完整 CI、本机隔离 EXE 启动失败及人工 Gate 独立记录，以下为历史证据。
 
 代码 `bcdf226` 的 [Windows CI 39944550467](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39944550467) 已通过 **505组完整回归、346项构建部署和完整EXE冷启动／重启／媒体检查**，Runtime Payload 与本机部署一致。原失败保留；真实 CK3、Provider、手动输入／穿透、真实 DPI 和 Soak 尚未签署。

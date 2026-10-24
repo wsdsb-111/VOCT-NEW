@@ -23,7 +23,9 @@
 
 诊断修正代码 `71bc7126f14d2eb3e3546d3b6df682039ddface0` 的 [Windows CI 40083703532](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40083703532) 同样通过 509 组、352 项资源、独立 Mod 产物及完整 EXE 冷启动／重启／媒体加载；该批 payload 为 `230af51f05de657d7ca37913437ab2059759978044c23421af4ff8d0f1d16e5c`，与该批本机部署一致。三主题中英原诊断页六张匿名截图位于本机 `.build/v9.6/visual/`；已检查水墨英文与骑士中文的文字可读性和背景显示。
 
-收口只读 QA 又发现两处未被首批夹具覆盖的边界：仅动作不可用时异常会误伤已经生成的台词；同命令金币回读后的余额刷新期间换载入，旧 verification 仍可能提交。现已将不可用的动作评估局部跳过，保留聊天，并在余额刷新 await 后再次验证 generation。新增反例先证明金币回读本身可 CONFIRMED，再在异步刷新内切换 LOAD，必须得到 UNCONFIRMED 且不记录旧验证。接线、金币确认和真实 respondAs 台词重生成专项通过；最终 payload 为 `2832fdc42cddcd486dad0e2e99b58af731088af330133c6113cc2dcb78c4fcdf`。该收口代码的完整 CI 待推送后补记；前两批成功不能代替收口代码验证。
+收口只读 QA 又发现两处未被首批夹具覆盖的边界：仅动作不可用时异常会误伤已经生成的台词；同命令金币回读后的余额刷新期间换载入，旧 verification 仍可能提交。现已将不可用的动作评估局部跳过，保留聊天，并在余额刷新 await 后再次验证 generation。新增反例先证明金币回读本身可 CONFIRMED，再在异步刷新内切换 LOAD，必须得到 UNCONFIRMED 且不记录旧验证。接线、金币确认和真实 respondAs 台词重生成专项通过；最终 payload 为 `2832fdc42cddcd486dad0e2e99b58af731088af330133c6113cc2dcb78c4fcdf`。独立 QA 已只读确认这两项关闭，未冒充其亲自运行测试。
+
+最终代码 **`f38bb52bf4a237307656a456a2c015947fa7aa76`** 的 [Windows CI 40085792003](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40085792003)（job `120848336125`）已通过 **509 组完整发布回归、352 项构建／部署校验、独立 97 文件 Mod 候选构建核验、完整 EXE 冷启动／重启／媒体加载**。冷启动与重启 runtime exception 均为 0；最终 Runtime payload 与本机部署一致。该 SHA 是最后一次代码修订，之后的验证文档提交不改变 Runtime 或 Mod payload。
 
 旧 V9.5.1 的 505 组及 EXE 成功不充当本版证据。本机 V9.5.1 的 0x80000003 历史失败保留，不由浏览器或远端成功替代；V9.6 本机未复制完整 EXE 做真实桌面输入验收。
 
@@ -34,7 +36,7 @@
 | T1 静态／来源／合同 | PASS | 独立清单、来源处置、合成夹具、Hello 一行最小改动 |
 | T2 Runtime 单元／接线 | PASS | 当前 generation、只读检测、分功能检查、原业务回归 |
 | T3 跨端合成兼容 | PASS | 合成声明与旧路径；不证明 CK3 引擎实际发出 Hello |
-| T4 完整回归／打包 | 前两批 PASS／收口待 CI | `997d936`、`71bc712` 准确 SHA 的 509 组和完整 EXE 通过；收口代码单列 |
+| T4 完整回归／打包 | PASS | 最终代码 `f38bb52`／CI 40085792003，509 组、352 项与完整 EXE 通过 |
 | T5 真实 CK3／Provider | NOT_RUN | 新档、读档、游戏语言／Traits、Action／Letter 实机；本轮零付费请求 |
 | T6 恢复／长时实机 | NOT_RUN | 合成恢复已测；真实游戏跨载入与 Soak 未签署 |
 
