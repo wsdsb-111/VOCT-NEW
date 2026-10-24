@@ -6,6 +6,8 @@ VOTC 是面向《Crusader Kings III》（CK3）的 Windows Electron 宫廷对话
 
 ## 当前版本与进度
 
+V9.6 前置探索（2026-10-24）：已记录自身Workshop Mod与Runtime的源文件指纹、日志／剪贴板／RunFile通信、跨端事件与变量依赖，以及统一交付、独立版本的候选边界。详见[探索总览](docs/current/v9/V9_6_PRE_EXPLORATION.md)。本轮只记录现状与方案，Runtime继续为9.5.1，尚未实施源码迁移、Bootstrap或Workshop发布。
+
 2026-10-23 当前为 **V9.5.1 候选**：原功能页接入共享离线图标与状态组件，官方追忆按会话、回应者和快照治理异步读取，补齐双语及优化／世界书导航图标。英文动作列表读取模组已有英文标题，前端显示 GLM；移除关键动作召回面板，保留按请求类型的 action 用量。详见[实施与验证](docs/current/v9/V9_5_1_VERIFICATION.md)、[页面矩阵](docs/current/v9/V9_5_1_PAGE_MIGRATION_MATRIX.md)、[双语覆盖](docs/current/v9/V9_5_1_I18N_COVERAGE.md)。完整 CI、本机隔离 EXE 启动失败及人工 Gate 独立记录，以下为历史证据。
 
 代码 `bcdf226` 的 [Windows CI 39944550467](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39944550467) 已通过 **505组完整回归、346项构建部署和完整EXE冷启动／重启／媒体检查**，Runtime Payload 与本机部署一致。原失败保留；真实 CK3、Provider、手动输入／穿透、真实 DPI 和 Soak 尚未签署。

@@ -1,5 +1,7 @@
 # VOTC 文档索引
 
+**V9.6 前置探索（2026-10-24，未施工）**：[总览](current/v9/V9_6_PRE_EXPLORATION.md)、[源码取证](current/v9/V9_6_SOURCE_INVENTORY.md)、[通信依赖矩阵](current/v9/V9_6_BRIDGE_PROTOCOL_MATRIX.md)、[兼容候选](current/v9/V9_6_COMPATIBILITY_MATRIX.md)、[架构决策](current/v9/V9_6_ARCHITECTURE_DECISION.md)、[原型与实机计划](current/v9/V9_6_CK3_LIVE_TEST_PLAN.md)。本机97文件哈希、七补丁对照及固定上游差异已记录；统一交付目标按用户最新说明纳入9.6前置研究。Runtime仍9.5.1，没有导入完整Mod、改协议或发布Workshop。
+
 当前入口 **V9.5.1 候选**：[实施与验证](current/v9/V9_5_1_VERIFICATION.md)、[页面迁移矩阵](current/v9/V9_5_1_PAGE_MIGRATION_MATRIX.md)、[双语覆盖](current/v9/V9_5_1_I18N_COVERAGE.md)。原页面共享组件、官方追忆 scoped read、英文标题与标签、导航专属图标；完整门禁和实机状态按本版记录。以下 V9.5.0 及更早为历史批次。
 
 准确代码 `bcdf226` 的 [Windows CI 39944550467](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/39944550467) 通过505组、346项构建部署及完整EXE冷启动／重启／媒体加载。Runtime Payload与本机一致；本机EXE失败和人工Gate不由远端结果替代。

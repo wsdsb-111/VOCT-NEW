@@ -1,0 +1,1336 @@
+{
+  "schema": "votc-v96-read-only-inventory/v1",
+  "auditDateLocal": "2026-10-24",
+  "runtimeBaseline": "060e336ce64d844dc32a122038b38bc02fb3a134",
+  "workshopItem": "3346777360",
+  "installedPath": "D:\\SteamLibrary\\steamapps\\workshop\\content\\1158310\\3346777360",
+  "provenance": "Locally installed and locally patched snapshot; not a pristine Steam download or an established authoritative source.",
+  "fileCount": 97,
+  "totalBytes": 12995956,
+  "treeSha256": "cf872f6a6d79878dc6106e312919b78f641971dda026bc3cdb1c5c926f040756",
+  "treeHashRule": "SHA256 of UTF-8 path + NUL + decimal size + NUL + lowercase file SHA256 + LF, sorted by relativePath.localeCompare(en).",
+  "stableAcrossAudit": true,
+  "descriptor": "version=\"2.0.5\"\ntags={\n\t\"Gameplay\"\n}\nname=\"Voices of the Court 2.0\"\nsupported_version=\"1.20.*\"\nremote_file_id=\"3346777360\"",
+  "files": [
+    {
+      "relativePath": "common/activities/activity_types/votc_council_gathering.txt",
+      "size": 19646,
+      "sha256": "61c145e6bf469cce568d1b0af411dad5f2abaffc5f0120953c510ba9ee108328"
+    },
+    {
+      "relativePath": "common/activities/intents/votc_activity_intents.txt",
+      "size": 271,
+      "sha256": "214248e795c04468e02ebb19e6b0f9c041241ebf35a243f20a1293cda46d8326"
+    },
+    {
+      "relativePath": "common/character_interactions/invite_to_talk_interactions.txt",
+      "size": 4616,
+      "sha256": "402b54909f32a5ee2c98ee9760d813ebf5bd51bf75e7c25a7e5106518a48b2fd"
+    },
+    {
+      "relativePath": "common/character_interactions/mcc_interactions.txt",
+      "size": 883,
+      "sha256": "ece89b1240dd593b242c0cb4dc04ec00fc71072bfbf4624c9cb17947fdaf6970"
+    },
+    {
+      "relativePath": "common/character_interactions/message_interactions.txt",
+      "size": 2516,
+      "sha256": "92a323ebff359d606cd4f74aedcfdcc4b6b5a2ae5b7298674edf16e94a0733e0"
+    },
+    {
+      "relativePath": "common/character_interactions/talk_interactions.txt",
+      "size": 4430,
+      "sha256": "9cad939f65abf9ab85af01de902ccde1b81edfcde2ffadaa7cb27176e6cb8ea2"
+    },
+    {
+      "relativePath": "common/decisions/votc_decisions.txt",
+      "size": 689,
+      "sha256": "8f243aa74d7f6ebeae371275352b117be513bc9adf0cd8e05d321fdeb7450726"
+    },
+    {
+      "relativePath": "common/defines/message_length.txt",
+      "size": 45,
+      "sha256": "9885481f8a99dff8963a5c04c4947da70a6adaa76781da1888f4ca2d253087b1"
+    },
+    {
+      "relativePath": "common/event_themes/clipboard_transfer_event_theme.txt",
+      "size": 389,
+      "sha256": "d1f5374d118253ec2774654041b273597252ecdbd488a6d09258c0aa4a091fe9"
+    },
+    {
+      "relativePath": "common/messages/votc_message.txt",
+      "size": 324,
+      "sha256": "c4d42c218c36e51a1bf878d8381e47374a8583d3a4648425e6dd6bf5cff4f430"
+    },
+    {
+      "relativePath": "common/on_action/votc_load_boundary.txt",
+      "size": 1040,
+      "sha256": "4f14470dbbefd198bf6736eb925040e47ec3c9a73c90bec20d41294860e60df1"
+    },
+    {
+      "relativePath": "common/opinion_modifiers/conversation_opinion.txt",
+      "size": 107,
+      "sha256": "ed88f0085c937a6b43d435a0305282dcd5425be6656acb1d7d0148f469a45daa"
+    },
+    {
+      "relativePath": "common/script_values/letter_delay.txt",
+      "size": 2225,
+      "sha256": "c12bbd7a3d85b8f257ef980439106e80ef696849d9542136411ab104843d9aab"
+    },
+    {
+      "relativePath": "common/script_values/levies_total.txt",
+      "size": 19406,
+      "sha256": "76c7d8a8306cac428124626269bcea2d4b9431ad4ac23216a0d7dd8a3eb38452"
+    },
+    {
+      "relativePath": "common/script_values/weight_memory_relevance.txt",
+      "size": 461,
+      "sha256": "27613f10f2bdc6e952a858745470cd3954e6f25ef9ca14ab63a601f4c3a1912e"
+    },
+    {
+      "relativePath": "common/scripted_effects/interaction_effects.txt",
+      "size": 515,
+      "sha256": "188256c9443acd505f2727c58c19885f221b48fd43ec416e7719299071b98d4d"
+    },
+    {
+      "relativePath": "common/scripted_effects/log_character_v2_effect.txt",
+      "size": 25095,
+      "sha256": "02db9044f83eb7977637288de47aff340a0109b3f699d656ad4a317e111f6580"
+    },
+    {
+      "relativePath": "common/scripted_effects/log_gamedata_v3_effect.txt",
+      "size": 4087,
+      "sha256": "e9d1cb98f23568cee144b3850fa8a46ab755eef8cfb833547c1d2e305c89a10b"
+    },
+    {
+      "relativePath": "common/scripted_effects/log_gamedata_v3l_effect.txt",
+      "size": 3586,
+      "sha256": "ca9d045bd731e41d1adc01d7d5f83f5cd6f8a802c7ba6419cd168005f1cb6aef"
+    },
+    {
+      "relativePath": "common/scripted_effects/log_gamedata_v3s_effect.txt",
+      "size": 3818,
+      "sha256": "b19b273c2a92450462fa4155f9d81385d54346af3a3a6efcc97645c394ec0db3"
+    },
+    {
+      "relativePath": "common/scripted_effects/votc_campaign_identity_effect.txt",
+      "size": 11077,
+      "sha256": "e301c82a9314a5ffb323f9bc4f78e5a1a6f2e35eff3c2660b4aa616e1b058cdd"
+    },
+    {
+      "relativePath": "common/scripted_guis/mcc_selection.txt",
+      "size": 1987,
+      "sha256": "e73291780338029481c81e61e005917652740b1bcd849c860d170670cb20a1a1"
+    },
+    {
+      "relativePath": "common/scripted_guis/votc_runtime_clock.txt",
+      "size": 260,
+      "sha256": "fde0259f116a66e602b0fd7e7b14e617ec8680a35024b582f1f696e8ba1be004"
+    },
+    {
+      "relativePath": "common/scripted_guis/votc_select_talk_scene.txt",
+      "size": 172,
+      "sha256": "32aad2293e123f700481fa4faf3f8ac7cd9382ca2de294eaac8f9a14c9274da3"
+    },
+    {
+      "relativePath": "common/scripted_modifiers/votc_council_gathering_modifiers.txt",
+      "size": 655,
+      "sha256": "c9a8245ac6e9a2105b3f0e7b4b2b5e77a206ff9346991927d538e7c568a59919"
+    },
+    {
+      "relativePath": "common/scripted_triggers/scene_triggers.txt",
+      "size": 2669,
+      "sha256": "0818377178942868bb93ce871f2b7b4f521446da342d7ae54bb0a4824e2dab48"
+    },
+    {
+      "relativePath": "descriptor.mod",
+      "size": 122,
+      "sha256": "c77060613e6cf45e9a2aa6b2215f4d689104a90d25791aa421794199a8fefa80"
+    },
+    {
+      "relativePath": "events/mcc_events_v2.txt",
+      "size": 15784,
+      "sha256": "4e5c2a4b20e7cc51474d64e2ee2735d729a0d69c0126b5290f01f6f67fe9c56d"
+    },
+    {
+      "relativePath": "events/message_events.txt",
+      "size": 6026,
+      "sha256": "b55f3fffde18cd938ff0974f07ae4e5a7130197d8be69c3797e6aa6447e1827f"
+    },
+    {
+      "relativePath": "events/silence_ck3_errors_events.txt",
+      "size": 25435,
+      "sha256": "d4dc446a9435ea93bf50fbdea66129cf1059ef1046d03303c595d450ab1e618f"
+    },
+    {
+      "relativePath": "gfx/0.dds",
+      "size": 144,
+      "sha256": "3b25cb963c8c03007ec9385b518f6c0292e1c9da405dca5d1dd9d6e6fc51b1b9"
+    },
+    {
+      "relativePath": "gfx/interface/icons/activities/_activity_votc_council_gathering_header.dds",
+      "size": 36656,
+      "sha256": "53243ee750cb1255b26c869220a4ab445460fba74a8562560879a925e8509087"
+    },
+    {
+      "relativePath": "gfx/interface/icons/activities/activity_votc_council_gathering_header.dds",
+      "size": 36656,
+      "sha256": "1d43731366438d2095f8a3ae4760bd00eec86ca0ccfe23fbdc51069cc2d5071e"
+    },
+    {
+      "relativePath": "gfx/interface/icons/activities/activity_votc_council_gathering.dds",
+      "size": 8768,
+      "sha256": "976e621d052a75b8990441816ecca70fb6be5b2c08b052a0cc172cde713a4214"
+    },
+    {
+      "relativePath": "gfx/interface/icons/activity_option_categories/votc_council_gathering_amenities_amount.dds",
+      "size": 15584,
+      "sha256": "184405e9b6cc8692d8d230635ee84218bc5a709fe46b0bf19bfe4465fbe0c686"
+    },
+    {
+      "relativePath": "gfx/interface/icons/activity_phases/votc_council_gathering_council_phase.dds",
+      "size": 78528,
+      "sha256": "e7cce8e7a3a20e2f6a46e648e389c119c96e100ecd6427a7c4509ddb1f45f76a"
+    },
+    {
+      "relativePath": "gfx/interface/illustrations/activity_backgrounds/activity_votc_council_gathering.dds",
+      "size": 1801648,
+      "sha256": "f693f63b341535fc6bd32bf6d284eacd68162cd4e692dda77a040eea658ee5f1"
+    },
+    {
+      "relativePath": "gfx/interface/illustrations/activity_header_backgrounds/activity_votc_council_gathering.dds",
+      "size": 1801648,
+      "sha256": "f693f63b341535fc6bd32bf6d284eacd68162cd4e692dda77a040eea658ee5f1"
+    },
+    {
+      "relativePath": "gfx/interface/illustrations/scripted_illustrations/scene_background_selector.txt",
+      "size": 124103,
+      "sha256": "3393d859961125f9fee1c73dbe1ebba224932ef54444629df8ec7223aebf8b6a"
+    },
+    {
+      "relativePath": "gfx/interface/illustrations/scripted_illustrations/scene_background.txt",
+      "size": 292561,
+      "sha256": "5b255c1d914e342852d9149facfadbe514c2cbdb449d3996b8b440c3153fa3b1"
+    },
+    {
+      "relativePath": "gfx/interface/tavern_gfx/mask_off.dds",
+      "size": 8294528,
+      "sha256": "2649283a16c47f2561bc94198237409c49c6907688558fe8154602f514ed3722"
+    },
+    {
+      "relativePath": "gfx/portraits/cameras/conversation_camera.txt",
+      "size": 708,
+      "sha256": "7689844b9eaaf936620ef332049c036cc6e9183d752ee64f71f8e815c8c2d5d7"
+    },
+    {
+      "relativePath": "gfx/portraits/portrait_animations/conversation_animations_v2.txt",
+      "size": 20550,
+      "sha256": "5f4fb9db95ec3d522c7496f129ea122d171c5488c3dac2ff4d1d78482fd940c3"
+    },
+    {
+      "relativePath": "gfx/portraits/portrait_animations/conversation_animations.txt",
+      "size": 3602,
+      "sha256": "fe05c3c27c311579b84aed963d9c977437cd4b5c6678eefdf9c043f83d391085"
+    },
+    {
+      "relativePath": "gui/custom_gui/letters_runner.gui",
+      "size": 246,
+      "sha256": "2181018c19f3884dc13f49252ef0caa9ffd71c9951b4192f83cea654ea1a4e1a"
+    },
+    {
+      "relativePath": "gui/custom_gui/mcc_characters_window.gui",
+      "size": 46330,
+      "sha256": "95dc4c5584a93529fcd18d4977d403d529b1d74293c9b525bd3c6ca801936c40"
+    },
+    {
+      "relativePath": "gui/custom_gui/talk_window_v2.gui",
+      "size": 2436,
+      "sha256": "f335c8628f4fb50178017978c4988709d5ce35f29f631c5f840b17c4af93d000"
+    },
+    {
+      "relativePath": "gui/custom_gui/votc_letter.gui",
+      "size": 6940,
+      "sha256": "a44e959238171b2d647d415618a1b310886a4b64c9b5c7ae491bba4e7bdad2d1"
+    },
+    {
+      "relativePath": "gui/custom_gui/votc_runtime_bridge.gui",
+      "size": 844,
+      "sha256": "4d105bb42313d8da71514cacdf394799642c29869a0e41653a5cab8947d87155"
+    },
+    {
+      "relativePath": "gui/custom_gui/votc_scene_selector.gui",
+      "size": 6734,
+      "sha256": "5bcd5b7d0324c24f29d40cec00c4add56ef7d12a15692884abef8c63beda17a5"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_message_clear.gui",
+      "size": 153,
+      "sha256": "162d17b1cca59a83a37fbeef1bf0f8055e6462083c1bddd6e691ca4043a89858"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_message_open.gui",
+      "size": 446,
+      "sha256": "25a963a8b1cbd6fb87a0c355579ebd41a575775a8fc9afcf1bff01f2c0580a10"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_message_write.gui",
+      "size": 606,
+      "sha256": "9265c477303c0bd99795a9fafdf86ffbe3874163e29f2d7b453021ba462faecc"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_message.gui",
+      "size": 127,
+      "sha256": "e9b611da88cf1def06cf46a4eed09c2a9e88147f92050f7ea2435abe3988faa2"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_talk_clear.gui",
+      "size": 283,
+      "sha256": "b18d9dc7534569b6c4a96cc24d127fe07107c427652dbca3c19a486e440caf78"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_talk_close_v2.gui",
+      "size": 316,
+      "sha256": "6fb4a6a17f3787120841b1c4dc9221c5faecb442337f5f1ba7beb011df18010e"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_talk_close.gui",
+      "size": 310,
+      "sha256": "b6d722c2867d72857e91dc3504f51c1e5eae57d5f9fe6d7e259b1601ec7b41a2"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_talk_v2.gui",
+      "size": 589,
+      "sha256": "dcc151b52d769e3a8d348d065224be165af9383ce41fb97f2e7db85f18ee7c8e"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_talk.gui",
+      "size": 493,
+      "sha256": "2abd85530e427c00286d6159788823fb25054906e5f62aceb64dbbd96b3b87f9"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/mcc_select_characters_widget.gui",
+      "size": 445,
+      "sha256": "02e9cbe85dbee4e855b88a438522690d329482d676df499c66a4794de3aa3097"
+    },
+    {
+      "relativePath": "gui/event_window_widgets/votc_scene_selector_widget.gui",
+      "size": 489,
+      "sha256": "73d1a02718845e71ebf6c61de48bd51ba04b729c4585488ade0c501959244f10"
+    },
+    {
+      "relativePath": "gui/event_windows/votc_invisible_event.gui",
+      "size": 625,
+      "sha256": "fbf75b792f69f047427fcffa87d2a133eeb9cfbb2ce9cff1cee88c776b6b4bd3"
+    },
+    {
+      "relativePath": "gui/scripted_widgets/mcc_characters_window.txt",
+      "size": 69,
+      "sha256": "6f4bda753cc85ddebc666d77abbf7bf59a91cd7cc48e65069028ebe797c89853"
+    },
+    {
+      "relativePath": "gui/scripted_widgets/revotc_scene_selector.txt",
+      "size": 62,
+      "sha256": "a93893166ede246fd587350948458f3e5a75d0153d8fe4525547263791e3d222"
+    },
+    {
+      "relativePath": "gui/scripted_widgets/votc_runtime_bridge.txt",
+      "size": 61,
+      "sha256": "dcfd3b6ddebc561f19f268f33efddf20550df0ace5d30f58bb6087ce065c9306"
+    },
+    {
+      "relativePath": "gui/shared/conversation_portraits.gui",
+      "size": 2302,
+      "sha256": "e6f72f4cdaeb1fadf86dddb5b7aaa4d7114d81e583e6ca9d2ae64b9f3c355382"
+    },
+    {
+      "relativePath": "gui/shared/votc_Editboxes.gui",
+      "size": 1320,
+      "sha256": "068eaa6f2fc307e7ff8e44dd467dc5a0a35c9253643425dc4d46aae2b2cd6a5a"
+    },
+    {
+      "relativePath": "LICENSE.MD",
+      "size": 20558,
+      "sha256": "fcc8a87920214067b4f9f81aceec79d4593e70184c25fe81f0e880ab30347856"
+    },
+    {
+      "relativePath": "localization/english/clipboard_codes_l_english.yml",
+      "size": 374,
+      "sha256": "64c04b78712744bfd81fc18a1871717b3f3eefda89b57d9699ff647f333cb2e9"
+    },
+    {
+      "relativePath": "localization/english/log_character_l_english.yml",
+      "size": 1540,
+      "sha256": "9c03855a711a3f66bef1f22ce2935753d8841ff243e6bc9446ae4650d13ed99c"
+    },
+    {
+      "relativePath": "localization/english/talk_l_english.yml",
+      "size": 10515,
+      "sha256": "d2c5305ee037a62e14912a4b58a43bfe42f7568d73332f9f5d14651285081297"
+    },
+    {
+      "relativePath": "localization/french/clipboard_codes_l_french.yml",
+      "size": 373,
+      "sha256": "5b800e686f12ceff96c65e7e4b34145d0a36cd7c882487a294b3e985da1a07ce"
+    },
+    {
+      "relativePath": "localization/french/log_character_l_french.yml",
+      "size": 1539,
+      "sha256": "00c158d28d9b6514546da681d45fe59b83a806bf097723373364e487a1e40eb7"
+    },
+    {
+      "relativePath": "localization/french/talk_l_french.yml",
+      "size": 11302,
+      "sha256": "9173c14485092b6249a9da45d2b3ae65742a44cde359213307695ac70157dc23"
+    },
+    {
+      "relativePath": "localization/german/clipboard_codes_l_german.yml",
+      "size": 373,
+      "sha256": "0839e227aab7f79419a7cd24f757506f16644f47e406c3aafe5c0adceffe24f6"
+    },
+    {
+      "relativePath": "localization/german/log_character_l_german.yml",
+      "size": 1539,
+      "sha256": "c18f2fd67f80f570b74633bbe16a3174ea949e61c8d77657a6c745f4485b3ec0"
+    },
+    {
+      "relativePath": "localization/german/talk_l_german.yml",
+      "size": 11104,
+      "sha256": "dd4804db8572bf8624e1d1bfa82e942e16dd781b27c73c8bd63f19900bde8359"
+    },
+    {
+      "relativePath": "localization/japaneese/clipboard_codes_l_japanese.yml",
+      "size": 375,
+      "sha256": "7be250d50f17b5d4032b59e0845be83ffb4f847442bd3d12414ede5ca756c626"
+    },
+    {
+      "relativePath": "localization/japaneese/log_character_l_japanese.yml",
+      "size": 1541,
+      "sha256": "3de5fdeae44f134a294a048b435e2bcad0e8de03dffb31e68f937496526b6b7d"
+    },
+    {
+      "relativePath": "localization/japaneese/talk_l_japanese.yml",
+      "size": 11188,
+      "sha256": "195db5c08979d5964b45c4c70e76e6ef08e06c2fbbaa1328f0b0287c522ebabb"
+    },
+    {
+      "relativePath": "localization/korean/clipboard_codes_l_korean.yml",
+      "size": 373,
+      "sha256": "e8d4bcbb09884e531ef3f8e82778dff61f668947d5cc265d8d50d40375e552b9"
+    },
+    {
+      "relativePath": "localization/korean/log_l_korean.yml",
+      "size": 1539,
+      "sha256": "f0337d46434927590fabef50dfa82f9193571ff49648524895aeb74271192fb1"
+    },
+    {
+      "relativePath": "localization/korean/talk_l_korean.yml",
+      "size": 11050,
+      "sha256": "c9b05305afc04e138de61bf2fbf06e99bc7a5d5add0a978e3ebdd6e21269122e"
+    },
+    {
+      "relativePath": "localization/polish/clipboard_codes_l_polish.yml",
+      "size": 373,
+      "sha256": "b369c437679c7dbf38f33c4016ac26c1b785104a8e4d99862154393edc098b31"
+    },
+    {
+      "relativePath": "localization/polish/log_character_l_polish.yml",
+      "size": 1539,
+      "sha256": "031e182be72615f4fe1a946535e5adb0db889f2ea7b627ca27b2846b203ba185"
+    },
+    {
+      "relativePath": "localization/polish/talk_l_polish.yml",
+      "size": 10829,
+      "sha256": "f5df5a717b808c7c7a74a8842f47221563497ee616f07d7f768ac5078254f98f"
+    },
+    {
+      "relativePath": "localization/russian/clipboard_codes_l_russian.yml",
+      "size": 374,
+      "sha256": "b2bc5d9ff4b6dfe0f6c77f698b1b7854036f4328624abb71437a99b1c7b7d56d"
+    },
+    {
+      "relativePath": "localization/russian/log_character_l_russian.yml",
+      "size": 1540,
+      "sha256": "a4c93068012cf81f5e7d3e39bc956bd7fd006735afbae888e7e4888a52a546df"
+    },
+    {
+      "relativePath": "localization/russian/talk_l_russian.yml",
+      "size": 13992,
+      "sha256": "c938f62f7a46f6578fc67324a91e59a546dd17a540cee6a087922956126cd4c9"
+    },
+    {
+      "relativePath": "localization/simp_chinese/clipboard_codes_l_simp_chinese.yml",
+      "size": 379,
+      "sha256": "c510381838b4a21816d3aa858de51751ccaf4af4639fd4c0cca4aae612de79cf"
+    },
+    {
+      "relativePath": "localization/simp_chinese/log_character_l_simp_chinese.yml",
+      "size": 1545,
+      "sha256": "3c2c45d61ff18e9f652ce30539ee0ad40ee63b2eb4886a8b1d7fe097d09551a9"
+    },
+    {
+      "relativePath": "localization/simp_chinese/talk_l_simp_chinese.yml",
+      "size": 9885,
+      "sha256": "55b783e59685ce2e8cc84f59a47cc4aff177e11c104a89b04a447bc8d2f09c81"
+    },
+    {
+      "relativePath": "localization/spanish/clipboard_codes_l_spanish.yml",
+      "size": 374,
+      "sha256": "dcdf8706495d75759a10ef168fac515082e2d7e6105deab553d74b10ff2cc7a3"
+    },
+    {
+      "relativePath": "localization/spanish/log_character_l_spanish.yml",
+      "size": 1540,
+      "sha256": "2d98a7bb092bb573d12720a0de709a1975414f499f2b63c576de97542f3d3aec"
+    },
+    {
+      "relativePath": "localization/spanish/talk_l_spanish.yml",
+      "size": 11182,
+      "sha256": "9c9604799555583baeeb9adb724b47dd4db0321604486906e7557eb7048a6aa9"
+    },
+    {
+      "relativePath": "README.md",
+      "size": 524,
+      "sha256": "c244221a5826d0cb43a00d59f9f7c006884e483d2293bd58b261eaae2d1c581a"
+    },
+    {
+      "relativePath": "thumbnail.png",
+      "size": 110351,
+      "sha256": "570fbd57c0587390ea4478d0058882c4b5aa1ec3c57867147bae796694bb8511"
+    }
+  ],
+  "patchComparisons": [
+    {
+      "relativePath": "common/on_action/votc_load_boundary.txt",
+      "patchSha256": "4f14470dbbefd198bf6736eb925040e47ec3c9a73c90bec20d41294860e60df1",
+      "installedSha256": "4f14470dbbefd198bf6736eb925040e47ec3c9a73c90bec20d41294860e60df1",
+      "rawEqual": true,
+      "textEqualIgnoringBomAndEol": true
+    },
+    {
+      "relativePath": "common/scripted_guis/votc_runtime_clock.txt",
+      "patchSha256": "fde0259f116a66e602b0fd7e7b14e617ec8680a35024b582f1f696e8ba1be004",
+      "installedSha256": "fde0259f116a66e602b0fd7e7b14e617ec8680a35024b582f1f696e8ba1be004",
+      "rawEqual": true,
+      "textEqualIgnoringBomAndEol": true
+    },
+    {
+      "relativePath": "gui/custom_gui/letters_runner.gui",
+      "patchSha256": "2181018c19f3884dc13f49252ef0caa9ffd71c9951b4192f83cea654ea1a4e1a",
+      "installedSha256": "2181018c19f3884dc13f49252ef0caa9ffd71c9951b4192f83cea654ea1a4e1a",
+      "rawEqual": true,
+      "textEqualIgnoringBomAndEol": true
+    },
+    {
+      "relativePath": "gui/custom_gui/votc_runtime_bridge.gui",
+      "patchSha256": "4d105bb42313d8da71514cacdf394799642c29869a0e41653a5cab8947d87155",
+      "installedSha256": "4d105bb42313d8da71514cacdf394799642c29869a0e41653a5cab8947d87155",
+      "rawEqual": true,
+      "textEqualIgnoringBomAndEol": true
+    },
+    {
+      "relativePath": "gui/event_window_widgets/event_window_widget_message_clear.gui",
+      "patchSha256": "162d17b1cca59a83a37fbeef1bf0f8055e6462083c1bddd6e691ca4043a89858",
+      "installedSha256": "162d17b1cca59a83a37fbeef1bf0f8055e6462083c1bddd6e691ca4043a89858",
+      "rawEqual": true,
+      "textEqualIgnoringBomAndEol": true
+    },
+    {
+      "relativePath": "gui/event_windows/votc_invisible_event.gui",
+      "patchSha256": "fbf75b792f69f047427fcffa87d2a133eeb9cfbb2ce9cff1cee88c776b6b4bd3",
+      "installedSha256": "fbf75b792f69f047427fcffa87d2a133eeb9cfbb2ce9cff1cee88c776b6b4bd3",
+      "rawEqual": true,
+      "textEqualIgnoringBomAndEol": true
+    },
+    {
+      "relativePath": "gui/scripted_widgets/votc_runtime_bridge.txt",
+      "patchSha256": "dcfd3b6ddebc561f19f268f33efddf20550df0ace5d30f58bb6087ce065c9306",
+      "installedSha256": "dcfd3b6ddebc561f19f268f33efddf20550df0ace5d30f58bb6087ce065c9306",
+      "rawEqual": true,
+      "textEqualIgnoringBomAndEol": true
+    }
+  ],
+  "upstreamReference": {
+    "repository": "Voices-of-the-Court/votc_mod",
+    "commit": "0cf4845a69f9e8633333ca04e558afe8216490f2",
+    "commitDate": "2026-10-03T19:25:23Z",
+    "descriptor": "version=\"2.0.4\"\ntags={\n\t\"Gameplay\"\n}\nname=\"Voices of the Court 2.0\"\nsupported_version=\"1.20.*\"\nremote_file_id=\"3346777360\"",
+    "note": "Read-only reference comparison; Git blob SHA-1 equals raw file bytes including line endings. Differences do not by themselves prove semantic changes. No upstream files were installed.",
+    "comparison": [
+      {
+        "relativePath": "common/activities/activity_types/votc_council_gathering.txt",
+        "localGitBlobSha1": "6087453d761f0fa66d720ca4c7b7d7c92ae10d9e",
+        "upstreamGitBlobSha1": "f1b6f8008d11729edd90e1b85c501e250b983371",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "133303169741da630dc31249ca25cb9908eea148999318f4585652dfa130254a",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "common/activities/intents/votc_activity_intents.txt",
+        "localGitBlobSha1": "4a0b5543b568ba95b348cd059cb85a34a1321655",
+        "upstreamGitBlobSha1": "b56d93e2f900d99383197160daaacf97904aea5d",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "5ebcb12fa682c5c1f21b1561435e728c601dbc8ecc7d7a4aa2661b408e392b06",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "common/character_interactions/invite_to_talk_interactions.txt",
+        "localGitBlobSha1": "84b2ec112eab9862a441095e62c8eeff837de405",
+        "upstreamGitBlobSha1": "62144fb7edfba7a8556254ab8be83421bdc6e81d",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "df02c46bde153c585f501d0c7821590cb697865eb80e6695a0a122cc987f7698",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "common/character_interactions/mcc_interactions.txt",
+        "localGitBlobSha1": "b22fa2632960fa121e214c19137d8307f82ff1e8",
+        "upstreamGitBlobSha1": "e019da8c770092f36bada56690f69664d51ce95d",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "5e59b1ce674cfa6472092c6586fc0ef2c36ea21621cabcdad1a20201c728146d",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "common/character_interactions/message_interactions.txt",
+        "localGitBlobSha1": "296da2913e5b962f1638ee6d0593b531fd9446d9",
+        "upstreamGitBlobSha1": "173ee0a173229492103b3f2ccead6b27f6a8e6fd",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "0e5ff19d0192e6aa06b5c298f2f604755b17e38ff8fd25bfa8c00664c24aa8d6",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "common/character_interactions/talk_interactions.txt",
+        "localGitBlobSha1": "d2b1d1c4d16f7acc98c65ec69a66c1b92ec1d700",
+        "upstreamGitBlobSha1": "ccebea19c21ee9f5fd304192bf08946aa4a55c3a",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "e28ea71a8bf52d0f7d7a579c9c01adf51e6e07f70bbd2ed08cc02ed079492254",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "common/decisions/votc_decisions.txt",
+        "localGitBlobSha1": "373cc2f51cf1c58fee56839af2c5770e1e44ec19",
+        "upstreamGitBlobSha1": "16c6170bd9402565af3f1a57eba30654d045926b",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "4f35e078925bbd0d18094553a83a3c42240f3b23f18f513059ee7af6300918ce",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "common/defines/message_length.txt",
+        "localGitBlobSha1": "fe5bb59264f8a7dad4f2235c0adb8ad03ddad6e6",
+        "upstreamGitBlobSha1": "f7a99960cb71728faf19725bb8f7f5f1c32abb0c",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "57bf887734b7e4aced89b90c24cc921ba88bf423757295faf0b9611429366361",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "common/event_themes/clipboard_transfer_event_theme.txt",
+        "localGitBlobSha1": "0d7de855e7c5a80cd0dfdb80d088d7958bcbb90d",
+        "upstreamGitBlobSha1": "e68eec7aa344aa1e66bff4a831db6d84d621b69e",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "2e9f52cb47f5019a32eb6270f5a09a8624dd979c042350134e1555c75ad9a602",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "common/messages/votc_message.txt",
+        "localGitBlobSha1": "1da85fc365c21ca6724dabc9b7a61dc70085f3d9",
+        "upstreamGitBlobSha1": "73aaa2839bec55632b89d1c97f92f8fbaab5ab71",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "1f798f3abf9c5bd61b3fa9bdf1f0228302be84412ddc1fcc3dc7dbebdbc2232d",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "common/on_action/votc_load_boundary.txt",
+        "localGitBlobSha1": "001627806bc4d0a04eec8a76e6017f49ababd7d7",
+        "upstreamGitBlobSha1": null,
+        "status": "LOCAL_ONLY"
+      },
+      {
+        "relativePath": "common/opinion_modifiers/conversation_opinion.txt",
+        "localGitBlobSha1": "88c02c3ecd28f0aab5822ef4561b50be1a9c5594",
+        "upstreamGitBlobSha1": "e233ca6e45f3b93b9ed4cfa2f0d5572918722d40",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "85a1d81db849dbed7e546415dbf22afe937997a8fe038dea14d57810ced252a0",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "common/script_values/letter_delay.txt",
+        "localGitBlobSha1": "5fb51913ed481fe4f4626fc852aef0e3b24a3403",
+        "upstreamGitBlobSha1": "44a0f4674defab6e8c7f6a8f6ebae3ea7936d213",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "c3ba6466cd66901f185d0789c2f0c2b8ea7ac7da50e638749cdf6c57173cc267",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "common/script_values/levies_total.txt",
+        "localGitBlobSha1": "5b6320796940bdb4c300135bfe7cfb0aada0f795",
+        "upstreamGitBlobSha1": "f8a9d33ea851a2426d330af653d2f71a07d4733c",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "85a429a2869fa98be69e40bd5805d662c4348129dad1e82299aaf3b776a46c45",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "common/script_values/weight_memory_relevance.txt",
+        "localGitBlobSha1": "afd11e21b66f656d4ccd59c0db6f9e1f335dcbcc",
+        "upstreamGitBlobSha1": "9089ab6e85f3d1df0d7298702f641d0c46026763",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "b89b69f5d17cbc727b82227dee53ef8acd8dc0fcd071be2c4c7bb1f439402ff6",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "common/scripted_effects/interaction_effects.txt",
+        "localGitBlobSha1": "5531caf129e34e3750553a6fe018a4783b62d896",
+        "upstreamGitBlobSha1": "91c65ab7a417cdfda27b62e328a5f7e776689d41",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "26d5c77aa00c39ee0f74681ec5a40ae7d23a1678f7f28599439237ab3187b184",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "common/scripted_effects/log_character_v2_effect.txt",
+        "localGitBlobSha1": "a47a87ca622ba5c9475ecd53a9ff1b392fc5050b",
+        "upstreamGitBlobSha1": "5ea03c16a9f5dd68f5ac8283f55412df2d99bc72",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "963723dd29d9ed392cc8c77815ed703c59c8a3e45f0eed6a56a94faeb0bbd84e",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "common/scripted_effects/log_gamedata_v3_effect.txt",
+        "localGitBlobSha1": "09bcaa00f721b7ca4be975fe382d735fff39dbf8",
+        "upstreamGitBlobSha1": "714efade11e35fe5ef0f424fe37687639afc2391",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "b4b1cb6a323da2405527675cc28fec7d582fb3c9e063ad868c17dbdc54f7552e",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "common/scripted_effects/log_gamedata_v3l_effect.txt",
+        "localGitBlobSha1": "448845cd67575d02d9ed2c7d8b792d8c1ed968dd",
+        "upstreamGitBlobSha1": "0b041b210d4e1fc6b86c6106573f534eaf2d313e",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "1aa4cb69a6c53246bb928e6e13d8fbb4b017a5fa57586dca0db13c73d17b9d2f",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "common/scripted_effects/log_gamedata_v3s_effect.txt",
+        "localGitBlobSha1": "ce5f92eafb7509a04c551b1e06e4f17c54c935b2",
+        "upstreamGitBlobSha1": "7299f0aea835cef3c2c6af93ac3419619b514edd",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "f398b6b2d4fc62fe49fa34bb81051fdcd9a6c7079c8dc66a3222962c8b260af6",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "common/scripted_effects/votc_campaign_identity_effect.txt",
+        "localGitBlobSha1": "87e8f3f45cce6b4250d3af8568e5d83f9ca57425",
+        "upstreamGitBlobSha1": null,
+        "status": "LOCAL_ONLY"
+      },
+      {
+        "relativePath": "common/scripted_guis/mcc_selection.txt",
+        "localGitBlobSha1": "4f157f2be746070f53fdab6c3b95b86d5c65a7d7",
+        "upstreamGitBlobSha1": "dcfd3984a59b598fb3b0492a531b7c5a370e3240",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "873685fc4e2cad3c693694bf9f107fa994056745168d9fbb9d9dcc8edda87366",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "common/scripted_guis/votc_runtime_clock.txt",
+        "localGitBlobSha1": "13e3fd2dcdb6127d29eeac30039171261bd59173",
+        "upstreamGitBlobSha1": null,
+        "status": "LOCAL_ONLY"
+      },
+      {
+        "relativePath": "common/scripted_guis/votc_select_talk_scene.txt",
+        "localGitBlobSha1": "20cf22d1b8c36baa1f7a6270f7fff3d338d0e649",
+        "upstreamGitBlobSha1": "a4069bc01435bc8edd9ead2de06423ff5a463739",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "b447dac26d12d955a4092a3570ae02f30a10d67145bd72346a86a6db4af57a5b",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "common/scripted_modifiers/votc_council_gathering_modifiers.txt",
+        "localGitBlobSha1": "3956bf61df23b4c670b7184a8111a37dcfd193b5",
+        "upstreamGitBlobSha1": "98cbde4556b1ea11e0dbb132c288e51952de3e36",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "fd251fcba21db9c8a6855c142cd5d8498394a912cf3aefda663830f6bae65042",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "common/scripted_triggers/scene_triggers.txt",
+        "localGitBlobSha1": "71a537dfad4e13b84b2288a07d8ef1f025665c2f",
+        "upstreamGitBlobSha1": "e2383b814ea27bded6d8dab2e577b04103a538ea",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "eb09ab8c77d53e6b200709438472b00612325c475f3a4ce15c69e4394fd86e3b",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "descriptor.mod",
+        "localGitBlobSha1": "2a1e27b3e60c2f78e2fd6068f2429e55e94ddc48",
+        "upstreamGitBlobSha1": "38a09b4537faee9bd4f7843eac13689c01af2ffd",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "b934063e499a8a3450df25655e8fd09a7597be1e9ec0187b78df778e9d5f2b12",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "events/mcc_events_v2.txt",
+        "localGitBlobSha1": "be6349cef04aa03da34fe16606a91c2e2db34ca5",
+        "upstreamGitBlobSha1": "daa98538f3b57e3a405bfc36284201f10ba9ec21",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "622ee3fe3fe642bdd5d3a5db04586aff80c5fc4b62f82804322202d32ff651b2",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "events/message_events.txt",
+        "localGitBlobSha1": "aaeddc18a5cc2376a97a9485c8d2a46ab7f4e267",
+        "upstreamGitBlobSha1": "930d40c77789eeadf319b414c14d72553cfcf610",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "9b1a7bbda5b9058c255b19cd05a24a9815923d4c768cd2b72f887b185302feda",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "events/silence_ck3_errors_events.txt",
+        "localGitBlobSha1": "f8387709a8c7fdf12e83b978fb2c189895ce3891",
+        "upstreamGitBlobSha1": "1d2679532cd66019c213d0091e51a02cd3b6b6b9",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "62d6cd32a9228f83166ca1dfac4ff10f4dc014f5ecf8460dd9ff9ff4f1199d6f",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gfx/0.dds",
+        "localGitBlobSha1": "78eaad87f465fd45baf12ace76a91d599697ca27",
+        "upstreamGitBlobSha1": "78eaad87f465fd45baf12ace76a91d599697ca27",
+        "status": "GIT_BLOB_EQUAL",
+        "upstreamSha256": "3b25cb963c8c03007ec9385b518f6c0292e1c9da405dca5d1dd9d6e6fc51b1b9"
+      },
+      {
+        "relativePath": "gfx/interface/icons/activities/_activity_votc_council_gathering_header.dds",
+        "localGitBlobSha1": "618f4066d5014ed51c2dc98045112bf333a3b371",
+        "upstreamGitBlobSha1": "618f4066d5014ed51c2dc98045112bf333a3b371",
+        "status": "GIT_BLOB_EQUAL",
+        "upstreamSha256": "53243ee750cb1255b26c869220a4ab445460fba74a8562560879a925e8509087"
+      },
+      {
+        "relativePath": "gfx/interface/icons/activities/activity_votc_council_gathering_header.dds",
+        "localGitBlobSha1": "748a4e3108282cdc8185aa9e0613574f4ddff997",
+        "upstreamGitBlobSha1": "748a4e3108282cdc8185aa9e0613574f4ddff997",
+        "status": "GIT_BLOB_EQUAL",
+        "upstreamSha256": "1d43731366438d2095f8a3ae4760bd00eec86ca0ccfe23fbdc51069cc2d5071e"
+      },
+      {
+        "relativePath": "gfx/interface/icons/activities/activity_votc_council_gathering.dds",
+        "localGitBlobSha1": "63c2d6c8fa2aaffd35599f06e0d3cdda070b4d4d",
+        "upstreamGitBlobSha1": "63c2d6c8fa2aaffd35599f06e0d3cdda070b4d4d",
+        "status": "GIT_BLOB_EQUAL",
+        "upstreamSha256": "976e621d052a75b8990441816ecca70fb6be5b2c08b052a0cc172cde713a4214"
+      },
+      {
+        "relativePath": "gfx/interface/icons/activity_option_categories/votc_council_gathering_amenities_amount.dds",
+        "localGitBlobSha1": "9aad2eaa64124bd2d4c282da5c06783f39114b52",
+        "upstreamGitBlobSha1": "9aad2eaa64124bd2d4c282da5c06783f39114b52",
+        "status": "GIT_BLOB_EQUAL",
+        "upstreamSha256": "184405e9b6cc8692d8d230635ee84218bc5a709fe46b0bf19bfe4465fbe0c686"
+      },
+      {
+        "relativePath": "gfx/interface/icons/activity_phases/votc_council_gathering_council_phase.dds",
+        "localGitBlobSha1": "4a62d19cbaf1830ea922e143bd44f9a2f11b5348",
+        "upstreamGitBlobSha1": "4a62d19cbaf1830ea922e143bd44f9a2f11b5348",
+        "status": "GIT_BLOB_EQUAL",
+        "upstreamSha256": "e7cce8e7a3a20e2f6a46e648e389c119c96e100ecd6427a7c4509ddb1f45f76a"
+      },
+      {
+        "relativePath": "gfx/interface/illustrations/activity_backgrounds/activity_votc_council_gathering.dds",
+        "localGitBlobSha1": "9d39f7d179187519a05b1cda9a82561c459a48af",
+        "upstreamGitBlobSha1": "9d39f7d179187519a05b1cda9a82561c459a48af",
+        "status": "GIT_BLOB_EQUAL",
+        "upstreamSha256": "f693f63b341535fc6bd32bf6d284eacd68162cd4e692dda77a040eea658ee5f1"
+      },
+      {
+        "relativePath": "gfx/interface/illustrations/activity_header_backgrounds/activity_votc_council_gathering.dds",
+        "localGitBlobSha1": "9d39f7d179187519a05b1cda9a82561c459a48af",
+        "upstreamGitBlobSha1": "9d39f7d179187519a05b1cda9a82561c459a48af",
+        "status": "GIT_BLOB_EQUAL",
+        "upstreamSha256": "f693f63b341535fc6bd32bf6d284eacd68162cd4e692dda77a040eea658ee5f1"
+      },
+      {
+        "relativePath": "gfx/interface/illustrations/scripted_illustrations/scene_background_selector.txt",
+        "localGitBlobSha1": "36b070da1c14c7c0729939dd9ef0439bf57f91d2",
+        "upstreamGitBlobSha1": "81b72c9c5842e0aa259c3b15e55bfd668a275580",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "1deb5c0c0a9b3520072681b7ab2c43359c78e307386e949b740244629bd89833",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gfx/interface/illustrations/scripted_illustrations/scene_background.txt",
+        "localGitBlobSha1": "eeb906af2b3b705a6992e0d5ddd56c480f320d61",
+        "upstreamGitBlobSha1": "85a8668aadfc446c24ce93d5493fb802becf2a4a",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "43d114851af688725ea26e346620474a358bfd720e5f0b9da02480e066344a7c",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gfx/interface/tavern_gfx/mask_off.dds",
+        "localGitBlobSha1": "59dab27d0cbf1c789bb8fcb0371ba4fc1408d2e8",
+        "upstreamGitBlobSha1": "59dab27d0cbf1c789bb8fcb0371ba4fc1408d2e8",
+        "status": "GIT_BLOB_EQUAL",
+        "upstreamSha256": "2649283a16c47f2561bc94198237409c49c6907688558fe8154602f514ed3722"
+      },
+      {
+        "relativePath": "gfx/portraits/cameras/conversation_camera.txt",
+        "localGitBlobSha1": "a38a6570f9ca355734be4e4427bfbc451b4940db",
+        "upstreamGitBlobSha1": "827060794d94d822f856cfdc2973aba27e893cfd",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "dee340b6ed80bdf0fb09d029e233c9cc07ebf5445ba01be0c2b164a5ccdc3006",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gfx/portraits/portrait_animations/conversation_animations_v2.txt",
+        "localGitBlobSha1": "a47a5dc29a8e7f84c050ced6f27d57bd7f3ac9ed",
+        "upstreamGitBlobSha1": "5a41314cccbfe2dcd067f6eb533ce2a4eb89394e",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "e872a75eead3901e2c8e7fcf6e958a57a1d657742f97d420fb6847e9fb0c6a50",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gfx/portraits/portrait_animations/conversation_animations.txt",
+        "localGitBlobSha1": "ff89a13abb22b89c2f9aec2b5622b5a41b6888e8",
+        "upstreamGitBlobSha1": "bb07ef086357d9d9bf0847c3331aeaaf4cb9919c",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "914a64c12fb072267eca144451235d4a27fd0edb5c9c9bc819e228e0ee4dd992",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gui/custom_gui/letters_runner.gui",
+        "localGitBlobSha1": "ba0328e967b94610e88a40745dac0da7442c9047",
+        "upstreamGitBlobSha1": "93b668313c1ae964c0da41682d29e3ba5b4450c0",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "fd4275a1dfdd31d8eabd93fe024ef601f8f55511a435a5bb2b95545e38d06876",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "gui/custom_gui/mcc_characters_window.gui",
+        "localGitBlobSha1": "0f60fc8bbe75002640d6d706558f47a170d35692",
+        "upstreamGitBlobSha1": "8ff8593a2761f108db6342c8af207bc38a0efada",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "c7fcfb6695be10c0c6cd00568fce0e16ac18cb725c6224b365fdd74d8d824230",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gui/custom_gui/talk_window_v2.gui",
+        "localGitBlobSha1": "3225d5ec7b14ef19fad0be1b73ad0ed379af0ab7",
+        "upstreamGitBlobSha1": "6ef8245e15cd4a08a8547245d0ab0dc21c8e38c4",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "090acce3579c5d0bede191a2d1c18eaf94b66ccfc92b1048ba5abf1c97988441",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gui/custom_gui/votc_letter.gui",
+        "localGitBlobSha1": "8d0bc1c24c01af4625997a6f53543d5720428c8c",
+        "upstreamGitBlobSha1": "29a136c70f78572c6f77ee2c2fc7ee9ceccfb8e6",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "b3f3ba2c8fccc70142c95d4c952e8c3f80f148a1bbd4a4af0812ca9c8919d61c",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gui/custom_gui/votc_runtime_bridge.gui",
+        "localGitBlobSha1": "02bf8362cef7da11920d0a961c895fb01df601f6",
+        "upstreamGitBlobSha1": null,
+        "status": "LOCAL_ONLY"
+      },
+      {
+        "relativePath": "gui/custom_gui/votc_scene_selector.gui",
+        "localGitBlobSha1": "347ed1caaf9e357852853303f823bfde42f32971",
+        "upstreamGitBlobSha1": "8b0b31365d43bf88517e7e3df227bbac424f5913",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "a8fe87871c9d014de816d20dc287bf455856e0fc90ab84df5e6f72e4bd069874",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gui/event_window_widgets/event_window_widget_message_clear.gui",
+        "localGitBlobSha1": "78f430b608de9010bab43b21c36316573729241a",
+        "upstreamGitBlobSha1": "afac16a01337a9969c8e8d999945266828d276f9",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "2df41cc0aeedf2288982701807eb6306653c2e476ee1b9d5c80bfa2dd7a9f6e8",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "gui/event_window_widgets/event_window_widget_message_open.gui",
+        "localGitBlobSha1": "163b0625b35613cdfde86dd69c2898b06b3833e9",
+        "upstreamGitBlobSha1": "7d40566cc383dd8aad7a8ee4881cc8d84e4b4527",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "928e8806a0a4b4e6d00a23325e3cd2397729bd98bed76eea7e7c99f3fe2b4f91",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gui/event_window_widgets/event_window_widget_message_write.gui",
+        "localGitBlobSha1": "0a510b94d038f0633437124cc738aff92e369a34",
+        "upstreamGitBlobSha1": "2ef77d75b7c7beba9a777b82547fa2849e0c8f37",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "2c909b11f095f620f16083d7517aa5d9a0e5691a82c09df7cad6938103c9d6c3",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gui/event_window_widgets/event_window_widget_message.gui",
+        "localGitBlobSha1": "052ea50c7071d3a5f403d5a6ffbb985359210916",
+        "upstreamGitBlobSha1": "ced04407715721e21a0261beab9e8a0833dd1384",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "360eabede50ad73215f24318e3a0864d5a4786809aedbd68dacd3dcceed2ba33",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "gui/event_window_widgets/event_window_widget_talk_clear.gui",
+        "localGitBlobSha1": "14cb477ef0230cd7d8df73bacd90f4d4c5983f18",
+        "upstreamGitBlobSha1": "67ceddbb02d555460335816aeb18ac10c16424f8",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "b0b2979dc9717a897ad67aa9440e3cac434526f3b2b621f642e778cb16efcf4a",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gui/event_window_widgets/event_window_widget_talk_close_v2.gui",
+        "localGitBlobSha1": "0c7edcadcb2dd8c981b9f67e00b839e1b232ee9f",
+        "upstreamGitBlobSha1": "9d39f69e23a99c6c6f24d1f6c8fddb836e481e92",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "46259eea5131f69202c1ae51c7aae3bfc078e1238357165762f4c8773d9f79fa",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gui/event_window_widgets/event_window_widget_talk_close.gui",
+        "localGitBlobSha1": "b961f73a231c92903c7459a8730a9a4421f6a495",
+        "upstreamGitBlobSha1": "7d19beec45a1d81ca8642790e2bc72684c0189d3",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "5bd624f80249ababa17662169c7fd7881412856522eb6b6f7fe5b5cdc4a86e4d",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gui/event_window_widgets/event_window_widget_talk_v2.gui",
+        "localGitBlobSha1": "e45a881fc9aad96ea1d73f9093973fb0d4a2b50e",
+        "upstreamGitBlobSha1": "73a46012613de26ac416615059cd21e04c4fd091",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "6b69349e986ef6b5989790dd4ddfdaa5063f78ba76b3c9b76ba2e8815b8b980c",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gui/event_window_widgets/event_window_widget_talk.gui",
+        "localGitBlobSha1": "275ce8cb21627d0778e791f5f15383ea731ac97b",
+        "upstreamGitBlobSha1": "0edc811a58604b42d2e6aa3a1976995243317982",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "fcc218fa18f8bb95d5391a4c0e9e507689cdb316c4faad6609507a141bb07470",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gui/event_window_widgets/mcc_select_characters_widget.gui",
+        "localGitBlobSha1": "bdb64cf249b1806d29cc8b6ea892c0ff46ddbe54",
+        "upstreamGitBlobSha1": "126cff35422713fccdb55695a13e21a4a71c4cee",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "4a4b0a0cd504ce2f3c35d42f21e25b126788266b0e1cd5fd24db47df6e61d55c",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gui/event_window_widgets/votc_scene_selector_widget.gui",
+        "localGitBlobSha1": "964aea79120961114008b0846e6078c023d1d990",
+        "upstreamGitBlobSha1": "1ea50d0a3632d227e54325b773749f218d170918",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "1ba96e898cac35769a5a66c6bb88e93771e53beb431c6f0b3fc87d79820772d7",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gui/event_windows/votc_invisible_event.gui",
+        "localGitBlobSha1": "e9d2729fa9a27f55cca109a0b00b997d5256898f",
+        "upstreamGitBlobSha1": "9a55a6d9d441a92eaae7697c2462d5871eef8ec2",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "34a2381f31d7e191dea17de3410e06278ab9ae330124d9bb47eceaeca8de10dd",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "gui/scripted_widgets/mcc_characters_window.txt",
+        "localGitBlobSha1": "4fb2e7351ba4680f19ec10e5d05831210ffae842",
+        "upstreamGitBlobSha1": "627bf1a193c01588ee57f32ec598dcf5149ed6b8",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "cd994318fe10e913c1c0e80079df8f1255f3fe787d37e249d15eeecefc0f7462",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gui/scripted_widgets/revotc_scene_selector.txt",
+        "localGitBlobSha1": "952ba27f82c36226b046d996cac879471b447ac8",
+        "upstreamGitBlobSha1": "bcbfd1876cb8ba65496ea3e107bd5fe398b79a10",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "a9c966fe168c7a4c12f78438b19c4b49f5748dc70dcb85832d726d3c54fe816d",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gui/scripted_widgets/votc_runtime_bridge.txt",
+        "localGitBlobSha1": "910e5ced7239fbccd799a85d1c461ef0ff2700dc",
+        "upstreamGitBlobSha1": null,
+        "status": "LOCAL_ONLY"
+      },
+      {
+        "relativePath": "gui/shared/conversation_portraits.gui",
+        "localGitBlobSha1": "e42578a018e1a5cd24904ceb11ecc5f3d8bd1e37",
+        "upstreamGitBlobSha1": "c74c0dac68d3643fd89df5e1c78d4b0c6b90aeb9",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "433d8b17b4593d6f8fd5e78f66a4cabc5a487d4a42dd463b1a26f6a65caf1359",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "gui/shared/votc_Editboxes.gui",
+        "localGitBlobSha1": "25dcf79e46e77959171eae84f03bb7444fe77596",
+        "upstreamGitBlobSha1": "5345d9cd299b2c761020e26f7b9ace79b461e837",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "8345ea70b95d58778ae9ebf79ca3567d406873a12f6da74479bc84b403f9c657",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "LICENSE.MD",
+        "localGitBlobSha1": "497481e3ba83d738a68e6168d0daf008eea50d21",
+        "upstreamGitBlobSha1": "3b7b82d0da2db857eda1a798dbd908ea136f07b5",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "7abe19ec9bb73b36141b999b861d24ad855e808bafe0f81e84cce28556f6c297",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "localization/english/clipboard_codes_l_english.yml",
+        "localGitBlobSha1": "d728d8686f55efd58ae61615f32337e3fea68bba",
+        "upstreamGitBlobSha1": "a2ce0704f5f47553966dc2bb4924e78538997394",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "8ecaeb5f166d163a74d6bd77306eecf3758ddf18f1cc6a09e4ed2c9258034d5a",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "localization/english/log_character_l_english.yml",
+        "localGitBlobSha1": "8e3e533b95ded10a9164b0bec486c98402ddb222",
+        "upstreamGitBlobSha1": "a9b0956f1e64f952734c18c5e09ed1d5dd0d3115",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "7b6e5d206b216f5693171bafc828559f6499bc17186d3ee10068fbcfb0d07071",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "localization/english/talk_l_english.yml",
+        "localGitBlobSha1": "c4d7713d517209ee5c74918b0fe4b0d0523bb44f",
+        "upstreamGitBlobSha1": "4237d4f2c58d4f238b8561495bc418b4f91fd57e",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "f13949ceda90be8251effa939728dd12414dcad6af78cdfbf27ad004ba7d36a7",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "localization/french/clipboard_codes_l_french.yml",
+        "localGitBlobSha1": "841ce8665adfd7a417bd777a92efe96f13d679b1",
+        "upstreamGitBlobSha1": "88bd670e0d588ac598725831df4c23006d206183",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "c454ba104700b4f7bf89f33fc454161c9ae1319195746f0f2906d9cc9f5ec82d",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "localization/french/log_character_l_french.yml",
+        "localGitBlobSha1": "82457d1257473177c543c5f465123b40e9c62b65",
+        "upstreamGitBlobSha1": "126fa3a07cacd0f40519152b8b8f7833d411f156",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "7a4455aa6ab2e1bfe447b2e761a43bb245baee9f981dd8959fd920a5c97001b6",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "localization/french/talk_l_french.yml",
+        "localGitBlobSha1": "9c536847a5173719b28ef79357872a81a986ed32",
+        "upstreamGitBlobSha1": "72212ff5b1e23f3ef5f13c5e1862f1a9ca476dbc",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "6f69fd88afaf16c5d9a6561ff941810457e53c4644af1a93aa3f5036f8627bec",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "localization/german/clipboard_codes_l_german.yml",
+        "localGitBlobSha1": "16924be0ca02e122c33628a43d4597b261b3c7ea",
+        "upstreamGitBlobSha1": "5c80bc1dcdc87e2481a7ad762377c82b813dd126",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "64b77ad0b8242b3d3406c1cbb4df64dede52b1757246d82044bbaec3c5e671b0",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "localization/german/log_character_l_german.yml",
+        "localGitBlobSha1": "80c3c2022fdcbf9a353465dd377675cf1bb2a2b3",
+        "upstreamGitBlobSha1": "527e237dade58d4db55d2d06dc084a757935bfb7",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "43b66448e3c41731fe5f3712f51685170f0aca1e1085ab86246e9f0954f5222d",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "localization/german/talk_l_german.yml",
+        "localGitBlobSha1": "9aabb1246c5ea46e756dcb739d3c3b84bd0e10a0",
+        "upstreamGitBlobSha1": "6156ce75799f5dea0796373ea6a1db0b5860d8d2",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "f114b00b31038ab545fe05f22772cd59b44eb8aa4f4f03cee0a0647452896065",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "localization/japaneese/clipboard_codes_l_japanese.yml",
+        "localGitBlobSha1": "3f9c11add81598858e29a566c75f0fa4886e3237",
+        "upstreamGitBlobSha1": "2f0c658f65ccca2887372eea1f148a530de81a58",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "29f327843b5d889abaec1c0bb71b440e834d4bc31bd3f7744547291a2f502df5",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "localization/japaneese/log_character_l_japanese.yml",
+        "localGitBlobSha1": "c9f6528d1920b3213d0136c30ed9085d19478441",
+        "upstreamGitBlobSha1": "4d46c6b9af629b620dc03d8481646c042340927d",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "224b4be75f7d76db9be358d067274951234143f13cc844cfc817f698798873b8",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "localization/japaneese/talk_l_japanese.yml",
+        "localGitBlobSha1": "224d0dbbc9408ae50149730f2fc2b156d64dd2c8",
+        "upstreamGitBlobSha1": "e19bf05729792af9da358dcbedbc56446371522e",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "5c68aabecaa1be8670976ced2210495807bea6c64b6405610abee440f1038b75",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "localization/korean/clipboard_codes_l_korean.yml",
+        "localGitBlobSha1": "8635e7aa6487564f5ceeebf85112a2319f239ba6",
+        "upstreamGitBlobSha1": "ebb4a2be3ce3ba061da68a13dd23cb124f2f95b2",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "deec4e4ac57f0f6eed322f4c9a32d58410e5a7a31f2a134b4a10c9ae160d0ae4",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "localization/korean/log_l_korean.yml",
+        "localGitBlobSha1": "ca6ccab50b55a608eef41f3492679278943a4100",
+        "upstreamGitBlobSha1": "9c69cd5d6d2f91fb84b49156f6dae0591d87623f",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "39011fee28f2f06a59775cc5eff5fa153ed40e7f2724dbd730a24503925ca49c",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "localization/korean/talk_l_korean.yml",
+        "localGitBlobSha1": "3184369c6c3fe5800aee60e8564075c649b3a063",
+        "upstreamGitBlobSha1": "089359a76c6f0415ed6cca6ced1df9cbdba3eac8",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "a75b6e0a689e08c7db383d47769387a0c14187ecdc1d6c8cd0a2685cf5a67047",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "localization/polish/clipboard_codes_l_polish.yml",
+        "localGitBlobSha1": "98beb250f825cd9a6e98d79c1e412f1d0754b5d2",
+        "upstreamGitBlobSha1": "62e6fea9a9707f5e5ebbe2fed84d48a669c41bd7",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "75fb1acc3faa3f7bcb53562ed5e8ab55f965a2d55ba4d0858a5090d26800ea0c",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "localization/polish/log_character_l_polish.yml",
+        "localGitBlobSha1": "e70bf256a8d42fce7218b255955cbb23b68f6077",
+        "upstreamGitBlobSha1": "2b44cf16e19f9d55bcdca6203dc0a97a85fd45d3",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "9a80a981cf08a0a27cccdcd439bafdfafcf8fbfa533c074f24b6c6c082c7b077",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "localization/polish/talk_l_polish.yml",
+        "localGitBlobSha1": "01e7e191d14d7e0df9c2a112b4b2f77d227749e3",
+        "upstreamGitBlobSha1": "f1ff3a9c30f5bb658dcb3d1979b26531834bae0f",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "e5f4f3c58c3cab86c0f81ea6c95fcfbf130932bd38eaacd2be050f686328ff6f",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "localization/russian/clipboard_codes_l_russian.yml",
+        "localGitBlobSha1": "baa84b7de59f76202066a6419466f40ab5152388",
+        "upstreamGitBlobSha1": "d8d689add1fecfa82bc2633635144ccf7e91d8b7",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "06079eabd687d5ec199dbf3e47a3af877af93bfa026739f093a635c1406646d3",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "localization/russian/log_character_l_russian.yml",
+        "localGitBlobSha1": "2f4857296877a9bc52b74295f205ab97da4255d4",
+        "upstreamGitBlobSha1": "c67d003df121d23752baa07c9a76d8112fc8565a",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "3067046ea9ba4e2189b12be6770d8e5c51a05af53c7cc06d829a958bbd71965f",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "localization/russian/talk_l_russian.yml",
+        "localGitBlobSha1": "fbd143f18f56f66937bf1b2971c22670be1fd6cf",
+        "upstreamGitBlobSha1": "d9e3facacdd81ad2271dbf1616f59b8cd0b8dac1",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "816f114d0bed9798c87045d49b7c6787cd8b25b61e040c5aa2f20a43194d18c5",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "localization/simp_chinese/clipboard_codes_l_simp_chinese.yml",
+        "localGitBlobSha1": "89776789c3ecc46ff8058f1aadcf88922f522234",
+        "upstreamGitBlobSha1": "96933c2b03c9278ffe29ec2cbad4d5e69f0199ab",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "9cc2d82d23aa179ff7b17945c7bb878605e0d4970895d1aeaef3ffd36388d536",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "localization/simp_chinese/log_character_l_simp_chinese.yml",
+        "localGitBlobSha1": "6bcbbd02d99f4ce8ec0c5433b5a504906d792b67",
+        "upstreamGitBlobSha1": "a2401907b9a0ef2d0de0c510c9adf91fa80587a3",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "e7951692c6fdfeeaf0e5bb3e7fa3d6b7691a352f9504a5fc97cb6a0e007c536e",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "localization/simp_chinese/talk_l_simp_chinese.yml",
+        "localGitBlobSha1": "64c7a9bd5b81f577688132679813af894b107b44",
+        "upstreamGitBlobSha1": "9c68836f9f0b6804e33502f5ddb1504606901533",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "e2e42c242d54c2bc37784e69fab9d2e41d4441035e25ee48b0ef1136086c2aa5",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "localization/spanish/clipboard_codes_l_spanish.yml",
+        "localGitBlobSha1": "e399bbef75a56bfeb84fc9345bafae298ac0719a",
+        "upstreamGitBlobSha1": "9736294f8c7fb8e508775617b632bb31109fe577",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "822e5190ad5e9c58b56892a741cf0a442b4b5b3e69a1f23165c638afa7ea6db7",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "localization/spanish/log_character_l_spanish.yml",
+        "localGitBlobSha1": "8196a4045c91b631b882a5693fc4ca6b7d6cbd82",
+        "upstreamGitBlobSha1": "1b4ece6220173634ed437fd5dbb62862dc1152e3",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "e0134db12549f6c87da53f4a25968ce9b195e1913263fba0ec961c9fdeef2e8d",
+        "textEqualIgnoringBomAndEol": false
+      },
+      {
+        "relativePath": "localization/spanish/talk_l_spanish.yml",
+        "localGitBlobSha1": "58f0aab3d7010012f284d31c959ed700150c1213",
+        "upstreamGitBlobSha1": "4a8f44680e26962eae5b41cdf70d83dab785f983",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "c05715fffa0093c32d1694c16044ce24266c304daff1137a4eb73745abf6e36d",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "README.md",
+        "localGitBlobSha1": "084300dab17e0defa7193f6b1ed4264aac6a2a35",
+        "upstreamGitBlobSha1": "4b6dfe8b14b5feac689297d80c1cbe1f7c011876",
+        "status": "RAW_BYTES_DIFFER",
+        "upstreamSha256": "ea1163ab19d052d1bcbbe4b924a5d245ec50619060d22baf5598e5f4742f302e",
+        "textEqualIgnoringBomAndEol": true
+      },
+      {
+        "relativePath": "thumbnail.png",
+        "localGitBlobSha1": "2724cec741067b5a2dc54e1228346e732926770b",
+        "upstreamGitBlobSha1": "2724cec741067b5a2dc54e1228346e732926770b",
+        "status": "GIT_BLOB_EQUAL",
+        "upstreamSha256": "570fbd57c0587390ea4478d0058882c4b5aa1ec3c57867147bae796694bb8511"
+      },
+      {
+        "relativePath": ".gitattributes",
+        "localGitBlobSha1": null,
+        "upstreamGitBlobSha1": "17f2807a29a06a5175431b3b07dc913cb7cc6a8f",
+        "status": "UPSTREAM_ONLY"
+      },
+      {
+        "relativePath": ".github/workflows/release.yml",
+        "localGitBlobSha1": null,
+        "upstreamGitBlobSha1": "ac856f25fe63e29cb4ecb361242b6a0f06d167ff",
+        "status": "UPSTREAM_ONLY"
+      },
+      {
+        "relativePath": ".gitignore",
+        "localGitBlobSha1": null,
+        "upstreamGitBlobSha1": "d47b859ffb06aa50a3dc1287ad034927a7180689",
+        "status": "UPSTREAM_ONLY"
+      }
+    ],
+    "archiveSha256": "b227f81d13b90fdb2963a1511d6951be5291746b4d28418ab18b9711e9a45d8b"
+  }
+}
