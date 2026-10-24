@@ -92,6 +92,7 @@ async function sessionBindingContracts(tempDirectory) {
   const startup = await service.start();
   assert.equal(startup.status, "UNKNOWN", "startup must begin reading at EOF and distrust an old Hello");
   assert.equal(startup.sessionEvidence.helloSeen, false);
+  assert.equal(startup.features.action.allowed, null, "unverified declaration availability is unknown, while the legacy business path stays available");
   assert.equal(service.assertFeature("action"), true, "legacy UNKNOWN must retain the existing business checks");
 
   appendLines(logPath, helloLine({ load: "votc-load-old" }));
@@ -183,6 +184,8 @@ async function compatibilityContracts(tempDirectory) {
   assert.equal(state.status, "INCOMPATIBLE");
   assert.equal(state.reasonCode, "UNSUPPORTED_PROTOCOL_OR_SCHEMA");
   assert.equal(state.sessionEvidence.helloBoundToCurrentSession, true, "a valid matching Hello remains bound even when its protocol is unsupported");
+  assert.deepEqual(state.bridgeProtocol, { major: 2, minor: 0 }, "diagnostics retain valid incompatible protocol declarations");
+  assert.equal(state.modBaseVersion, "2.0.5");
   assert.ok(Object.values(state.features).every(feature => feature.allowed === false));
 
   appendLines(logPath, loadLine("votc-load-minor"), helloLine({ load: "votc-load-minor", protocol: "1.1" }));

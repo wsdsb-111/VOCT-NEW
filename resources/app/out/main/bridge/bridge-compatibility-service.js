@@ -478,20 +478,20 @@ class BridgeCompatibilityService {
 
   _applyHello(hello) {
     if (!this.manifest) {
-      this._applyFatal("RUNTIME_MANIFEST_UNAVAILABLE");
+      this._applyFatal("RUNTIME_MANIFEST_UNAVAILABLE", hello);
       return;
     }
     if (hello.schemaVersion !== this.manifest.schemaVersion) {
-      this._applyFatal("UNSUPPORTED_PROTOCOL_OR_SCHEMA");
+      this._applyFatal("UNSUPPORTED_PROTOCOL_OR_SCHEMA", hello);
       return;
     }
     if (hello.bridgeProtocol.major !== this.manifest.bridgeProtocol.major) {
-      this._applyFatal("UNSUPPORTED_PROTOCOL_OR_SCHEMA");
+      this._applyFatal("UNSUPPORTED_PROTOCOL_OR_SCHEMA", hello);
       return;
     }
     if (hello.bridgeProtocol.minor < this.manifest.bridgeProtocol.minMinor
       || hello.bridgeProtocol.minor > this.manifest.bridgeProtocol.maxMinor) {
-      this._applyFatal("UNSUPPORTED_PROTOCOL_OR_SCHEMA");
+      this._applyFatal("UNSUPPORTED_PROTOCOL_OR_SCHEMA", hello);
       return;
     }
 
@@ -504,7 +504,7 @@ class BridgeCompatibilityService {
       else diagnostics.push("UNKNOWN_OPTIONAL_CAPABILITY_IGNORED");
     }
     if (unknownRequired) {
-      this._applyFatal("UNKNOWN_REQUIRED_CAPABILITY");
+      this._applyFatal("UNKNOWN_REQUIRED_CAPABILITY", hello);
       return;
     }
 
@@ -514,7 +514,7 @@ class BridgeCompatibilityService {
         capabilities[id] = { revision: null, supported: false, reasonCode: "CAPABILITY_NOT_DECLARED" };
       } else if (declaration.revision < range.minRevision || declaration.revision > range.maxRevision) {
         if (declaration.required) {
-          this._applyFatal("REQUIRED_CAPABILITY_REVISION_UNSUPPORTED");
+          this._applyFatal("REQUIRED_CAPABILITY_REVISION_UNSUPPORTED", hello);
           return;
         }
         capabilities[id] = { revision: declaration.revision, supported: false, reasonCode: "CAPABILITY_REVISION_UNSUPPORTED" };
@@ -558,8 +558,14 @@ class BridgeCompatibilityService {
     this._touch();
   }
 
-  _applyFatal(reasonCode) {
+  _applyFatal(reasonCode, hello = null) {
     this._state = this._emptyState(reasonCode, "INCOMPATIBLE");
+    if (hello) {
+      this._state.modBaseVersion = hello.modBaseVersion;
+      this._state.upstreamBaseVersion = hello.upstreamBaseVersion;
+      this._state.voctBridgeRevision = hello.voctBridgeRevision;
+      this._state.bridgeProtocol = { ...hello.bridgeProtocol };
+    }
     this._state.sessionEvidence = {
       loadSessionSeen: this._loadSessionSeen,
       helloSeen: this._helloSeen,
@@ -581,7 +587,7 @@ class BridgeCompatibilityService {
       capabilities[id] = { revision: null, supported: false, reasonCode: "HELLO_NOT_VERIFIED" };
     }
     for (const [name, feature] of Object.entries(this.manifest?.features || {})) {
-      features[name] = { allowed: false, reasonCode: "BRIDGE_NOT_VERIFIED", missing: [...feature.required] };
+      features[name] = { allowed: null, reasonCode: "BRIDGE_NOT_VERIFIED", missing: [...feature.required] };
     }
     return {
       status,
