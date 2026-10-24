@@ -13,6 +13,7 @@ const { resolveAnchoredRelationMention } = require("./anchored-relation-resolver
 const { buildFamilyEntityFactBundle } = require("./family-entity-fact-bundle");
 const { resolveRelationshipCurrentTruth } = require("./relationship-current-truth");
 const { buildStepFamilyFactBlock, isStepFamilyQuery } = require("./step-family-facts");
+const { isPublicCloseFamily } = require("../prompts/trait-profile-selector");
 
 const DISPLAY_TYPES = new Set(["PARENT_OF", "CHILD_OF", "STEP_PARENT_OF", "STEP_CHILD_OF", "STEP_SIBLING_OF", "SIBLING_OF", "GRANDPARENT_OF", "AUNT_UNCLE_OF", "NIECE_NEPHEW_OF", "COUSIN_OF", "SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF"]);
 
@@ -202,6 +203,7 @@ function buildTrustedSeniorityContext(ageAuthorityGameData, projectedGameData, s
   const currentTotalDays = Number(projectedGameData.totalDays);
   const rawGraph = getTargetedKinshipGraph(ageAuthorityGameData, [...new Set(seedIds.map(String))], { maxDepth: 3, maxNodes: 4096 });
   if (rawGraph.scopeTruncated) return null;
+  const familySource = { ...ageAuthorityGameData, characters: rawGraph.nodes };
   const projectedEdgeKeys = new Set(projectedGraph.edges.map(edge => `${edge.type}:${edge.from}:${edge.to}`));
   const hasProjectedEdge = (ownerId, entryId, field) => {
     const owner = String(ownerId), target = String(entryId);
@@ -254,6 +256,8 @@ function buildTrustedSeniorityContext(ageAuthorityGameData, projectedGameData, s
   };
   return {
     compare(subjectId, referenceId) {
+      const relation = rawGraph.relationBetween(String(subjectId), String(referenceId))?.relation;
+      if (relation?.type === "SIBLING_OF" && !isPublicCloseFamily(Number(subjectId), Number(referenceId), familySource)) return null;
       const subjectAge = ageById.get(String(subjectId));
       const referenceAge = ageById.get(String(referenceId));
       if (!Number.isInteger(subjectAge) || !Number.isInteger(referenceAge)) return null;

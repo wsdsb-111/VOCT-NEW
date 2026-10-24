@@ -345,7 +345,8 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
         const isSelf = Number(value.id) > 0 && Number(value.id) === Number(observer?.id);
         if (Array.isArray(value.traits)) result.traits = (isSelf ? getTraitsForSelfProfile(value) : getTraitsForKnownProfile(observer, value, knowledge)).map(trait => copy(trait));
         if (!isSelf) {
-          const knowsAge = scopedDisclosureFacts(observer, value, knowledge).some(fact => fact.factType === "AGE"
+          const knowsAge = isPublicCloseFamily(runtimeCharacterId(observer), runtimeCharacterId(value), gameData)
+            || scopedDisclosureFacts(observer, value, knowledge).some(fact => fact.factType === "AGE"
             && fact.effectiveKnown === true && fact.status !== "MANUAL_HIDDEN");
           if (!knowsAge) {
             if ("age" in result) result.age = null;

@@ -110,6 +110,10 @@ function redactCurrentDemographics(gameData) {
     projected.birth = null;
     projected.birthDateTotalDays = null;
     projected.birthTotalDays = null;
+    for (const field of ["parents", "children", "siblings"]) {
+      projected[field] = (character[field] || []).map(relative => ({ ...relative,
+        age: null, ageSource: null, birthDateTotalDays: null, birthTotalDays: null }));
+    }
     return projected;
   });
   return makeGameData(characters);
@@ -220,7 +224,7 @@ function testCloseFamilyIdentityRuleIsNarrowAndCurrent() {
   const parent = makeCharacter(2, "父亲乙", 38);
   addPublicParent(player, parent);
   const familyPrompt = buildPrompt([player, parent], { activeParticipantIds: [1, 2] });
-  assert.match(familyPrompt.responderFacts, /当前可靠公开的亲属关系允许双方依本轮可信人物资料白名单互知姓名、头衔与特质/u,
+  assert.match(familyPrompt.responderFacts, /当前可靠公开的亲属关系允许双方依本轮可信人物资料白名单互知姓名、年龄、头衔与特质/u,
     "the actual Prompt authorizes the family whitelist from current public parentage");
   assert.match(familyPrompt.responderFacts, /不授权秘密、过往记忆或其他人物资料/u);
 
@@ -331,8 +335,9 @@ function testOffSceneSiblingQueryUsesPreRedactionAge() {
   });
   assert.match(prompt.familyFacts, /查询关系：哥哥；目标人物：兄长丙/u,
     "an off-scene older sibling is resolved from current source ages after profile redaction");
-  assert.doesNotMatch(prompt.familyFacts, /(?:9|14|38)岁|1190年|106575/u,
-    "pre-redaction seniority does not disclose source ages or dates");
+  assert.match(prompt.familyFacts, /14岁/u, "current public siblings retain their known CK3 age");
+  assert.doesNotMatch(prompt.familyFacts, /(?:9|38)岁|1190年|106575/u,
+    "a sibling query does not expose unrelated source fields or raw dates");
 
   const untrustedBrother = makeCharacter(3, "未核实兄长", 14);
   untrustedBrother.ageSource = "UNVERIFIED";
@@ -428,10 +433,14 @@ function testExtendedKinshipSeniorityUsesTheCorrectParent() {
     publicStatus: "PUBLIC_LEGAL_PARENT", knowledgeStatus: "UNKNOWN", campaignToken: CAMPAIGN,
     sourceSnapshotId: SNAPSHOT, evidenceConflict: false
   };
-  father.siblings.push(...[olderUncle, youngerUncle, paternalAunt].map(item => ({ id: item.id, name: item.fullName, gender: item.gender })));
-  mother.siblings.push(...[maternalUncle, maternalAunt].map(item => ({ id: item.id, name: item.fullName, gender: item.gender })));
-  for (const relative of [olderUncle, youngerUncle, paternalAunt]) relative.siblings.push({ id: father.id, name: father.fullName, gender: "male" });
-  for (const relative of [maternalUncle, maternalAunt]) relative.siblings.push({ id: mother.id, name: mother.fullName, gender: "female" });
+  for (const relative of [olderUncle, youngerUncle, paternalAunt]) {
+    addCurrentSiblingEvidence(father, relative);
+    addCurrentSiblingEvidence(relative, father);
+  }
+  for (const relative of [maternalUncle, maternalAunt]) {
+    addCurrentSiblingEvidence(mother, relative);
+    addCurrentSiblingEvidence(relative, mother);
+  }
 
   const authority = makeGameData([responder, father, mother, olderUncle, youngerUncle, paternalAunt, maternalUncle, maternalAunt]);
   const projected = redactCurrentDemographics(authority);

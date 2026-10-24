@@ -29,7 +29,7 @@ try {
     for (const field of ["name", "shortName", "fullName", "primaryTitle", "titleRankConcept", "heldCourtAndCouncilPositions", "traits"]) {
       assert.deepEqual(target[field], raw[field], `family ${observerId}->${targetId} preserves ${field}`);
     }
-    assert.equal(target.age, null, "relative seniority does not disclose numeric ages");
+    assert.equal(target.age, raw.age, "current public close family preserves known CK3 ages");
     assert.deepEqual(target.secrets, [], "the whitelist does not disclose raw secret records");
     assert.deepEqual(target.knownSecrets, [], "the whitelist does not disclose another person's secret knowledge");
     const view = store.getTargetView({ ownerRuntimeId: observerId, targetRuntimeId: targetId });
