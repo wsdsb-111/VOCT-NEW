@@ -1710,6 +1710,18 @@ class WorldlineService {
     finally { clearTimeout(timer); }
   }
 
+  async getCanonTurnRecallAsync(args = {}) {
+    if (!this.isSubjectivePromptIntegrationEnabled() || !String(args.query || "").trim()) return null;
+    await this.prepareCanon();
+    if (!this.isSubjectivePromptIntegrationEnabled()) return null;
+    const view = this.getSubjectiveWorldView(args);
+    if (!view) return null;
+    return this.canon.recall({ responderId: args.responderId, query: args.query,
+      entityIds: args.mentionedEntityIds || [], conversationId: args.conversationId,
+      excludeIds: args.excludeIds || [], currentFacts: view.allowedFacts || [],
+      tokenBudget: Math.max(0, Math.min(512, Number.isFinite(args.tokenBudget) ? args.tokenBudget : 512)) });
+  }
+
   getHistoricalQueryContext({ responderId = null, query = "", assistContext = "", queryPlan = null, queryAnalysis = null, directObservationFacts = [], tokenBudget = null, precomputed = null } = {}) {
     const settings = this._settings();
     if (!settings.v812HistoricalRetrievalEnabled || !this.currentCheckpoint?.snapshot) return null;
@@ -1922,6 +1934,7 @@ class WorldlineService {
       worldStableText: [buildWorldStablePrompt({ checkpointId: view.checkpointId, checkpointAsOf: view.asOf, hasStableCanon: !!stableCanon.text }), stableCanon.text?.replace("本轮玩家 Canon", "会话固定玩家 Canon（V8.7）")].filter(Boolean).join("\n\n") || null,
       worldTurnRecallText: turnText,
       worldTurnRecallTokens: turnTokens,
+      stableCanonRecordIds: stableCanon.selected.map(item => item.recordId),
       ...(baseline ? { baselineFacts: formatted.selectedFacts, baselineLanes: formatted.lanes, baselineLaneCoverage: formatted.laneCoverage,
         baselineTruncated: formatted.trimmed || view.truncated, baselineCandidateSetComplete: view.candidateSetComplete, checkpointId: view.checkpointId } : {}),
       worldTurnRecallTrimmed: formatted.trimmed,

@@ -595,8 +595,23 @@ class Conversation {
       } else if (productionWorldlineEnabled && ["CURRENT", "UNSPECIFIED"].includes(hint.mode)) {
         try {
           memoryContext = { ...memoryContext, coveragePatchText: traceOperation(performanceTrace, "worldline.turnQuery", { attribution: "MAIN", context: diagnosticsContext }, () => this.getWorldlineCoveragePatchFor?.(npc, memoryContext)) || null };
+          const canon = await traceOperation(performanceTrace, "worldline.turnQuery", { attribution: "MAIN", context: diagnosticsContext }, () => worldlineService.getCanonTurnRecallAsync?.({
+            runtimeGameData: this.gameData, responderId: npc.id, query: request.query || "",
+            assistContext: request.assistContext || "", mentionedEntityIds: request.mentionedEntityIds || [],
+            activeParticipantIds: this.getActiveConversationCharacters().map(character => character.id),
+            conversationId: this.id, turnEpoch: this.turnEpoch,
+            excludeIds: this.frozenWorldlineByResponder?.get(Number(npc.id))?.stableCanonRecordIds || [],
+            tokenBudget: Math.max(0, resolveWorldlineTurnBudget({ contextLimit, basePromptTokens: estimatedTokens }).turnBudget
+              - TokenCounter.estimateTokens(memoryContext.coveragePatchText || "") - 2)
+          }));
+          if (canon?.text) memoryContext.coveragePatchText = [memoryContext.coveragePatchText, canon.text].filter(Boolean).join("\n\n");
+          if (canon) usageAnalytics?.record({ requestType: "worldline_recall", characterId: npc.id, conversationId: this.id,
+            supplementalCandidateCount: canon.candidateCount || 0, supplementalSelectedCount: canon.selected?.length || 0,
+            supplementalTokens: canon.tokens || 0, supplementalRevision: canon.revision || 0,
+            canonConflictCount: canon.conflictCount || 0, canonTemporalBlockedCount: canon.temporalBlockedCount || 0,
+            canonVisibilityBlockedCount: canon.visibilityBlockedCount || 0, cacheHit: canon.cacheHit === true }, null);
         } catch (error) {
-          console.warn("[Worldline] Coverage patch failed; continuing with frozen world view:", error.message);
+          console.warn("[Worldline] World knowledge patch failed; continuing with frozen world view:", error.message);
         }
       }
       if (memoryContext?.turnRecallText && shouldTrimMemoryTurnRecall({ contextLimit, basePromptTokens: estimatedTokens, worldlineEnabled: true })) {
