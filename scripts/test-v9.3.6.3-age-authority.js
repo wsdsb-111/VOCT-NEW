@@ -392,15 +392,16 @@ assert.strictEqual(computeAgeAtDate("1160年2月29日", "1180年3月1日"), 20);
     "a relative-age marker without source-owner evidence is not trusted");
 }
 
-// Existing disclosure projection remains in force outside the narrow, unique current-age question path.
+// Public close-family ages remain current facts outside the narrow age-query diagnostic path.
 {
   const sample = fixture();
   addCanonicalRelative(sample, makeCharacter(2, "儿子", { age: 17, birthDate: "1172年5月2日" }));
   const ordinary = buildPrompt(sample, "你儿子最近怎么样？");
-  assert.doesNotMatch(familyFacts(ordinary), /17岁|1172年5月2日/);
+  assert.match(familyFacts(ordinary), /17岁/);
   assert.strictEqual(ordinary.ageDiagnostics.length, 0);
   const historical = buildPrompt(sample, "你儿子去年几岁？");
-  assert.doesNotMatch(familyFacts(historical), /17岁|18岁/);
+  assert.match(familyFacts(historical), /当前结构化家庭事实[\s\S]*17岁/);
+  assert.doesNotMatch(familyFacts(historical), /16岁|18岁/, "a historical query does not replace the current raw age with a guessed past or calendar age");
   assert.strictEqual(historical.ageDiagnostics.length, 0);
 }
 

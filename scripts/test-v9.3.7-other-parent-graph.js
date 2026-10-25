@@ -196,8 +196,10 @@ async function main() {
     evidence: { ...promptCharacter.evidence, otherParentRelations: [{ ...promptCharacter.evidence.otherParentRelations[0],
       sourceOwnerId: 1, campaignToken: gameData.campaignToken, sourceSnapshotId: `${gameData.date}/${gameData.totalDays}` }] }
   }).character;
-  assert.equal(currentPromptView.children[0].otherParent?.name, "妻子", "current public parent data remains available to the prompt projection");
-  assert.equal(currentPromptView.evidence.otherParentRelations[0]?.parentName, "旧战役配偶", "current public normalized evidence remains available");
+  assert.equal(currentPromptView.children[0].otherParent?.id, currentPublicParent.id, "current public parent identity binding remains available to the prompt projection");
+  assert.equal(currentPromptView.children[0].otherParent?.name, "未获知姓名的人物", "a public parent edge does not disclose an unknown co-parent name");
+  assert.equal(currentPromptView.evidence.otherParentRelations[0]?.parentId, 2, "current public normalized parent evidence keeps its identity binding");
+  assert.equal(currentPromptView.evidence.otherParentRelations[0]?.parentName, "未获知姓名的人物", "normalized evidence does not bypass the co-parent name gate");
   const unknownPromptView = createTraitProfileView({ ...gameData, characters: new Map([[1, root]]) }, {
     ...promptCharacter,
     children: [{ id: 101, name: "妻生子", directParentEvidence: root.children[0].directParentEvidence,

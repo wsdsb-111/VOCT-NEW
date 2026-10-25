@@ -320,6 +320,10 @@ function makePrompt(characters, { playerId, responderId = playerId } = {}) {
   gameData.characters = new Map(characters.map(character => [Number(character.id), character]));
   const result = promptBuilder.buildMessagesWithTokenCount([{ role: "user", content: "谈谈你们的关系。" }], responder,
     gameData, "", { activeParticipantIds: characters.map(character => Number(character.id)), subjectiveWorldPolicyActive: true,
+      // Relationship-label fixtures explicitly know names; NAME grants no age or kinship permission.
+      disclosureProfiles: new Map(characters.map(character => [Number(character.id), [{ factType: "NAME", value: character.firstName || character.shortName,
+        ownerId: Number(responderId), entityId: Number(character.id), campaignToken: gameData.campaignToken,
+        current: true, effectiveKnown: true, status: "AUTO_DISCLOSED", firstAcquiredDate: gameData.date }]])),
       cacheV2FrozenSnapshots: { conversation: null, responders: new Map(), prefixByResponder: new Map() } });
   const relationshipBlock = result.blocks.find(entry => entry.block?.id === "live-relationships")?.content
     || result.blocks.find(entry => entry.block?.id === "active-participant-relationship")?.content || "";

@@ -9,7 +9,7 @@ const {
   loadRuntime,
   parseFixture,
   makeMemoryContext,
-  render,
+  render: renderBase,
   line,
   characterLine,
   FIXTURE_DATE,
@@ -27,6 +27,21 @@ const MATERNAL_HALF_SIBLING_ID = 70;
 const SECRET = "V937_STEP_FAMILY_SECRET_SENTINEL";
 const HISTORICAL_MEMORY = "获准的Legacy记录（来源：旧关系记忆；时间：1184年至1190年）：崔兰曾是王承礼的继母；这段记录只说明当时的关系。";
 const OTHER_CAMPAIGN = "votc8c-202610170002";
+
+function knownNameContext(gameData, context) {
+  const responder = gameData.characters.get(RESPONDER_ID);
+  // These relationship-source fixtures know names, independently of step-family authorization.
+  const profiles = [...gameData.characters.values(), ...(responder.parents || [])];
+  return { ...context, disclosureProfiles: new Map(profiles.map(person => [Number(person.id), [{
+    factType: "NAME", value: person.firstName || person.shortName || person.name || person.fullName,
+    ownerId: RESPONDER_ID, entityId: Number(person.id), campaignToken: gameData.campaignToken,
+    current: true, effectiveKnown: true, status: "AUTO_DISCLOSED", firstAcquiredDate: gameData.date
+  }]])) };
+}
+
+function render(runtime, gameData, query, context) {
+  return renderBase(runtime, gameData, query, knownNameContext(gameData, context));
+}
 
 function pronoun(gender) {
   return gender === "female" ? "she" : "he";
@@ -195,7 +210,7 @@ function makeHistoricalMemoryContext() {
 
 function projectTraitProfile(gameData, includeStepFamily) {
   const responder = gameData.characters.get(RESPONDER_ID);
-  const profile = createTraitProfileView(gameData, responder, makeMemoryContext(), { includeStepFamily });
+  const profile = createTraitProfileView(gameData, responder, knownNameContext(gameData, makeMemoryContext()), { includeStepFamily });
   const charactersMapValues = [...profile.gameData.characters.values()];
   return {
     profile,

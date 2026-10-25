@@ -364,6 +364,12 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
           result[key] = value[key].filter(item => currentPublicParent(item)).map(item => copy(item));
           continue;
         }
+        if (key === "parentName" && typeof value[key] === "string") {
+          const parentId = runtimeCharacterId(value.parentId ?? value.otherParentId);
+          result[key] = parentId === runtimeCharacterId(observer) || isPublicCloseFamily(runtimeCharacterId(observer), parentId, identitySource)
+            ? value[key] : knownPersonalName(observer, { id: parentId }, knowledge) || "未获知姓名的人物";
+          continue;
+        }
         result[key] = copy(value[key], relativeFields.has(key) || relative && Array.isArray(value));
       }
       if (relative && Number(value.id) > 0 || Array.isArray(value.traits) || Object.hasOwn(value, "personality") || Array.isArray(value.secrets) || Object.hasOwn(value, "primaryTitle")) {

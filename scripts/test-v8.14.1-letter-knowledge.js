@@ -136,7 +136,7 @@ try {
     return message.content;
   };
   const stranger = new Builder().buildMessages(gameData, letter);
-  assert(stranger[0].content.includes("from Sender"), "the guard does not implement canonical label masking");
+  assert(stranger[0].content.includes("from 未获知姓名的人物"), "the shared projection masks an undisclosed sender label before the guard");
   assert(identityGuard(stranger).includes("身份识别关系证据：未提供"));
   const introduction = new Builder().buildMessages(gameData, { ...letter, content: "Call me AliasOnly." });
   assert(introduction[0].content.includes("Call me AliasOnly."), "the actual introduction remains in the input");
