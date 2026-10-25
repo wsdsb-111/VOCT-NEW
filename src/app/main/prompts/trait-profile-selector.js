@@ -253,7 +253,16 @@ function knownPersonalName(observer, target, context) {
 function createTraitProfileView(gameData, character, memoryContext = null, { includeStepFamily = false } = {}) {
   const observer = gameData?.characters?.get(Number(character?.id)) || character;
   const identityData = profileViewSources.get(gameData) || gameData;
-  const sourceProfiles = getTargetedKinshipGraph(identityData, [...(identityData?.characters?.keys?.() || [])], { maxDepth: 3, maxNodes: 4096 }).nodes;
+  const identityGraph = getTargetedKinshipGraph(identityData, [...(identityData?.characters?.keys?.() || [])], { maxDepth: 3, maxNodes: 4096 });
+  const sourceProfiles = new Map(identityGraph.nodes);
+  // Off-scene kids rows carry their parent proof on the edge, not on the child node.
+  for (const edge of identityGraph.edges) {
+    if (edge.type !== "PARENT_OF" || edge.relationshipKind === "STEP" || edge.parentEvidenceConflict || edge.relationshipKindConflict || !edge.parentEvidence?.length) continue;
+    const child = sourceProfiles.get(String(edge.to));
+    if (!child) continue;
+    const parents = Array.isArray(child.parents) ? child.parents : Object.values(child.parents || {});
+    sourceProfiles.set(String(edge.to), { ...child, parents: [...parents, ...edge.parentEvidence] });
+  }
   const identitySource = { ...identityData, characters: sourceProfiles };
   const knowledge = { ...memoryContext, campaignToken: gameData?.campaignToken, currentGameDate: gameData?.date, gameData, identitySource };
   const copies = new Map();

@@ -27,8 +27,8 @@ const familyGameData = { ...gameData, characters: new Map([[1, { ...target,
   children: [{ id: 4, name: "鲁王，丙", directParentEvidence: parentProof(4, 1), spouses: [{ id: 5, name: "齐公，丁" }] }]
 }], [2, observer]]) };
 const familyView = createTraitProfileView(familyGameData, observer).gameData.characters.get(1);
-assert.equal(familyView.parents[0].name, "乙", "family name must not expose an undisclosed precise title");
-assert.equal(familyView.children[0].spouses[0].name, "丁", "nested spouse name must not bypass the title gate");
+assert.equal(familyView.parents[0].name, "未获知姓名的人物", "another person's parent must not disclose an unknown name or precise title");
+assert.equal(familyView.children[0].spouses[0].name, "未获知姓名的人物", "nested spouse names must not bypass the observer's disclosure gate");
 assert.equal(familyGameData.characters.get(1).parents[0].name, "河间公，乙", "family projection must not mutate source");
 
 const fact = (factType, factKey, value, status = "AUTO_DISCLOSED") => ({ campaignToken: gameData.campaignToken,

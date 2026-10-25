@@ -221,7 +221,7 @@ function makeAliasAuditFixture() {
 
   const strangerView = createTraitProfileView(gameData, responder);
   const projectedController = strangerView.gameData.characters.get(sourceId);
-  assert.equal(projectedController.shortName, "Controller", "source ID maps to the canonical projected name");
+  assert.equal(projectedController.shortName, "未获知姓名的人物", "source ID maps to the undisclosed projected name");
   assert.equal(projectedController.primaryTitle, "", "controller title is not disclosed by the alias");
   if (runPList(strangerView).includes(CONTROLLER_TITLE)) leaks.push("pListMccTest2 locationController alias");
 
@@ -281,14 +281,14 @@ function makeAliasAuditFixture() {
   const strangerPrompt = buildPrompt(responder);
   if (strangerPrompt.includes(PRIVATE_TITLE)) leaks.push("final chat messages playerName alias");
   if (strangerPrompt.includes(CONTROLLER_TITLE)) leaks.push("final chat messages aiName alias");
-  assert(strangerPrompt.includes("CUSTOM_PLAYER=Player|CUSTOM_AI=Controller"),
+  assert(strangerPrompt.includes("CUSTOM_PLAYER=未获知姓名的人物|CUSTOM_AI=未获知姓名的人物"),
     "custom final-message template receives projected playerName and aiName");
   assert(strangerPrompt.includes("=== 当前在场人物（仅本轮有效） ===\n- Responder\n- Controller"),
     "actual final messages contain the sanitized Conversation presence roster");
 
   const selfPrompt = buildPrompt(player);
   assert(selfPrompt.includes(PRIVATE_TITLE), "self retains their full title in final messages");
-  assert(selfPrompt.includes(`CUSTOM_PLAYER=${gameData.playerName}|CUSTOM_AI=Controller`),
+  assert(selfPrompt.includes(`CUSTOM_PLAYER=${gameData.playerName}|CUSTOM_AI=未获知姓名的人物`),
     "self alias remains complete while the other alias stays projected");
 
   const disclosedTitleFact = {
@@ -334,10 +334,10 @@ function makeAliasAuditFixture() {
   chatSettings.blocks = fullBlocks.filter(block => block.type !== "description");
   try {
     const missingPlayerPrompt = buildPrompt(responder, memoryContext, missingPlayer);
-    assert(missingPlayerPrompt.includes("CUSTOM_PLAYER=|CUSTOM_AI=Controller"),
+    assert(missingPlayerPrompt.includes("CUSTOM_PLAYER=|CUSTOM_AI=未获知姓名的人物"),
       "missing player target fails closed in the actual final custom message");
     const missingControllerPrompt = buildPrompt(responder, memoryContext, missingController);
-    assert(missingControllerPrompt.includes("CUSTOM_PLAYER=Player|CUSTOM_AI="),
+    assert(missingControllerPrompt.includes("CUSTOM_PLAYER=未获知姓名的人物|CUSTOM_AI="),
       "missing ai target fails closed in the actual final custom message");
   } finally {
     chatSettings.blocks = fullBlocks;

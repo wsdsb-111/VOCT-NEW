@@ -106,6 +106,26 @@ custom = false;
 }
 {
   const sample = fixture();
+  const child = { id: 4, name: "场外子女", age: 8, ageSource: "CK3_LIVE_RELATIVE_AGE", traits: [],
+    directParentEvidence: { source: "CK3_DIRECT_PARENT", sourceOwnerId: 4, childId: 4, parentId: 2,
+      relationType: "parent", sourceRelation: "parents", publicStatus: "PUBLIC_LEGAL_PARENT", knowledgeStatus: "UNKNOWN",
+      campaignToken: sample.data.campaignToken, sourceSnapshotId: `${sample.data.date}/${sample.data.totalDays}` } };
+  sample.han.children = [child];
+  const projected = () => createTraitProfileView(sample.data, sample.han).gameData.characters.get(2).children[0];
+  assert.equal(projected().name, "场外子女", "a current public child edge supplies the off-scene close-family identity proof");
+  assert.equal(projected().age, 8);
+  child.relationshipKind = "STEP";
+  assert.equal(projected().name, "未获知姓名的人物", "a step child cannot gain identity from a nested parent proof");
+  assert.equal(projected().age, null);
+  delete child.relationshipKind;
+  child.traits = [{ traitId: "bastard" }];
+  assert.equal(projected().name, "未获知姓名的人物", "a bastard child does not gain parent disclosure through the edge projection");
+  child.traits = [];
+  child.directParentEvidence.sourceSnapshotId = "stale";
+  assert.equal(projected(), undefined, "an expired public-child row is removed rather than granting identity");
+}
+{
+  const sample = fixture();
   sample.player.firstName = "鹏举";
   sample.player.shortName = "岳二郎";
   sample.player.fullName = "岳飞";

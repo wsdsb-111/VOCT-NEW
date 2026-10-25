@@ -190,15 +190,15 @@ async function run() {
   assert.equal(legalProfile.age, 9, "the legal parent row retains the raw CK3 relative GetAge");
   const projectedAge = withoutConsole(() => createTraitProfileView(legalMarker, legalMarker.characters.get(RESPONDER_ID))
     .gameData.getMentionableCharacterProfiles().get(CHILD_ID).age);
-  assert.equal(projectedAge, null,
-    "relative age is masked in the projected view; targeted current-age facts still use original bound authority");
+  assert.equal(projectedAge, 9,
+    "a publicly verified parent retains the off-scene child's raw age in the projected view");
   const agePrompt = buildPrompt(legalMarker, "你儿子今年多少岁了？");
   const familyFacts = block(agePrompt, "responder-family-facts");
   assert(familyFacts.includes(CHILD_NAME), `the explicitly queried, publicly verified child resolves through FamilyFact: ${familyFacts}`);
   assert.match(familyFacts, /9岁/u, "FamilyFact uses the raw GetAge value");
   assert.doesNotMatch(familyFacts, /10岁/u, "the calendar estimate does not replace CK3 GetAge");
   assert(!block(agePrompt, "responder-game-facts").includes(CHILD_NAME),
-    "the masked general profile does not re-inject the relative as a numeric-age fact");
+    "the targeted family fact is not duplicated as a general current-truth fact");
   assert.equal(agePrompt.ageDiagnostics.length, 1);
   assert.equal(agePrompt.ageDiagnostics[0].ageSource, "CK3_LIVE_RELATIVE_AGE");
   assert.equal(agePrompt.ageDiagnostics[0].rawAge, 9);
@@ -208,8 +208,8 @@ async function run() {
   assert.equal(agePrompt.ageDiagnostics[0].diagnosticCode, "CALENDAR_AGE_UNVERIFIED");
 
   const noAgeQuery = buildPrompt(legalMarker, "请介绍一下你自己。");
-  assert(!allPromptText(noAgeQuery).includes("9岁") && !allPromptText(noAgeQuery).includes("10岁"),
-    "relative numeric age is not re-injected for a non-age query");
+  assert(!allPromptText(noAgeQuery).includes("10岁"),
+    "a non-age query must not turn a public relative's raw age into a calendar estimate");
 
   const invalidAge = await parseFixture(makeFixture({ age: "not-an-integer", status: "PUBLIC_LEGAL_PARENT" }));
   const invalidAgePrompt = buildPrompt(invalidAge, "你儿子今年多少岁了？");
