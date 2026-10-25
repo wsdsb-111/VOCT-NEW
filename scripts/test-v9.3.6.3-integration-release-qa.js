@@ -307,10 +307,10 @@ async function testActualPromptAgeAuthority() {
   const ordinaryPrompt = buildActualAgePrompt(promptRuntime, gameData, "你儿子最近怎么样？");
   const ordinaryText = ordinaryPrompt.messages.map(message => String(message.content || "")).join("\n");
   const ordinaryFamilyBlock = ordinaryPrompt.blocks.find(entry => entry.block?.id === "responder-family-facts")?.content || "";
-  assert(!/17岁|1182年5月1日/u.test(ordinaryFamilyBlock),
-    "non-age conversation must not expose a relative's exact current age or birth date");
-  assert(!ordinaryText.includes("17岁") && !ordinaryText.includes("1182年5月1日"),
-    "the final non-age Prompt must omit private current-age details");
+  assert(ordinaryFamilyBlock.includes("17岁"),
+    "non-age conversation retains the current public child's authoritative raw age");
+  assert(ordinaryText.includes("17岁") && !ordinaryText.includes("18岁"),
+    "the final non-age Prompt preserves the public-close-family exception without guessing calendar age");
   assert.equal(ordinaryPrompt.ageDiagnostics.length, 0, "non-age conversation must not produce age diagnostics");
 
   const twinA = makeActualAgeCharacter(5, "QA_TWIN_A", { age: 16 });
@@ -336,7 +336,7 @@ async function testActualPromptAgeAuthority() {
   "unknown age evidence must stay unknown in Prompt diagnostics");
   assert(unknownFamilyBlock.includes("Memory 只可补充过去经历与主观感受，不得覆盖这些事实"),
     "unknown current-age output must still forbid old Memory from supplying the missing current fact");
-  return { freshCurrentAge: 17, conflictingBirthdayAge: 18, ordinaryAgeDisclosure: false,
+  return { freshCurrentAge: 17, conflictingBirthdayAge: 18, ordinaryAgeDisclosure: true,
     ambiguousSonsSelected: false, oldSourceCurrentAge: "UNKNOWN", usedActualGameDataClass: true };
 }
 
