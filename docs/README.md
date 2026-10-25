@@ -2,6 +2,8 @@
 
 **2026-10-25 V9.6 身份补丁**：[陌生人首轮姓名／职称泄露](current/v9/V9_6_FIRST_MEETING_IDENTITY_FIX.md)，同时保留近亲年龄例外；逐回应者投影、历史署名、生成元数据和旧描述缓存均纳入回归。
 
+最终补丁 `142e43b`／[CI 40154420589](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40154420589) 通过 511 组完整发布回归、352 项资源与完整 EXE 冷启动／重启／媒体检查，payload 与本机一致；真实新对话与 Soak 单列。
+
 **2026-10-25 V9.6 补丁**：[近亲年龄遮盖修复](current/v9/V9_6_FAMILY_AGE_FIX.md)。修复公开近亲年龄豁免缺失，并限制陈旧兄妹来源的长幼推导；保留既有秘密／记忆权限及原始用户数据。
 
 **V9.6.0 双模块候选（2026-10-24）**：[设计原文](current/v9/V9_6_DESIGN.md)、[实施](current/v9/V9_6_IMPLEMENTATION.md)、[验证](current/v9/V9_6_VERIFICATION.md)、[独立分发与配对](current/v9/V9_6_RELEASE_PAIRING.md)。官方上游 2.0.4／维护 Mod 2.0.5／Bridge 1 与 Runtime 分开版本；完整 97 文件源码、只读 Hello、能力门禁和双语诊断已实施。本轮只推送 GitHub，Steam 及真实 CK3／Soak 未发布或验收。前置探索的统一交付建议已被双模块方案取代；[探索总览](current/v9/V9_6_PRE_EXPLORATION.md)、[来源取证](current/v9/V9_6_SOURCE_INVENTORY.md)、[通信依赖](current/v9/V9_6_BRIDGE_PROTOCOL_MATRIX.md)、[旧架构建议](current/v9/V9_6_ARCHITECTURE_DECISION.md)保留历史。以下为历史版本证据。
