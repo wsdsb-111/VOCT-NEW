@@ -8,7 +8,7 @@ const {
   loadRuntime,
   parseFixture,
   makeMemoryContext,
-  render,
+  render: renderBase,
   line,
   characterLine,
   FIXTURE_DATE,
@@ -25,6 +25,16 @@ const PRIVATE_MEMORY = "V937_PRIVATE_MEMORY_SENTINEL";
 const RELATED_QUERY = "你兄弟的母亲是谁？";
 const COMPARISON_QUERY = "你们是否同父异母？";
 const AGE_QUERY = "你兄弟赵子明现在几岁？";
+
+function render(runtime, gameData, query, memoryContext = makeMemoryContext()) {
+  // The sibling's mother is named in these fixtures; this grants no relation or age facts.
+  const context = { ...memoryContext, disclosureProfiles: new Map([[3, [{
+    factType: "NAME", value: "陈氏妾", ownerId: RESPONDER_ID, entityId: 3,
+    campaignToken: gameData.campaignToken, current: true, effectiveKnown: true,
+    status: "AUTO_DISCLOSED", firstAcquiredDate: gameData.date
+  }]]]) };
+  return renderBase(runtime, gameData, query, context);
+}
 
 function addPublicKidsMarkers(lines) {
   return lines.map(value => {

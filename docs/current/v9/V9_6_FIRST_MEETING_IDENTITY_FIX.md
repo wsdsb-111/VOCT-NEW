@@ -44,4 +44,6 @@
 
 独立复审另外发现规范化关系证明中的 `parentName` 仍暴露未知共同父母名字。只对这个显示字段按对应 parentId 的 NAME／近亲权限投影；ID、owner、child、来源、Campaign、快照与状态字段不改变。普通 `otherParent.name` 与规范化 `parentName` 均要求遮盖，并保留当前父母 ID 绑定、过期／UNKNOWN 删除断言。独立复审通过，352 项资源已重新构建部署且哈希一致；最终 payload 为 `418824e5889531120550a1a4612098fc75039d156f5be6c9d4ad4511d4301cfe`。
 
+最终源码下 46 项直接依赖回归已重新完整串行通过。`f54a33f26c8b8796622278590936890b22a0591b`／[CI 40152594471](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40152594471) 为 FAILED：间接使用共享渲染夹具的 V9.3.7 独立 QA 仍缺少兄弟母亲的姓名披露前提；仅给该人物增加 NAME 测试事实后，来源冲突、UNKNOWN、同名 ID、内存权限和年龄刷新等完整断言通过。该轮 EXE 检查另报 `Runtime.evaluate: Promise was collected`，保留失败，待新准确提交重跑验证；不据此宣称环境原因或成功。
+
 没有新增付费 Provider 请求，没有重写真实摘要、对话、日志、存档或投递队列。旧对话已经产生的错误内容不会自动消失；实机应重启 VOTC 并新建对话验证。真实模型首轮措辞、CK3 现场新导出及 Soak 尚未验收。
