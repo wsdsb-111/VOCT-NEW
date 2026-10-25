@@ -2,6 +2,8 @@
 
 **2026-10-26 V9.6 世界记忆补丁**：[普通世界记忆动态召回接线](current/v9/V9_6_WORLD_MEMORY_RECALL_FIX.md)。V813 当前查询补回 Canon，开场固定内容不变，既有 ACL／分支／时间／预算过滤保留；真实新回复待复测。
 
+`1b361d5`／[CI 40219544407](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40219544407)：512 组、352 项、独立 Mod 和完整 EXE 冷启动／重启／媒体解码通过，payload 与本机部署一致。
+
 **2026-10-25 V9.6 身份补丁**：[陌生人首轮姓名／职称泄露](current/v9/V9_6_FIRST_MEETING_IDENTITY_FIX.md)，同时保留近亲年龄例外；逐回应者投影、历史署名、生成元数据和旧描述缓存均纳入回归。
 
 最终补丁 `142e43b`／[CI 40154420589](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40154420589) 通过 511 组完整发布回归、352 项资源与完整 EXE 冷启动／重启／媒体检查，payload 与本机一致；真实新对话与 Soak 单列。
