@@ -31,7 +31,7 @@ Prompt block ID 与缓存锚点没有变更。V9.6 世界记忆补丁保持：�
 
 旧测试中“已验证公开合法亲子仍仅因私生子特质而拒绝资料”的断言按用户本轮规则更新；未公开关系的反例保留。婚约回归将未知性别子女的歧义负例与唯一已知子女的正例分开，未降低解析门禁。
 
-Runtime 的 353 项资源已构建、部署到原安装目录并逐项核对一致，最终 payload 为 `53cb91a6ab3ab2877e89f2bc7c97c22cdb1ee44697690c26f9eef9dc47e02c70`，部署备份保留在 `.build/runtime-deploy-state`。依赖核验为 5981 文件／264 包；发布清单为 518 组。完整发布门禁交隔离 Windows CI，按准确提交补记，不能以此前 V9.6 的 CI 结果替代。
+Runtime 的 353 项资源已构建、部署到原安装目录并逐项核对一致，最终 payload 为 `28a1394262ed8ef14c28e0084fff491ea1f08f625cb0eb68fd782932d7dea6f0`，部署备份保留在 `.build/runtime-deploy-state`。依赖核验为 5981 文件／264 包；发布清单为 518 组。完整发布门禁交隔离 Windows CI，按准确提交补记，不能以此前 V9.6 的 CI 结果替代。
 
 本机原目录隔离配置 EXE 检查已通过前端／Preload、版本 9.6.1 IPC 与合成 PCM 媒体解码，随后 `app.quit()` 退出为 `3221225477`（`0xC0000005`），因此整项记为 **FAIL**。没有未处理 JavaScript 异常先于退出；当前证据不足以认定原因。匿名检查结果在 `.build/v961-installed-smoke-evidence.json`，没有使用真实用户配置。本机捆绑 Node 22 本轮还出现进程初始化失败 `0xC0000142`，专项改用本机 Node 24.13.0；Node 22 的完整兼容性由远端单列核验。
 
@@ -46,3 +46,5 @@ Runtime 的 353 项资源已构建、部署到原安装目录并逐项核对一�
 `9b78bab`／[CI 40483705239](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40483705239) 的完整回归也为 **FAILED**：Bridge UI 测试的两个正则仍固定 9.6.0，已改为核对当前 App 包版本；没有降低版本一致性断言。该次完整 EXE 检查仍通过。前两次 CI 的 Runtime payload 均为 `7ff88067693e98abbdcf49f23d0a702357b423e94091207ec092081045df0f59`，后续存档来源修正采用上述新 payload。
 
 `994a0d6`／[CI 40486506726](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40486506726) 回归为 **FAILED**：原有披露存储的禁止全目录扫描用例发现两人判断错误地构造了完整反向索引。已将两人路径改为仅按双方种子有界发现，原测试未改且专项通过；完整 Prompt 仍保持全目录身份脱敏。该次完整 EXE 检查通过。最终 CI 结果另记。
+
+`cd85573`／[CI 40487515346](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40487515346) 回归为 **FAILED**：两人查询先将无 canonical 记录的场外 ID 登记为空节点，阻止后续真实内嵌亲属记录入队，使合法亲属的未知年龄诊断丢失。已跳过不存在的纯 ID 提名，并增加真实日志解析后的场外亲属两人查询反例；原年龄测试保持且专项通过。该次完整 EXE 检查通过，payload 为 `53cb91a6ab3ab2877e89f2bc7c97c22cdb1ee44697690c26f9eef9dc47e02c70`。修正后的原目录隔离启动、IPC、媒体解码和退出码 0 已再次通过。

@@ -11,7 +11,7 @@ const { getCachedKinshipGraph, getTargetedKinshipGraph } = require("../src/app/m
 const { parseGameState } = require("../src/app/main/worldline/game-state-adapter");
 const { resolveRelationshipCurrentTruth } = require("../src/app/main/worldline/relationship-current-truth");
 const { resolveAnchoredRelationMention } = require("../src/app/main/worldline/anchored-relation-resolver");
-const { createTraitProfileView } = require("../src/app/main/prompts/trait-profile-selector");
+const { createTraitProfileView, isPublicCloseFamily } = require("../src/app/main/prompts/trait-profile-selector");
 const { buildFamilyFactBlock } = require("../src/app/main/worldline/character-family-facts");
 const { ConversationDisclosureStore } = require("../src/app/main/conversation/character-disclosure-store");
 const { buildCharacterDisclosureContext } = require("../src/app/main/conversation/character-disclosure-context");
@@ -116,6 +116,7 @@ async function checkNestedMarriages() {
         assert.equal(record.sourceOwnerId, 1, `${label}: owner-bound export`);
         assert.equal(record.targetBound, spousePresent, `${label}: parser target binding`);
         assert.equal(getFamilyVisibility(data, 1).ids.has("3"), true, `${label}: responder knows relative's spouse`);
+        assert.equal(isPublicCloseFamily(1, 3, data), true, `${label}: pair lookup preserves an off-scene target's real source record`);
         if (spousePresent) {
           assert.equal(getFamilyVisibility(data, 3).ids.has("1"), true, `${label}: spouse knows the owner in reverse`);
           const target = data.characters.get(3);

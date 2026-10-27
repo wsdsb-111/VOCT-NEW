@@ -169,6 +169,7 @@ function selectRelationScope(gameData, seedIds, { maxDepth, maxNodes, discoveryI
   const enqueue = (value, depth) => {
     const id = referenceId(value);
     if (!id || depth > maxDepth) return;
+    if (typeof value !== "object" && !characters.has(id) && !characters.has(Number(id))) return;
     const previous = queued.get(id);
     if (previous && previous.depth <= depth) return;
     const entry = { id, depth, record: typeof value === "object" ? value : previous?.record || null };
