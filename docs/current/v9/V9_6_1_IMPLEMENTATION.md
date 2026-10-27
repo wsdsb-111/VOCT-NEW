@@ -56,3 +56,5 @@ Runtime 的 353 项资源已构建、部署到原安装目录并逐项核对一�
 `6636794`／[CI 40491358079](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40491358079) 回归为 **FAILED**：旧 AGE-01 配偶年龄样例仍缺当前婚姻来源。已仅补齐 canonical／场外配偶正例的来源与不同 targetBound，保留全部年龄、来源冲突和披露断言。A01–A14 专项及另外 20 组年龄／时间专项本机串行通过。该次完整 EXE 检查通过；Runtime payload 与当前安装一致，后续仅测试与报告变更不改变该 payload。
 
 `07bbfe2`／[CI 40491998176](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40491998176) 回归为 **FAILED**：旧特质投影用例要求有当前合法亲子证据的场外子女仍隐藏资料，已按本轮五代规则更新，并新增快照过期后整条场外亲属被移除的反例；秘密及陌生人断言保持。该组与发布清单中的 visible-traits 专项均通过，完整 EXE 检查也通过。额外误运行了清单中已归档的 `test-v8.15.2-provider-visible-traits.js`，其依赖已退役 `engine.memory4.buildOwnerSnapshot` 而失败；未把它计入发布通过数，未为旧测试恢复 Memory4，未发起外部请求。
+
+`680f087`／[CI 40493089651](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40493089651) 回归为 **FAILED**：根目录主题预览页仍显示 9.6.0，与已交付包版本不符。已将预览标题及页脚同步 9.6.1，版本一致性测试不变；该次完整 EXE 检查通过。
