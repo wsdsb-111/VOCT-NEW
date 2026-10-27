@@ -2,6 +2,8 @@
 
 日期：2026-10-27。基线为 `24d813d`；Core／App／UI 为 9.6.1 候选。Workshop 仍是独立维护的 2.0.5，Bridge 1、日志协议 3.0、Legacy Summary 存储 2.5 和 Official Action 2.0.3 保持。没有上传 Steam，没有新增付费请求。
 
+自动化收口：准确提交 `f783fd070ba5dc00143e94c8196da34898e3c618` 的 [Windows CI 40495012370](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40495012370) **PASS**：518 组完整发布回归、353 项源码／构建／部署一致性，以及完整 Windows 分发 EXE 冷启动、同配置重启、Preload／IPC、ffmpeg／PCM 媒体解码和正常退出。本机安装与远端 Runtime payload 完全一致。随后仅本报告记账，不改变已验证代码或 payload；真实 CK3／Provider 回复、性能、命中率和 Soak 仍单独待实机验收。
+
 ## 本轮合同
 
 依据用户提供、于 10 月 26 日读取的 `V9.6.1_RELATION_RECOGNITION_AND_IDENTITY_FIX.md` 实施；原 Downloads 文件现已不可用，不将本报告冒充设计原文。用户补充的五代亲属要求优先于设计文档原本较窄的资料白名单。
@@ -60,3 +62,5 @@ Runtime 的 353 项资源已构建、部署到原安装目录并逐项核对一�
 `680f087`／[CI 40493089651](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40493089651) 回归为 **FAILED**：根目录主题预览页仍显示 9.6.0，与已交付包版本不符。已将预览标题及页脚同步 9.6.1，版本一致性测试不变；该次完整 EXE 检查通过。
 
 `69315ee`／[CI 40493953826](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40493953826) 已运行到第 421 组，回归为 **FAILED**：多重亲属正例仍使用无来源婚姻及不完整 checkpoint，现保留 Legacy 多重关系检查，当前查询补来源，检查器改用真实 `parseGameState` 合成存档。另九组定向关系边界检查发现旧上限测试期待在上限之外合成第 3 个 partial 节点，已改为更严格的恰好 2 节点、无第 3 节点及 `scopeTruncated=true`，完整范围正例保持。两项专项已通过；该次完整 EXE 检查通过，Runtime payload 保持。
+
+最终准确代码与测试提交 `f783fd0` 的 CI 已全部通过，Node 为 22.23.4；测试清单实际分类 646 文件，518 发布组、127 历史归档。完整分发复制为 6406 文件／340998550 字节，tree SHA-256 为 `138ee871136f942fb9d95fa0044535ae7b11f0509fb2e1d1db69b3d62b7ad958`；两次 EXE 启动均完成 9.6.1 版本 IPC、Renderer／Preload、语言包和媒体检查，并以 0 退出。Runtime payload 为 `f7069c5824d0188235d2d8fd396ee86c23b7283aa688c41460d6c2b55016721f`，与本机部署回执一致。匿名证据上传于该 run 的 `v94-packaged-smoke-f783fd070ba5dc00143e94c8196da34898e3c618` artifact。人工输入焦点／草稿持久化和透明区域穿透未运行；不能以该 CI 替代用户真实游戏对话与耗时／缓存测试。Terra 子代理本轮纠正后仅以 high 完成独立边界样例和最终静态复核，测试由主代理串行运行。
