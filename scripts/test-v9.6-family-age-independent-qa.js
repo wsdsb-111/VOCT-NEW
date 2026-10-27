@@ -174,7 +174,8 @@ for (const [label, options] of [
   assertAgeAndBirthHidden(projected.characters.get(2), label);
 }
 
-// A typed bastard-to-parent relation does not turn the hidden biological link into age permission.
+// V9.6.1: a verified PUBLIC_LEGAL_PARENT remains a public family relationship
+// regardless of the child's trait. Unproven biological links still fail closed.
 {
   const parent = makeCharacter(10, "父亲", 50, 330000, "male");
   const child = makeCharacter(11, "私生子", 20, 390000, "male");
@@ -193,9 +194,11 @@ for (const [label, options] of [
   };
   child.parents = [{ id: parent.id, name: parent.fullName, gender: parent.gender, ...proof }];
   const gameData = makeFamilyGameData({ extraCharacters: [parent, child] });
-  assert.equal(isPublicCloseFamily(parent.id, child.id, gameData), false);
+  assert.equal(isPublicCloseFamily(parent.id, child.id, gameData), true);
   const projected = createTraitProfileView(gameData, parent).gameData.characters.get(child.id);
-  assertAgeAndBirthHidden(projected, "bastard parent");
+  assertAgeAndBirthVisible(projected, child.age, child.birthDateTotalDays, "public legal parent");
+  child.parents[0].publicStatus = "UNKNOWN";
+  assert.equal(isPublicCloseFamily(parent.id, child.id, gameData), false, "a hidden biological link still needs public legal evidence");
 }
 
 // The assembled active-participant Prompt path emits pairwise order only for current public sibling pairs.

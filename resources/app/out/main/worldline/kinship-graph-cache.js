@@ -2,6 +2,7 @@
 
 const { buildKinshipGraph } = require("./character-kinship-graph");
 const { normalizeGameDate } = require("./character-temporal-facts");
+const { currentBetrothalEvidenceFilter, currentFormerSpouseEvidenceFilter, currentSpouseEvidenceFilter } = require("./canonical-spouse-record");
 
 const graphCache = new WeakMap();
 const targetedGraphCache = new WeakMap();
@@ -9,8 +10,8 @@ const targetedGraphCache = new WeakMap();
 function relationFingerprint(gameData) {
   const characters = gameData?.characters instanceof Map ? [...gameData.characters.values()] : Object.values(gameData?.characters || {});
   return characters.map((character) => JSON.stringify([
-    character?.id,
-    ...["parents", "children", "siblings", "spouse", "spouses", "formerSpouses", "deceasedSpouses"].map((field) => {
+    character?.id, character?.name, character?.firstName, character?.shortName, character?.fullName,
+    ...["parents", "children", "siblings", "spouse", "spouses", "formerSpouses", "deceasedSpouses", "betrothed"].map((field) => {
       const value = character?.[field] ?? null;
       return value;
     }),
@@ -27,68 +28,23 @@ function relationFingerprint(gameData) {
     character?.alive,
     character?.evidence?.conflicts?.alive === true,
     character?.deathDateTotalDays ?? character?.deathDate ?? ""
-  ])).sort().join("|");
+  ])).join("|");
 }
 
 function revisionKey(gameData) {
-  // Production checkpoints use parseGameState's SHA-256 of the complete gamestate;
-  // runtime objects without that invariant fall back to the demographic fingerprint.
-  const explicitRevision = gameData?.contentFingerprint ?? gameData?.saveContentHash ?? gameData?.relationFingerprint;
-  const fingerprint = explicitRevision ?? relationFingerprint(gameData);
-  // The fallback already serializes the exact parent source metadata. Reuse
-  // that proof instead of walking the same character collection a second time.
-  const liveScope = explicitRevision === null || explicitRevision === undefined
-    ? /"source":"CK3_(?:DIRECT|OTHER)_PARENT"/.test(fingerprint) ? `${gameData?.date ?? ""}/${gameData?.totalDays ?? ""}`
-      : /"source":"CK3_SAVE_LEGAL_PARENT"/.test(fingerprint) ? `${gameData?.playthroughId ?? ""}/${gameData?.gameDate ?? ""}/${gameData?.contentFingerprint ?? ""}` : ""
-    : liveParentScope(gameData);
-  return [
-    gameData?.campaignToken ?? gameData?.campaignId ?? "",
-    gameData?.checkpointId ?? gameData?.currentCheckpoint?.id ?? "",
-    gameData?.gameDataRevision ?? "",
-    gameData?.structuralRevision ?? "",
-    gameData?.participantRelationRevision ?? "",
-    liveScope,
-    fingerprint
-  ].join("|");
-}
-
-function liveParentScope(gameData) {
-  const characters = gameData?.characters instanceof Map ? gameData.characters.values() : Object.values(gameData?.characters || {});
-  for (const character of characters) {
-    if ((character?.parents || []).some?.(parent => parent?.source === "CK3_DIRECT_PARENT")
-      || character?.children?.some?.(entry => entry?.directParentEvidence?.source === "CK3_DIRECT_PARENT")
-      || ["children", "siblings"].some(field => character?.[field]?.some?.(entry => entry?.otherParent))
-      || character?.evidence?.otherParentRelations?.length
-      || character?.evidence?.relations?.some(item => item?.directParentEvidence?.source === "CK3_DIRECT_PARENT")) {
-      return `${gameData?.date ?? ""}/${gameData?.totalDays ?? ""}`;
-    }
-    if (character?.evidence?.relations?.some(item => item?.directParentEvidence?.source === "CK3_SAVE_LEGAL_PARENT")) {
-      return `${gameData?.playthroughId ?? ""}/${gameData?.gameDate ?? ""}/${gameData?.contentFingerprint ?? ""}`;
-    }
-  }
-  // Legacy structural graphs have no live parent source to expire. Preserve
-  // their cache identity when only the game clock changes.
-  return "";
+  // Live objects can change within one day. Exact source content is cache
+  // authority; supplied revision labels do not certify immutable GameData.
+  const fingerprint = relationFingerprint(gameData);
+  const liveScope = /"sourceSnapshotId"/.test(fingerprint) ? String(gameData?.date ?? "") + "/" + String(gameData?.totalDays ?? "") : "";
+  return [gameData?.campaignToken ?? gameData?.campaignId ?? "", gameData?.checkpointId ?? "",
+    gameData?.playthroughId ?? "", gameData?.gameDate ?? "", gameData?.contentFingerprint ?? "",
+    gameData?.gameDataRevision ?? "", gameData?.structuralRevision ?? "", gameData?.participantRelationRevision ?? "",
+    liveScope, fingerprint].join("|");
 }
 
 function referenceId(value) {
   const raw = value && typeof value === "object" ? value.id ?? value.runtimeId ?? value.characterId : value;
   return raw === null || raw === undefined || raw === "" ? null : String(raw);
-}
-
-function relatedIds(character = {}) {
-  const values = [];
-  const add = value => {
-    for (const item of Array.isArray(value) ? value : value === null || value === undefined ? [] : [value]) {
-      const id = referenceId(item);
-      if (id) values.push(id);
-    }
-  };
-  if (Array.isArray(character.parents)) add(character.parents);
-  else add(Object.values(character.parents || {}));
-  for (const field of ["father", "mother", "children", "siblings", "spouse", "spouses", "formerSpouses", "deceasedSpouses", "consort"]) add(character[field]);
-  for (const evidence of character?.evidence?.relations || []) add(evidence?.ownerId);
-  return [...new Set(values)];
 }
 
 function positiveRuntimeId(value) {
@@ -107,6 +63,7 @@ function currentParentSnapshotId(gameData) {
 
 function isCurrentDirectParentEvidence(record, context = {}, gameData = {}) {
   if (!record || typeof record !== "object") return false;
+  if (["relationshipKind", "parentage", "parentType", "kinshipType", "kind"].some(key => /STEP|继亲|繼親/iu.test(record[key] || ""))) return false;
   const childId = positiveRuntimeId(context.childId ?? context.sourceOwnerId ?? record.childId);
   const parentId = positiveRuntimeId(context.parentId ?? record.parentId ?? record.id);
   const recordId = positiveRuntimeId(record.id ?? record.parentId ?? record.parentRuntimeId);
@@ -191,33 +148,99 @@ function currentDirectParentFilter(gameData) {
   };
 }
 
-function getTargetedKinshipGraph(gameData, seedIds = [], { maxDepth = 3, maxNodes = 4096 } = {}) {
-  if (!gameData || typeof gameData !== "object") return buildKinshipGraph({});
+function isCurrentSiblingRow(owner, row, gameData) {
+  return !!referenceId(owner) && !!referenceId(row) && referenceId(owner) !== referenceId(row) && row.evidenceConflict !== true
+    && !["relationshipKind", "parentage", "parentType", "kinshipType", "kind"].some(key => /STEP|继亲|繼親/iu.test(row[key] || ""))
+    && typeof gameData.campaignToken === "string" && !!gameData.campaignToken
+    && typeof gameData.date === "string" && Number.isFinite(gameData.totalDays)
+    && row.evidence?.age?.length > 0
+    && row.evidence.age.every(proof => proof.ageSource === "CK3_LIVE_RELATIVE_AGE" && proof.evidenceConflict !== true
+      && !/STEP/iu.test(proof.relationshipKind || "")
+      && Number(proof.sourceOwnerId) === Number(owner.id) && proof.relationType === "sibling"
+      && proof.source === `${owner.id}.siblings` && proof.campaignToken === gameData.campaignToken
+      && proof.sourceSnapshotId === `${gameData.date}/${gameData.totalDays}`);
+}
+
+function selectRelationScope(gameData, seedIds, { maxDepth, maxNodes, discoveryIndex }) {
   const characters = gameData.characters instanceof Map ? gameData.characters : new Map(Object.entries(gameData.characters || {}));
+  const selected = new Map();
+  const queued = new Map();
+  const levels = Array.from({ length: maxDepth + 1 }, () => []);
+  const enqueue = (value, depth) => {
+    const id = referenceId(value);
+    if (!id || depth > maxDepth) return;
+    const previous = queued.get(id);
+    if (previous && previous.depth <= depth) return;
+    const entry = { id, depth, record: typeof value === "object" ? value : previous?.record || null };
+    queued.set(id, entry);
+    levels[depth].push(entry);
+  };
+  for (const seed of seedIds) enqueue(seed, 0);
+  let queueReads = 0;
+  traversal: for (const level of levels) for (let head = 0; head < level.length; head++) {
+    const current = level[head];
+    queueReads++;
+    if (queued.get(current.id) !== current) continue;
+    if (selected.size >= maxNodes) break traversal;
+    const character = characters.get(current.id) ?? characters.get(Number(current.id)) ?? current.record;
+    if (!character) continue;
+    selected.set(current.id, character);
+    if (current.depth >= maxDepth) continue;
+    // Keep partial, source-bound relatives as well as canonical characters. This
+    // discovers off-scene spouses/betrothals without seeding the entire save.
+    const records = new Map();
+    const inlineDepths = new WeakMap();
+    const add = (value, depth) => {
+      for (const item of Array.isArray(value) ? value : value == null ? [] : [value]) {
+        const id = referenceId(item);
+        if (id && (!records.has(id) || records.get(id).depth > depth)) records.set(id, { item, depth });
+        walk(item, depth);
+      }
+    };
+    const walk = (record, depth) => {
+      if (!record || typeof record !== "object" || depth >= maxDepth
+        || (inlineDepths.get(record) ?? Infinity) <= depth) return;
+      inlineDepths.set(record, depth);
+      add(Array.isArray(record.parents) ? record.parents : Object.values(record.parents || {}), depth + 1);
+      for (const field of ["father", "mother", "children", "siblings", "spouse", "spouses", "formerSpouses", "deceasedSpouses", "consort", "betrothed", "otherParent"]) add(record[field], depth + 1);
+      for (const evidence of record.evidence?.relations || []) add(evidence.ownerId, depth + 1);
+      for (const evidence of record.evidence?.otherParentRelations || []) { add(evidence.sourceOwnerId, depth + 1); add(evidence.parentId, depth + 1); }
+    };
+    walk(character, current.depth);
+    if (current.record !== character) walk(current.record, current.depth);
+    for (const { item, depth } of [...records.values()].sort((left, right) => left.depth - right.depth)) enqueue(item, depth);
+    for (const related of discoveryIndex?.get(current.id) || []) enqueue(related, current.depth + 1);
+  }
+  const truncated = [...queued.values()].some(item => !selected.has(item.id) && (characters.has(item.id) || characters.has(Number(item.id)) || item.record));
+  return { selected, truncated, metrics: { nodeVisits: selected.size, queued: queued.size, queueReads, fingerprintComputations: 1 } };
+}
+
+function relationshipOptions(gameData) {
+  return { otherParentEvidenceFilter: currentPublicParentFilter(gameData),
+    directParentEvidenceFilter: currentDirectParentFilter(gameData),
+    siblingEvidenceFilter: (record, ownerId) => isCurrentSiblingRow({ id: ownerId }, record, gameData),
+    currentSpouseEvidenceFilter: currentSpouseEvidenceFilter(gameData),
+    formerSpouseEvidenceFilter: currentFormerSpouseEvidenceFilter(gameData),
+    betrothalEvidenceFilter: currentBetrothalEvidenceFilter(gameData) };
+}
+
+function getTargetedKinshipGraph(gameData, seedIds = [], { maxDepth = 3, maxNodes = 4096, deriveExtendedRelations = true, discoveryIndex = null } = {}) {
+  if (!gameData || typeof gameData !== "object") return buildKinshipGraph({});
   const seeds = [...new Set(seedIds.map(referenceId).filter(Boolean))].sort();
-  const key = `${revisionKey(gameData)}:${seeds.join(",")}:${maxDepth}:${maxNodes}`;
+  const scope = selectRelationScope(gameData, seeds, { maxDepth, maxNodes, discoveryIndex });
+  // The live GameData parser mutates objects in place. Revalidate the bounded
+  // neighborhood even on a hit; caller-supplied revision strings cannot certify
+  // immutability. No whole-save fingerprint is needed for this local graph.
+  const key = JSON.stringify([gameData.campaignToken, gameData.campaignId, gameData.checkpointId,
+    gameData.date, gameData.totalDays, gameData.playthroughId, gameData.gameDate, gameData.contentFingerprint,
+    seeds, maxDepth, maxNodes, deriveExtendedRelations, scope.truncated, relationFingerprint({ characters: scope.selected })]);
   let cache = targetedGraphCache.get(gameData);
   if (!cache) { cache = new Map(); targetedGraphCache.set(gameData, cache); }
   if (cache.has(key)) return cache.get(key);
-  const selected = new Map();
-  const queue = seeds.map(id => ({ id, depth: 0 }));
-  const visited = new Set();
-  let truncated = false;
-  while (queue.length) {
-    const current = queue.shift();
-    if (visited.has(current.id)) continue;
-    visited.add(current.id);
-    const character = characters.get(current.id) ?? characters.get(Number(current.id));
-    if (!character) continue;
-    selected.set(current.id, character);
-    const neighborIds = current.depth < maxDepth ? relatedIds(character) : [];
-    if (selected.size >= maxNodes) { truncated = queue.length > 0 || neighborIds.some(id => !visited.has(id)); break; }
-    if (current.depth >= maxDepth) continue;
-    for (const relatedId of neighborIds) if (!visited.has(relatedId)) queue.push({ id: relatedId, depth: current.depth + 1 });
-  }
-  const graph = buildKinshipGraph(selected, { otherParentEvidenceFilter: currentPublicParentFilter(gameData),
-    directParentEvidenceFilter: currentDirectParentFilter(gameData) });
-  graph.scopeTruncated = truncated;
+  const graph = buildKinshipGraph(scope.selected, { ...relationshipOptions(gameData),
+    allowedNodeIds: new Set(scope.selected.keys()), deriveExtendedRelations });
+  graph.scopeTruncated = scope.truncated;
+  graph.scopeMetrics = scope.metrics;
   cache.set(key, graph);
   if (cache.size > 16) cache.delete(cache.keys().next().value);
   return graph;
@@ -231,10 +254,9 @@ function getCachedKinshipGraph(gameData, { includeOtherParents = true } = {}) {
   const cached = variants.get(includeOtherParents);
   if (cached?.key === key) return cached.graph;
   const profiles = typeof gameData.getMentionableCharacterProfiles === "function" ? gameData.getMentionableCharacterProfiles() : gameData.characters;
-  const graph = buildKinshipGraph(profiles, { includeOtherParents, otherParentEvidenceFilter: currentPublicParentFilter(gameData),
-    directParentEvidenceFilter: currentDirectParentFilter(gameData) });
+  const graph = buildKinshipGraph(profiles, { includeOtherParents, ...relationshipOptions(gameData) });
   variants.set(includeOtherParents, { key, graph });
   return graph;
 }
 
-module.exports = { getCachedKinshipGraph, getTargetedKinshipGraph, revisionKey, currentDirectParentFilter, currentPublicParentFilter, isCurrentDirectParentEvidence };
+module.exports = { getCachedKinshipGraph, getTargetedKinshipGraph, revisionKey, currentDirectParentFilter, currentPublicParentFilter, isCurrentDirectParentEvidence, isCurrentSiblingRow };

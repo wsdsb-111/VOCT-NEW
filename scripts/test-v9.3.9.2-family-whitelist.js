@@ -71,10 +71,10 @@ try {
   const child = characters.get(2);
   for (const traitId of ["bastard", "legitimized_bastard"]) {
     child.traits.push({ traitId, name: "私生子" });
-    assert.equal(isPublicCloseFamily(1, 2, gameData), false, "bastard parent-child is excluded in both directions");
-    assert.equal(isPublicCloseFamily(2, 1, gameData), false);
-    assert.equal(createTraitProfileView(gameData, characters.get(1)).gameData.characters.get(2).primaryTitle, "");
-    assert.equal(createTraitProfileView(gameData, characters.get(1)).gameData.characters.get(2).heldCourtAndCouncilPositions, "");
+    assert.equal(isPublicCloseFamily(1, 2, gameData), true, "V9.6.1 public legal parentage is not revoked by a child's trait");
+    assert.equal(isPublicCloseFamily(2, 1, gameData), true);
+    assert.equal(createTraitProfileView(gameData, characters.get(1)).gameData.characters.get(2).primaryTitle, "公爵");
+    assert.equal(createTraitProfileView(gameData, characters.get(1)).gameData.characters.get(2).heldCourtAndCouncilPositions, "宰相、宫廷医师");
     assert.equal(isPublicCloseFamily(2, 3, gameData), true, "verified public sibling relation remains separate");
     child.traits.pop();
   }

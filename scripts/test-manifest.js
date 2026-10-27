@@ -176,6 +176,12 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.6.1-relationship-recognition-regression", script: "test-v9.6.1-relationship-recognition-regression.js" },
+  { group: "v9.6.1-family-visibility-independent-qa", script: "test-v9.6.1-family-visibility-independent-qa.js" },
+  { group: "v9.6.1-terra-boundary-qa", script: "test-v9.6.1-terra-boundary-qa.js" },
+  { group: "v9.6.1-identity-projection-scale", script: "test-v9.6.1-identity-projection-scale.js" },
+  { group: "v9.6.1-kinship-cache-performance", script: "test-v9.6.1-kinship-cache-performance.js" },
+  { group: "v9.6.1-relation-prompt-independent-qa", script: "test-v9.6.1-relation-prompt-independent-qa.js" },
   { group: "v9.6-first-meeting-identity", script: "test-v9.6-first-meeting-identity.js" },
   { group: "v9.6-world-memory-recall-independent-qa", script: "test-v9.6-world-memory-recall-independent-qa.js" },
   { group: "v9.6-family-age-independent-qa", script: "test-v9.6-family-age-independent-qa.js" },

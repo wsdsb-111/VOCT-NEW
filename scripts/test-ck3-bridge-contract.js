@@ -108,7 +108,7 @@ assert.deepEqual(protocolSchema.required, [
   'capabilities'
 ]);
 assert.equal(runtimeManifest.schemaVersion, 1);
-assert.equal(runtimeManifest.runtimeVersion, '9.6.0');
+assert.equal(runtimeManifest.runtimeVersion, require('../src/app/package.json').version);
 assert.deepEqual(runtimeManifest.bridgeProtocol, { major: 1, minMinor: 0, maxMinor: 0 });
 assert.deepEqual(Object.keys(runtimeManifest.capabilities).sort(), [...capabilityIds].sort());
 for (const value of Object.values(runtimeManifest.capabilities)) assert.deepEqual(value, { minRevision: 1, maxRevision: 1 });

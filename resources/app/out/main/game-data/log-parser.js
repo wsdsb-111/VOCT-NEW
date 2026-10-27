@@ -33,6 +33,14 @@ function parseRelativeAge(data, index, gameData, sourceOwnerId, relationType, fi
   };
 }
 
+function hasCharacter(gameData, runtimeId) {
+  const id = Number(runtimeId);
+  if (!Number.isSafeInteger(id) || id <= 0) return false;
+  const characters = gameData?.characters;
+  if (characters instanceof Map) return characters.has(id) || characters.has(String(id));
+  return !!(characters && Object.hasOwn(characters, id));
+}
+
 function createLogParser({ GameData, Character, onGameDataParsed = null }) {
   async function parseLog(debugLogPath) {
     console.log(`parseLog: Processing debug log at path: ${debugLogPath}`);
@@ -54,6 +62,71 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
     const getSourceSnapshotId = () => gameData?.date && Number.isFinite(Number(gameData.totalDays))
       ? `${gameData.date}/${Number(gameData.totalDays)}`
       : null;
+    const addBetrothalEvidence = (relative, sourceOwnerId, sourceRelation, targetId, targetName, targetPronoun) => {
+      const targetGender = inferGenderFromPronoun(targetPronoun);
+      const betrothed = {
+        id: Number(targetId),
+        name: String(targetName || "").trim(),
+        sheHe: targetPronoun || "",
+        gender: targetGender,
+        ...(targetGender !== "unknown" ? { genderSource: "CK3_LIVE_RELATIVE" } : {}),
+        relationType: "BETROTHED",
+        source: "CK3_CURRENT_BETROTHAL",
+        sourceOwnerId,
+        relatedCharacterId: Number(relative.id),
+        observerRuntimeId: sourceOwnerId,
+        sourceRelation,
+        evidenceScope: "SOURCE_OWNER_RECORD_ONLY",
+        publicStatus: "CURRENT_BETROTHAL",
+        knowledgeStatus: "UNKNOWN",
+        campaignToken: gameData.campaignToken || null,
+        sourceSnapshotId: getSourceSnapshotId(),
+        evidenceConflict: false,
+        targetBound: false
+      };
+      const hasOtherMaritalStatus = !["unmarried", "betrothed"].includes(relative.maritalStatus);
+      if (hasOtherMaritalStatus) betrothed.evidenceConflict = true;
+      if (!relative.betrothed) relative.betrothed = betrothed;
+      else if (Number(relative.betrothed.id) !== betrothed.id || relative.betrothed.name !== betrothed.name
+        || relative.betrothed.sheHe !== betrothed.sheHe || relative.betrothed.gender !== betrothed.gender
+        || relative.betrothed.genderSource !== betrothed.genderSource
+        || relative.betrothed.sourceOwnerId !== sourceOwnerId || relative.betrothed.sourceRelation !== sourceRelation
+        || relative.betrothed.campaignToken !== betrothed.campaignToken || relative.betrothed.sourceSnapshotId !== betrothed.sourceSnapshotId) {
+        relative.betrothed.evidenceConflict = true;
+      }
+    };
+    const addCurrentSpouseEvidence = (relative, sourceOwnerId, sourceRelation, targetId, targetName, pronoun) => {
+      if (!Array.isArray(relative.spouses)) relative.spouses = [];
+      const gender = inferGenderFromPronoun(pronoun);
+      const spouse = {
+        id: Number(targetId),
+        name: String(targetName || "").trim(),
+        sheHe: pronoun || "",
+        gender,
+        ...(gender !== "unknown" ? { genderSource: "CK3_LIVE_RELATIVE" } : {}),
+        relationType: "CURRENT_SPOUSE",
+        source: "CK3_GAME_CURRENT_SPOUSE",
+        sourceOwnerId,
+        relatedCharacterId: Number(relative.id),
+        observerRuntimeId: sourceOwnerId,
+        sourceRelation,
+        evidenceScope: "SOURCE_OWNER_RECORD_ONLY",
+        publicStatus: "PUBLIC_LEGAL_MARRIAGE",
+        knowledgeStatus: "UNKNOWN",
+        campaignToken: gameData.campaignToken || null,
+        sourceSnapshotId: getSourceSnapshotId(),
+        evidenceConflict: false,
+        targetBound: false
+      };
+      const existing = relative.spouses.find(item => Number(item?.id) === spouse.id);
+      if (!existing) relative.spouses.push(spouse);
+      else if (existing.name !== spouse.name || existing.gender !== spouse.gender || existing.sourceRelation !== sourceRelation
+        || existing.campaignToken !== spouse.campaignToken || existing.sourceSnapshotId !== spouse.sourceSnapshotId) {
+        existing.evidenceConflict = true;
+        spouse.evidenceConflict = true;
+        relative.spouses.push(spouse);
+      }
+    };
     const fileStream = fs.createReadStream(debugLogPath);
     const rl = readline.createInterface({
       input: fileStream,
@@ -558,11 +631,15 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
               ...(spouseGender !== "unknown" ? { genderSource: "CK3_LIVE_RELATIVE" } : {}),
               relationType: "CURRENT_SPOUSE",
               parentId,
+              relatedCharacterId: parentId,
               sourceOwnerId: rootID,
+              observerRuntimeId: rootID,
               source: "CK3_PARENT_SPOUSE",
               sourceRelation: "parents.spouses",
+              evidenceScope: "SOURCE_OWNER_RECORD_ONLY",
               publicStatus: "PUBLIC_LEGAL_MARRIAGE",
               knowledgeStatus: "UNKNOWN",
+              evidenceConflict: false,
               campaignToken: gameData.campaignToken || null,
               sourceSnapshotId: getSourceSnapshotId(),
               children: []
@@ -666,6 +743,47 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
               parentToUpdate.deathReason = data[4];
             }
             break;
+          case "current_spouse": {
+            const character = gameData.characters.get(rootID);
+            if (character && data[4] === "PUBLIC_LEGAL_MARRIAGE") {
+              addCurrentSpouseEvidence(character, rootID, "spouses", data[1], data[2], data[3]);
+            }
+            break;
+          }
+          case "former_spouse": {
+            const character = gameData.characters.get(rootID);
+            const spouseId = Number(data[1]);
+            if (!character) break;
+            if (!Array.isArray(character.formerSpouses)) character.formerSpouses = [];
+            const spouse = {
+              id: spouseId,
+              name: String(data[2] || "").trim(),
+              sheHe: data[3] || "",
+              gender: inferGenderFromPronoun(data[3]),
+              ...(inferGenderFromPronoun(data[3]) !== "unknown" ? { genderSource: "CK3_LIVE_RELATIVE" } : {}),
+              relationType: "FORMER_SPOUSE",
+              source: "CK3_FORMER_SPOUSE",
+              sourceOwnerId: rootID,
+              sourceRelation: "formerSpouses",
+              publicStatus: "FORMER_SPOUSE",
+              knowledgeStatus: "UNKNOWN",
+              historicalStatus: "FORMER",
+              campaignToken: gameData.campaignToken || null,
+              sourceSnapshotId: getSourceSnapshotId(),
+              evidenceConflict: false,
+              targetBound: false
+            };
+            const existing = character.formerSpouses.find(item => Number(item?.id) === spouseId);
+            if (!existing) character.formerSpouses.push(spouse);
+            else if (existing.name !== spouse.name || existing.sheHe !== spouse.sheHe || existing.gender !== spouse.gender
+              || existing.source !== spouse.source
+              || existing.campaignToken !== spouse.campaignToken || existing.sourceSnapshotId !== spouse.sourceSnapshotId) {
+              existing.evidenceConflict = true;
+              spouse.evidenceConflict = true;
+              character.formerSpouses.push(spouse);
+            }
+            break;
+          }
           case "kids":
             currentChild = {
               id: Number(data[1]),
@@ -734,6 +852,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
             break;
           case "kid_is_concubine":
             if (currentChild) {
+              if (currentChild.betrothed) currentChild.betrothed.evidenceConflict = true;
               currentChild.maritalStatus = "concubine";
               currentChild.concubineOf = {
                 id: Number(data[2]),
@@ -743,6 +862,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
             break;
           case "kid_concubine":
             if (currentChild) {
+              if (currentChild.betrothed) currentChild.betrothed.evidenceConflict = true;
               currentChild.maritalStatus = "has_concubines";
               if (!currentChild.concubines) currentChild.concubines = [];
               currentChild.concubines.push({
@@ -752,22 +872,17 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
             }
             break;
           case "kid_spouse":
-            if (currentChild) {
+            if (currentChild && currentChildOwnerId === rootID && Number(data[1]) === Number(currentChild.id)) {
+              if (currentChild.betrothed) currentChild.betrothed.evidenceConflict = true;
               currentChild.maritalStatus = "has_spouses";
-              if (!currentChild.spouses) currentChild.spouses = [];
-              currentChild.spouses.push({
-                id: Number(data[2]),
-                name: data[3]
-              });
+              if (data[5] === "PUBLIC_LEGAL_MARRIAGE") addCurrentSpouseEvidence(currentChild, currentChildOwnerId, "kids.spouses", data[2], data[3], data[4]);
+              else currentChild.spouses.push({ id: Number(data[2]), name: data[3] });
             }
             break;
           case "kid_betrothed":
-            if (currentChild) {
+            if (currentChild && currentChildOwnerId === rootID && Number(data[1]) === Number(currentChild.id)) {
+              addBetrothalEvidence(currentChild, currentChildOwnerId, "kids.betrothed", data[2], data[3], data[4]);
               currentChild.maritalStatus = "betrothed";
-              currentChild.betrothed = {
-                id: Number(data[2]),
-                name: data[3]
-              };
             }
             break;
           case "kid_unmarried":
@@ -829,6 +944,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
             break;
           case "sibling_is_concubine":
             if (currentSibling) {
+              if (currentSibling.betrothed) currentSibling.betrothed.evidenceConflict = true;
               currentSibling.maritalStatus = "concubine";
               currentSibling.concubineOf = {
                 id: Number(data[2]),
@@ -838,6 +954,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
             break;
           case "sibling_concubine":
             if (currentSibling) {
+              if (currentSibling.betrothed) currentSibling.betrothed.evidenceConflict = true;
               currentSibling.maritalStatus = "has_concubines";
               if (!currentSibling.concubines) currentSibling.concubines = [];
               currentSibling.concubines.push({
@@ -847,22 +964,17 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
             }
             break;
           case "sibling_spouse":
-            if (currentSibling) {
+            if (currentSibling && currentSiblingOwnerId === rootID && Number(data[1]) === Number(currentSibling.id)) {
+              if (currentSibling.betrothed) currentSibling.betrothed.evidenceConflict = true;
               currentSibling.maritalStatus = "has_spouses";
-              if (!currentSibling.spouses) currentSibling.spouses = [];
-              currentSibling.spouses.push({
-                id: Number(data[2]),
-                name: data[3]
-              });
+              if (data[5] === "PUBLIC_LEGAL_MARRIAGE") addCurrentSpouseEvidence(currentSibling, currentSiblingOwnerId, "siblings.spouses", data[2], data[3], data[4]);
+              else currentSibling.spouses.push({ id: Number(data[2]), name: data[3] });
             }
             break;
           case "sibling_betrothed":
-            if (currentSibling) {
+            if (currentSibling && currentSiblingOwnerId === rootID && Number(data[1]) === Number(currentSibling.id)) {
+              addBetrothalEvidence(currentSibling, currentSiblingOwnerId, "siblings.betrothed", data[2], data[3], data[4]);
               currentSibling.maritalStatus = "betrothed";
-              currentSibling.betrothed = {
-                id: Number(data[2]),
-                name: data[3]
-              };
             }
             break;
           case "sibling_unmarried":
@@ -959,6 +1071,26 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
         reason: splits[0],
         value: Number(splits[1])
       };
+    }
+    if (gameData) {
+      const characterValues = gameData.characters instanceof Map ? [...gameData.characters.values()] : Object.values(gameData.characters || {});
+      for (const character of characterValues) {
+        for (const spouse of character?.spouses || []) {
+          spouse.targetBound = hasCharacter(gameData, spouse.id);
+        }
+        for (const relative of [...(character?.children || []), ...(character?.siblings || [])]) {
+          for (const spouse of relative?.spouses || []) {
+            spouse.targetBound = hasCharacter(gameData, spouse.id);
+          }
+          if (relative?.betrothed) relative.betrothed.targetBound = hasCharacter(gameData, relative.betrothed.id);
+        }
+        for (const parent of character?.parents || []) {
+          for (const spouse of parent?.spouses || []) spouse.targetBound = hasCharacter(gameData, spouse.id);
+        }
+        for (const formerSpouse of character?.formerSpouses || []) {
+          formerSpouse.targetBound = hasCharacter(gameData, formerSpouse.id);
+        }
+      }
     }
     if (gameData) Object.defineProperty(gameData, "ck3RelationshipReadbackComplete", {
       value: !(isWaitingForMultiLine && ["relations", "new_relations"].includes(multiLineType)),

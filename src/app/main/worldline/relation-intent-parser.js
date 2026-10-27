@@ -71,8 +71,74 @@ const INTENTS = [
   { terms: ["配偶"], relationTypes: ["SPOUSE_OF"], spouseStatus: "CURRENT", sexConstraint: null, label: "配偶", anchorMode: "EXPLICIT" }
 ];
 
+function parseBetrothalIntent(text) {
+  const terms = ["未婚夫", "未婚妻", "订婚对象", "订婚"];
+  const match = terms.map(term => ({ term, index: text.lastIndexOf(term) }))
+    .filter(item => item.index >= 0)
+    .sort((left, right) => right.index + right.term.length - (left.index + left.term.length) || right.term.length - left.term.length)[0];
+  if (!match) return null;
+  const prefix = text.slice(0, match.index);
+  const childMentions = [...prefix.matchAll(/(女儿|儿子|子女|孩子|儿女|子嗣)/gu)];
+  const childMention = childMentions.at(-1);
+  const targetSex = match.term === "未婚夫" ? "male" : match.term === "未婚妻" ? "female" : null;
+  if (childMention) {
+    const beforeChild = prefix.slice(0, childMention.index);
+    const afterChild = prefix.slice(childMention.index + childMention[0].length);
+    const isResponderChild = /^(?:(?:我|你)(?:的)?|某(?:位|个)?|一位|一个)*$/u.test(beforeChild)
+      && /^(?:(?:的)?(?:与谁|跟谁|和谁)?)*$/u.test(afterChild);
+    return {
+      detected: true,
+      relationTypes: ["BETROTHED_TO"],
+      spouseStatus: null,
+      sexConstraint: targetSex,
+      anchorSexConstraint: childMention[0] === "女儿" ? "female" : childMention[0] === "儿子" ? "male" : null,
+      anchorRelationTypes: ["CHILD_OF"],
+      birthOrder: null,
+      recency: null,
+      anchorMention: null,
+      sourcePhrase: match.term,
+      sourceIndex: match.index,
+      confidence: "HIGH",
+      label: match.term === "订婚" ? "订婚对象" : match.term,
+      anchorMode: isResponderChild ? "RESPONDER_CHILD" : "EXPLICIT_CHILD"
+    };
+  }
+  if (/^(?:(?:我|你)(?:的)?|\s)*$/u.test(prefix)) {
+    return {
+      detected: true,
+      relationTypes: ["BETROTHED_TO"],
+      spouseStatus: null,
+      sexConstraint: targetSex,
+      birthOrder: null,
+      recency: null,
+      anchorMention: null,
+      sourcePhrase: match.term,
+      sourceIndex: match.index,
+      confidence: "HIGH",
+      label: match.term === "订婚" ? "订婚对象" : match.term,
+      anchorMode: "RESPONDER"
+    };
+  }
+  return {
+    detected: true,
+    relationTypes: ["BETROTHED_TO"],
+    spouseStatus: null,
+    sexConstraint: targetSex,
+    birthOrder: null,
+    recency: null,
+    anchorMention: null,
+    sourcePhrase: match.term,
+    sourceIndex: match.index,
+    confidence: "HIGH",
+    label: match.term === "订婚" ? "订婚对象" : match.term,
+    anchorMode: "EXPLICIT"
+  };
+}
+
 function parseRelationIntent(query = "") {
   const text = String(query || "");
+  const betrothalIntent = parseBetrothalIntent(text);
+  if (betrothalIntent) return betrothalIntent;
   const matches = INTENTS.flatMap((intent) => intent.terms.map((term) => ({ intent, term, index: text.lastIndexOf(term) }))).filter((match) => match.index >= 0);
   const match = matches.sort((left, right) => right.index + right.term.length - (left.index + left.term.length) || right.term.length - left.term.length || right.index - left.index)[0];
   if (!match) return { detected: false, relationTypes: [], spouseStatus: null, sexConstraint: null, birthOrder: null, recency: null, anchorMention: null, sourcePhrase: null, confidence: "NONE", anchorMode: null };

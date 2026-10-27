@@ -154,7 +154,8 @@ class ConversationDisclosureStore {
       const native = candidate.factType === "TRAIT" && nativeKnown.has(normalizeTraitKey(candidate.canonicalKey || candidate.factKey.slice(6)));
       const publicNickname = candidate.factType === "NICKNAME";
       const familyFact = closeFamily && ["NAME", "TITLE", "TRAIT"].includes(candidate.factType);
-      const intrinsic = publicNickname || familyFact || candidate.factType === "TRAIT" && automatic.traitKeys.includes(candidate.factKey);
+      const intrinsic = manual?.status !== "MANUAL_HIDDEN"
+        && (publicNickname || familyFact || candidate.factType === "TRAIT" && automatic.traitKeys.includes(candidate.factKey));
       const status = intrinsic ? "AUTO_DISCLOSED" : manual?.status || (evidence.length || native ? "AUTO_DISCLOSED" : "UNKNOWN");
       const observable = candidate.factType === "TRAIT" && resolveTraitVisibility(candidate.canonicalKey || candidate.factKey.slice(6)).status === "OBSERVABLE";
       // The player can explicitly disclose their own traits. Other people's

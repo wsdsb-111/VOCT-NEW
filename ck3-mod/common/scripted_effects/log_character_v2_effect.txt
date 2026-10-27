@@ -445,6 +445,14 @@ log_relatives = {
 			debug_log = "VOTC:IN/;/parent_death/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetDeathDate.GetDateAsTotalDays]/;/[THIS.Char.GetDeathDate.GetStringShort]/;/[THIS.Char.GetDeathReason]/;/"
 		}
 	}
+	every_spouse = {
+		limit = { is_alive = yes }
+		debug_log = "VOTC:IN/;/current_spouse/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetFullNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetSheHe]/;/PUBLIC_LEGAL_MARRIAGE/;/"
+	}
+	every_former_spouse = {
+		even_if_dead = yes
+		debug_log = "VOTC:IN/;/former_spouse/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetFullNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetSheHe]/;/"
+	}
 	every_child = {
 		even_if_dead = yes
 		save_scope_as = votc_v937_relative_subject
@@ -515,14 +523,14 @@ log_relatives = {
 					debug_log = "VOTC:IN/;/kid_concubine/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetFullNameNicknamedNoTooltip]"
 				}
 				else = {
-					debug_log = "VOTC:IN/;/kid_spouse/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetFullNameNicknamedNoTooltip]"
+					debug_log = "VOTC:IN/;/kid_spouse/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetFullNameNicknamedNoTooltip]/;/[THIS.Char.GetSheHe]/;/PUBLIC_LEGAL_MARRIAGE/;/"
 				}
 			}
 		}
 		else_if = {
 			limit = { is_betrothed = yes }
 			betrothed = {
-				debug_log = "VOTC:IN/;/kid_betrothed/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetFullNameNicknamedNoTooltip]"
+				debug_log = "VOTC:IN/;/kid_betrothed/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetFullNameNicknamedNoTooltip]/;/[THIS.Char.GetSheHe]"
 			}
 		}
 		else = { 
@@ -588,14 +596,14 @@ log_relatives = {
 					debug_log = "VOTC:IN/;/sibling_concubine/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetFullNameNicknamedNoTooltip]"
 				}
 				else = {
-					debug_log = "VOTC:IN/;/sibling_spouse/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetFullNameNicknamedNoTooltip]"
+					debug_log = "VOTC:IN/;/sibling_spouse/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetFullNameNicknamedNoTooltip]/;/[THIS.Char.GetSheHe]/;/PUBLIC_LEGAL_MARRIAGE/;/"
 				}
 			}
 		}
 		else_if = {
 			limit = { is_betrothed = yes }
 			betrothed = {
-				debug_log = "VOTC:IN/;/sibling_betrothed/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetFullNameNicknamedNoTooltip]"
+				debug_log = "VOTC:IN/;/sibling_betrothed/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[PREV.Char.GetID]/;/[THIS.Char.GetID]/;/[THIS.Char.GetFullNameNicknamedNoTooltip]/;/[THIS.Char.GetSheHe]"
 			}
 		}
 		else = { 

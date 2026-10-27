@@ -97,8 +97,14 @@ function createCharacterMap(source) {
   return new Map(Object.entries(characters || {}).map(([key, value]) => [String(key), value]));
 }
 
-function buildKinshipGraphInternal(source = {}, { includeOtherParents = true, otherParentEvidenceFilter = null, directParentEvidenceFilter = null } = {}) {
-  const characters = createCharacterMap(source);
+function buildKinshipGraphInternal(source = {}, { includeOtherParents = true, otherParentEvidenceFilter = null, directParentEvidenceFilter = null, siblingEvidenceFilter = null,
+  currentSpouseEvidenceFilter = null, formerSpouseEvidenceFilter = null, betrothalEvidenceFilter = null,
+  allowUnverifiedFormerSpouses = false, allowedNodeIds = null, deriveExtendedRelations = true } = {}) {
+  const allowedIds = allowedNodeIds instanceof Set ? new Set([...allowedNodeIds].map(String)) : null;
+  const sourceCharacters = createCharacterMap(source);
+  const characters = allowedIds
+    ? new Map([...sourceCharacters].filter(([characterId]) => allowedIds.has(String(characterId))))
+    : sourceCharacters;
   const nodes = new Map(characters);
   const edges = [];
   const edgeKeys = new Set();
@@ -109,6 +115,19 @@ function buildKinshipGraphInternal(source = {}, { includeOtherParents = true, ot
   const diagnostics = [];
   const rejectedParentPairs = new Map();
   const parentPairKey = (parentId, childId) => `${String(parentId)}:${String(childId)}`;
+  const unorderedPairKey = (left, right) => [String(left), String(right)].sort().join(":");
+  const rejectedSpousePairs = new Set();
+  const rejectedSiblingPairs = new Set();
+  const spouseProofsByOwnerPair = new Map();
+  const rejectedBetrothalPairs = new Set();
+  const rejectedBetrothalTargetsBySubject = new Map();
+  const rejectBetrothalClaim = (subjectId, targetId) => {
+    const subject = String(subjectId);
+    const target = String(targetId);
+    rejectedBetrothalPairs.add(unorderedPairKey(subject, target));
+    if (!rejectedBetrothalTargetsBySubject.has(subject)) rejectedBetrothalTargetsBySubject.set(subject, new Set());
+    rejectedBetrothalTargetsBySubject.get(subject).add(target);
+  };
   const rejectParentEvidence = (parentId, childId, sourcePath) => {
     const normalizedParentId = positiveRuntimeId(parentId);
     const normalizedChildId = positiveRuntimeId(childId);
@@ -172,6 +191,7 @@ function buildKinshipGraphInternal(source = {}, { includeOtherParents = true, ot
   const ensureNode = (value) => {
     const key = id(value);
     if (!key) return null;
+    if (allowedIds && !allowedIds.has(key)) return null;
     if (!nodes.has(key)) nodes.set(key, value && typeof value === "object" ? { ...value, id: key, partial: true } : { id: key, partial: true });
     else if (value && typeof value === "object") nodes.set(key, { ...value, ...nodes.get(key), id: key });
     return key;
@@ -184,6 +204,10 @@ function buildKinshipGraphInternal(source = {}, { includeOtherParents = true, ot
     if (edgeKeys.has(key)) {
       const existing = edgeByKey.get(key);
       mergeParentEvidence(existing, details.parentEvidence);
+      if (existing && Array.isArray(details.betrothalSources)) {
+        const sources = [...(existing.betrothalSources || []), ...details.betrothalSources];
+        existing.betrothalSources = [...new Map(sources.map(item => [JSON.stringify(item), item])).values()];
+      }
       if (existing && details.branch && existing.branch && existing.branch !== details.branch) existing.branchConflict = true;
       if (existing && details.branch && !existing.branch) existing.branch = details.branch;
       const incomingKind = details.relationshipKind || null;
@@ -207,6 +231,42 @@ function buildKinshipGraphInternal(source = {}, { includeOtherParents = true, ot
     if (!incomingEdges.has(toId)) incomingEdges.set(toId, []);
     outgoingEdges.get(fromId).push(edge);
     incomingEdges.get(toId).push(edge);
+  };
+  const recordSpouseProof = (ownerId, relatedId, spouse, isFormer) => {
+    const raw = spouse.raw && typeof spouse.raw === "object" ? spouse.raw : {};
+    const pairKey = unorderedPairKey(relatedId, spouse.runtimeId);
+    const proofKey = `${String(ownerId)}:${pairKey}:${isFormer ? "FORMER" : "CURRENT"}`;
+    const signature = JSON.stringify([raw.id, raw.name, raw.sheHe, raw.gender, raw.genderSource, raw.source,
+      raw.sourceOwnerId, raw.relatedCharacterId, raw.observerRuntimeId, raw.sourceRelation, raw.relationType,
+      raw.evidenceScope, raw.publicStatus, raw.knowledgeStatus, raw.historicalStatus, raw.campaignToken,
+      raw.sourceSnapshotId, raw.evidenceConflict, raw.targetBound]);
+    if (!spouseProofsByOwnerPair.has(proofKey)) spouseProofsByOwnerPair.set(proofKey, { pairKey, signatures: new Set() });
+    spouseProofsByOwnerPair.get(proofKey).signatures.add(signature);
+  };
+  const addCurrentSpouseEdges = (ownerId, relatedId, relative, sourceRelation) => {
+    if (typeof currentSpouseEvidenceFilter !== "function") return;
+    const records = normalizeSpouseRecords(relative, { preserveEvidenceVariants: true });
+    for (const spouse of records) {
+      if (spouse.relationType !== "CURRENT_SPOUSE" || spouse.runtimeId === null) continue;
+      const spouseContext = { ownerId, sourceOwnerId: ownerId, relatedCharacterId: relatedId,
+        targetId: spouse.runtimeId, spouseId: spouse.runtimeId, sourceRelation };
+      if (!currentSpouseEvidenceFilter(spouse.raw, spouseContext, source)) {
+        rejectedSpousePairs.add(unorderedPairKey(relatedId, spouse.runtimeId));
+        continue;
+      }
+      recordSpouseProof(ownerId, relatedId, spouse, false);
+      const spouseId = ensureNode(spouse.raw && typeof spouse.raw === "object" ? spouse.raw : spouse.runtimeId);
+      if (!spouseId) continue;
+      const relatedLife = resolveLifeStatus(relative);
+      const spouseLife = resolveLifeStatus(nodes.get(spouseId) || spouse.raw || {});
+      const type = relatedLife.alive === false ? "DECEASED_SPOUSE_OF" : "SPOUSE_OF";
+      const reverseType = spouseLife.alive === false ? "DECEASED_SPOUSE_OF" : "SPOUSE_OF";
+      const details = { source: spouse.raw?.source, sourceOwnerId: String(ownerId),
+        relatedCharacterId: String(relatedId), sourceRelation, sourceSnapshotId: spouse.raw?.sourceSnapshotId || null,
+        campaignToken: spouse.raw?.campaignToken || null, knowledgeStatus: "UNKNOWN" };
+      add(relatedId, spouseId, type, [relatedId, spouseId], spouse.confidence, details);
+      add(spouseId, relatedId, reverseType, [spouseId, relatedId], spouse.confidence, details);
+    }
   };
   const addOtherParent = (value, defaults = {}) => {
     const evidence = createOtherParentEvidence(value, defaults);
@@ -246,6 +306,7 @@ function buildKinshipGraphInternal(source = {}, { includeOtherParents = true, ot
     for (const child of values(character?.children)) {
       const childId = ensureNode(child);
       if (!childId) continue;
+      addCurrentSpouseEdges(sourceOwnerId ?? positiveRuntimeId(characterId), positiveRuntimeId(childId), child, "kids.spouses");
       const proof = child?.directParentEvidence || child?.parentEvidence || null;
       const directProof = directParentProof(positiveRuntimeId(childId), sourceOwnerId || positiveRuntimeId(characterId), "children", proof);
       if (directProof.accepted) {
@@ -270,8 +331,17 @@ function buildKinshipGraphInternal(source = {}, { includeOtherParents = true, ot
       }
     }
     for (const sibling of values(character?.siblings)) {
+      if (typeof siblingEvidenceFilter === "function" && !siblingEvidenceFilter(sibling, characterId)) {
+        // A legacy, unmarked row is not evidence either way. It cannot cancel
+        // a separately verified shared-parent relationship.
+        if (sibling?.evidence?.age?.length || explicitRelationshipKind(sibling) || sibling?.evidenceConflict === true) {
+          rejectedSiblingPairs.add(unorderedPairKey(characterId, id(sibling)));
+        }
+        continue;
+      }
       const siblingId = ensureNode(sibling);
       if (!siblingId) continue;
+      addCurrentSpouseEdges(sourceOwnerId ?? positiveRuntimeId(characterId), positiveRuntimeId(siblingId), sibling, "siblings.spouses");
       add(characterId, siblingId, "SIBLING_OF", [characterId, siblingId], 1, { source: "LOG_DIRECT" });
       add(siblingId, characterId, "SIBLING_OF", [siblingId, characterId], 1, { source: "LOG_DIRECT" });
       if (includeOtherParents) {
@@ -289,22 +359,64 @@ function buildKinshipGraphInternal(source = {}, { includeOtherParents = true, ot
         });
       }
     }
-    for (const spouse of normalizeSpouseRecords(character)) {
+    const spouseRecords = normalizeSpouseRecords(character, {
+      preserveEvidenceVariants: typeof currentSpouseEvidenceFilter === "function" || typeof formerSpouseEvidenceFilter === "function"
+    });
+    for (const spouse of spouseRecords) {
       if (spouse.runtimeId === null) continue;
+      const isFormer = spouse.relationType === "FORMER_SPOUSE";
+      const proofOwnerId = positiveRuntimeId(spouse.raw?.sourceOwnerId) ?? sourceOwnerId ?? characterId;
+      const spouseContext = {
+        ownerId: proofOwnerId,
+        sourceOwnerId: proofOwnerId,
+        relatedCharacterId: positiveRuntimeId(spouse.raw?.relatedCharacterId) ?? sourceOwnerId ?? positiveRuntimeId(characterId),
+        targetId: spouse.runtimeId,
+        spouseId: spouse.runtimeId,
+        sourceRelation: spouse.raw?.sourceRelation
+      };
+      const formerAccepted = !isFormer || allowUnverifiedFormerSpouses
+        || typeof formerSpouseEvidenceFilter === "function" && formerSpouseEvidenceFilter(spouse.raw, spouseContext, source);
+      const currentAccepted = isFormer || typeof currentSpouseEvidenceFilter !== "function"
+        || currentSpouseEvidenceFilter(spouse.raw, spouseContext, source);
+      if (!formerAccepted || !currentAccepted) {
+        rejectedSpousePairs.add(unorderedPairKey(characterId, spouse.runtimeId));
+        continue;
+      }
+      if (isFormer && typeof formerSpouseEvidenceFilter === "function"
+        || !isFormer && typeof currentSpouseEvidenceFilter === "function" && spouse.source !== "deceasedSpouses") {
+        recordSpouseProof(proofOwnerId,
+          positiveRuntimeId(spouse.raw?.relatedCharacterId) ?? sourceOwnerId ?? positiveRuntimeId(characterId), spouse, isFormer);
+      }
       const spouseId = ensureNode(spouse.raw && typeof spouse.raw === "object" ? spouse.raw : spouse.runtimeId);
       if (!spouseId) continue;
       const spouseNode = nodes.get(spouseId);
       const characterLife = resolveLifeStatus(character);
       const spouseLife = resolveLifeStatus(spouseNode || spouse.raw || {});
-      const isFormer = spouse.relationType === "FORMER_SPOUSE";
       const type = isFormer ? "FORMER_SPOUSE_OF"
         : characterLife.alive === false ? "DECEASED_SPOUSE_OF" : "SPOUSE_OF";
       const reverseType = isFormer ? "FORMER_SPOUSE_OF"
         : spouse.relationType === "DECEASED_SPOUSE" || spouseLife.alive === false
           ? "DECEASED_SPOUSE_OF"
           : "SPOUSE_OF";
-      add(characterId, spouseId, type, [characterId, spouseId], spouse.confidence, { source: "SNAPSHOT_DIRECT" });
-      add(spouseId, characterId, reverseType, [spouseId, characterId], spouse.confidence, { source: "SNAPSHOT_DIRECT" });
+      const spouseEvidence = isFormer ? {
+        source: "CK3_FORMER_SPOUSE",
+        sourceOwnerId: String(proofOwnerId),
+        sourceRelation: "formerSpouses",
+        sourceSnapshotId: spouse.raw?.sourceSnapshotId || null,
+        campaignToken: spouse.raw?.campaignToken || null,
+        knowledgeStatus: "UNKNOWN"
+      } : typeof currentSpouseEvidenceFilter === "function" && spouse.source !== "deceasedSpouses" ? {
+        source: spouse.raw?.source,
+        sourceOwnerId: String(proofOwnerId),
+        sourceRelation: spouse.raw?.sourceRelation || null,
+        sourceSnapshotId: spouse.raw?.sourceSnapshotId || null,
+        campaignToken: spouse.raw?.campaignToken || null,
+        knowledgeStatus: "UNKNOWN"
+      } : {};
+      add(characterId, spouseId, type, [characterId, spouseId], spouse.confidence,
+        { source: spouseEvidence.source || (isFormer ? "CK3_FORMER_SPOUSE" : "SNAPSHOT_DIRECT"), ...spouseEvidence });
+      add(spouseId, characterId, reverseType, [spouseId, characterId], spouse.confidence,
+        { source: spouseEvidence.source || (isFormer ? "CK3_FORMER_SPOUSE" : "SNAPSHOT_DIRECT"), ...spouseEvidence });
     }
     for (const evidence of character?.evidence?.relations || []) {
       const ownerId = ensureNode(evidence.ownerId);
@@ -330,6 +442,7 @@ function buildKinshipGraphInternal(source = {}, { includeOtherParents = true, ot
         add(characterId, ownerId, "CHILD_OF", [characterId, ownerId], 1, details);
         add(ownerId, characterId, "PARENT_OF", [ownerId, characterId], 1, details);
       } else if (evidence.relationType === "sibling") {
+        if (typeof siblingEvidenceFilter === "function") continue;
         add(characterId, ownerId, "SIBLING_OF", [characterId, ownerId], evidence.confidence ?? 1, { source: "LOG_DIRECT", evidenceSource: evidence.source || null });
         add(ownerId, characterId, "SIBLING_OF", [ownerId, characterId], evidence.confidence ?? 1, { source: "LOG_DIRECT", evidenceSource: evidence.source || null });
       }
@@ -360,6 +473,152 @@ function buildKinshipGraphInternal(source = {}, { includeOtherParents = true, ot
     }
   }
 
+  if (typeof betrothalEvidenceFilter === "function") {
+    for (const [characterId, character] of characters) {
+      const sourceOwnerId = positiveRuntimeId(character?.id ?? characterId);
+      if (!sourceOwnerId) continue;
+      for (const [field, sourceRelation] of [["children", "kids.betrothed"], ["siblings", "siblings.betrothed"]]) {
+        for (const relative of values(character?.[field])) {
+          const relatedCharacterId = positiveRuntimeId(relative);
+          const evidence = relative?.betrothed;
+          const targetId = positiveRuntimeId(evidence);
+          if (!relatedCharacterId || relatedCharacterId === sourceOwnerId || !targetId || targetId === sourceOwnerId || targetId === relatedCharacterId) continue;
+          const rejectClaim = () => rejectBetrothalClaim(relatedCharacterId, targetId);
+          if (field === "children" && !directParentProof(relatedCharacterId, sourceOwnerId, "children.betrothed", relative?.directParentEvidence || null).accepted) {
+            rejectClaim();
+            continue;
+          }
+          const context = { sourceOwnerId, relatedCharacterId, targetId, sourceRelation };
+          if (!betrothalEvidenceFilter(evidence, context, source)) {
+            rejectClaim();
+            continue;
+          }
+          const target = nodes.get(String(targetId)) || {
+            id: String(targetId),
+            ...(String(evidence.name || "").trim() ? { fullName: String(evidence.name).trim() } : {}),
+            ...(evidence.gender === "male" || evidence.gender === "female" ? {
+              gender: evidence.gender,
+              genderSource: evidence.genderSource,
+              sheHe: evidence.sheHe
+            } : {}),
+            partial: true
+          };
+          const betrothalSource = {
+            source: "CK3_CURRENT_BETROTHAL",
+            relationType: "BETROTHED",
+            sourceOwnerId: String(sourceOwnerId),
+            relatedCharacterId: String(relatedCharacterId),
+            targetId: String(targetId),
+            sourceRelation,
+            sourceSnapshotId: evidence.sourceSnapshotId,
+            campaignToken: evidence.campaignToken,
+            targetGender: evidence.gender === "male" || evidence.gender === "female" ? evidence.gender : null,
+            targetGenderSource: evidence.genderSource || null,
+            publicStatus: evidence.publicStatus,
+            evidenceScope: "SOURCE_OWNER_RECORD_ONLY",
+            knowledgeStatus: "UNKNOWN"
+          };
+          const details = { source: "CK3_CURRENT_BETROTHAL", betrothalSources: [betrothalSource] };
+          add(relatedCharacterId, target, "BETROTHED_TO", [relatedCharacterId, targetId], 1, details);
+          add(target, relatedCharacterId, "BETROTHED_TO", [targetId, relatedCharacterId], 1, details);
+        }
+      }
+    }
+  }
+
+  const relationStatusPairs = new Map();
+  for (const edge of edges) {
+    if (!["SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF", "BETROTHED_TO"].includes(edge.type)) continue;
+    const pair = [edge.from, edge.to].sort().join(":");
+    if (!relationStatusPairs.has(pair)) relationStatusPairs.set(pair, []);
+    relationStatusPairs.get(pair).push(edge);
+  }
+  for (const pairEdges of relationStatusPairs.values()) {
+    const types = new Set(pairEdges.map(edge => edge.type));
+    const directionalStatuses = new Map();
+    for (const edge of pairEdges) {
+      const direction = `${edge.from}:${edge.to}`;
+      if (!directionalStatuses.has(direction)) directionalStatuses.set(direction, new Set());
+      directionalStatuses.get(direction).add(edge.type);
+    }
+    // A surviving husband and deceased wife legitimately have different labels
+    // in reciprocal directions. Former/current claims still conflict as a pair.
+    const spouseStatusConflict = types.has("FORMER_SPOUSE_OF") && (types.has("SPOUSE_OF") || types.has("DECEASED_SPOUSE_OF"))
+      || [...directionalStatuses.values()].some(statuses => statuses.has("SPOUSE_OF") && statuses.has("DECEASED_SPOUSE_OF"));
+    const betrothalConflict = types.has("BETROTHED_TO")
+      && ["SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF"].some(type => types.has(type));
+    const betrothalEdges = pairEdges.filter(edge => edge.type === "BETROTHED_TO");
+    const sourceSignatures = new Set(betrothalEdges.map(edge => JSON.stringify((edge.betrothalSources || [])
+      .map(item => ({ ...item }))
+      .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))))));
+    const sourceOwnerClaims = new Map();
+    const targetGenderClaims = new Map();
+    const allBetrothalSources = betrothalEdges.flatMap(edge => edge.betrothalSources || []);
+    const campaignTokens = new Set(allBetrothalSources.map(source => source.campaignToken));
+    const sourceSnapshots = new Set(allBetrothalSources.map(source => source.sourceSnapshotId));
+    for (const source of allBetrothalSources) {
+      const ownerId = String(source.sourceOwnerId);
+      if (!sourceOwnerClaims.has(ownerId)) sourceOwnerClaims.set(ownerId, new Set());
+      sourceOwnerClaims.get(ownerId).add(JSON.stringify([source.relatedCharacterId, source.targetId, source.sourceRelation]));
+      if (source.targetGender === "male" || source.targetGender === "female") {
+        const targetId = String(source.targetId);
+        if (!targetGenderClaims.has(targetId)) targetGenderClaims.set(targetId, new Set());
+        targetGenderClaims.get(targetId).add(source.targetGender);
+      }
+    }
+    const sourceProofConflict = betrothalEdges.length > 0 && (sourceSignatures.size !== 1
+      || betrothalEdges.some(edge => !(edge.betrothalSources || []).length
+        || edge.betrothalSources.some(source => unorderedPairKey(source.relatedCharacterId, source.targetId) !== unorderedPairKey(edge.from, edge.to)
+          || source.source !== "CK3_CURRENT_BETROTHAL" || source.relationType !== "BETROTHED"
+          || source.publicStatus !== "CURRENT_BETROTHAL" || source.evidenceScope !== "SOURCE_OWNER_RECORD_ONLY"
+          || source.knowledgeStatus !== "UNKNOWN"
+          || source.targetGender !== null && !["male", "female"].includes(source.targetGender)
+          || source.targetGender && source.targetGenderSource !== "CK3_LIVE_RELATIVE"))
+      || [...sourceOwnerClaims.values()].some(claims => claims.size > 1)
+      || [...targetGenderClaims.values()].some(genders => genders.size > 1)
+      || campaignTokens.size !== 1 || sourceSnapshots.size !== 1
+      || allBetrothalSources.some(source => !source.campaignToken || !source.sourceSnapshotId));
+    if (spouseStatusConflict || betrothalConflict || sourceProofConflict) {
+      for (const edge of pairEdges) edge.evidenceConflict = true;
+    }
+  }
+  for (const pair of rejectedSpousePairs) {
+    for (const edge of edges) {
+      if (["SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF"].includes(edge.type)
+        && unorderedPairKey(edge.from, edge.to) === pair) edge.evidenceConflict = true;
+    }
+  }
+  for (const { pairKey, signatures } of spouseProofsByOwnerPair.values()) {
+    if (signatures.size === 1) continue;
+    for (const edge of edges) {
+      if (["SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF"].includes(edge.type)
+        && unorderedPairKey(edge.from, edge.to) === pairKey) edge.evidenceConflict = true;
+    }
+  }
+  for (const pair of rejectedBetrothalPairs) {
+    for (const edge of edges) {
+      if (edge.type === "BETROTHED_TO" && unorderedPairKey(edge.from, edge.to) === pair) edge.evidenceConflict = true;
+    }
+  }
+  for (const [subjectId, rejectedTargets] of rejectedBetrothalTargetsBySubject) {
+    const acceptedTargets = new Set(edges.filter(edge => edge.type === "BETROTHED_TO" && edge.from === subjectId).map(edge => edge.to));
+    if (![...rejectedTargets].some(targetId => [...acceptedTargets].some(acceptedId => acceptedId !== targetId))) continue;
+    for (const edge of edges) {
+      if (edge.type === "BETROTHED_TO" && (edge.from === subjectId || edge.to === subjectId)) edge.evidenceConflict = true;
+    }
+  }
+  const betrothalPartners = new Map();
+  for (const edge of edges.filter(item => item.type === "BETROTHED_TO")) {
+    if (!betrothalPartners.has(edge.from)) betrothalPartners.set(edge.from, new Set());
+    betrothalPartners.get(edge.from).add(edge.to);
+  }
+  for (const [characterId, partners] of betrothalPartners) {
+    if (partners.size < 2) continue;
+    for (const edge of edges) {
+      if (edge.type === "BETROTHED_TO" && (edge.from === characterId || edge.to === characterId)) edge.evidenceConflict = true;
+    }
+  }
+
   for (const [key, sources] of rejectedParentPairs) {
     const [parentId, childId] = key.split(":");
     for (const edge of [
@@ -376,41 +635,44 @@ function buildKinshipGraphInternal(source = {}, { includeOtherParents = true, ot
   const parentsOf = (characterId) => outgoing(characterId, "CHILD_OF").filter(edge => !edge.parentEvidenceConflict).map((edge) => edge.to);
   const childrenOf = (characterId) => outgoing(characterId, "PARENT_OF").filter(edge => !edge.parentEvidenceConflict).map((edge) => edge.to);
   const allIds = [...nodes.keys()];
-  for (const parentId of allIds) {
-    const children = childrenOf(parentId);
-    for (let leftIndex = 0; leftIndex < children.length; leftIndex++) {
-      for (let rightIndex = leftIndex + 1; rightIndex < children.length; rightIndex++) {
-        const left = children[leftIndex];
-        const right = children[rightIndex];
-        add(left, right, "SIBLING_OF", [left, parentId, right], 1, { source: "DERIVED_SHARED_PARENT" });
-        add(right, left, "SIBLING_OF", [right, parentId, left], 1, { source: "DERIVED_SHARED_PARENT" });
+  if (deriveExtendedRelations) {
+    for (const parentId of allIds) {
+      const children = childrenOf(parentId);
+      for (let leftIndex = 0; leftIndex < children.length; leftIndex++) {
+        for (let rightIndex = leftIndex + 1; rightIndex < children.length; rightIndex++) {
+          const left = children[leftIndex];
+          const right = children[rightIndex];
+          add(left, right, "SIBLING_OF", [left, parentId, right], 1, { source: "DERIVED_SHARED_PARENT" });
+          add(right, left, "SIBLING_OF", [right, parentId, left], 1, { source: "DERIVED_SHARED_PARENT" });
+        }
       }
     }
-  }
-  for (const childId of allIds) {
-    for (const parentEdge of outgoing(childId, "CHILD_OF")) {
-      const parentId = parentEdge.to;
-      const parentSex = resolveCharacterSexConsensus({ snapshot: nodes.get(parentId) }).sex;
-      const inferredBranch = parentSex === "male" ? "PATERNAL" : parentSex === "female" ? "MATERNAL" : null;
-      const branch = parentEdge.branchConflict || parentEdge.branch && inferredBranch && parentEdge.branch !== inferredBranch
-        ? null : parentEdge.branch || inferredBranch;
-      for (const grandparentId of parentsOf(parentId)) {
-        add(grandparentId, childId, "GRANDPARENT_OF", [grandparentId, parentId, childId], 0.95, { source: "DERIVED_KINSHIP", branch });
-        add(childId, grandparentId, "GRANDCHILD_OF", [childId, parentId, grandparentId], 0.95, { source: "DERIVED_KINSHIP", branch });
-      }
-      for (const parentSibling of outgoing(parentId, "SIBLING_OF").map((edge) => edge.to)) {
-        add(parentSibling, childId, "AUNT_UNCLE_OF", [parentSibling, parentId, childId], 0.9, { source: "DERIVED_KINSHIP", branch });
-        add(childId, parentSibling, "NIECE_NEPHEW_OF", [childId, parentId, parentSibling], 0.9, { source: "DERIVED_KINSHIP", branch });
-        const parentSiblingNode = nodes.get(parentSibling);
-        const sex = resolveCharacterSexConsensus({ snapshot: parentSiblingNode }).sex;
-        const cousinBranch = branch === "PATERNAL" ? sex === "male" ? "PATERNAL_MALE" : sex === "female" ? "PATERNAL_FEMALE" : null : branch;
-        for (const cousinId of childrenOf(parentSibling)) {
-          add(cousinId, childId, "COUSIN_OF", [cousinId, parentSibling, parentId, childId], 0.85, { source: "DERIVED_KINSHIP", branch: cousinBranch });
-          // The reverse relation is derived from its own parent branch, not ours.
+    for (const childId of allIds) {
+      for (const parentEdge of outgoing(childId, "CHILD_OF")) {
+        const parentId = parentEdge.to;
+        const parentSex = resolveCharacterSexConsensus({ snapshot: nodes.get(parentId) }).sex;
+        const inferredBranch = parentSex === "male" ? "PATERNAL" : parentSex === "female" ? "MATERNAL" : null;
+        const branch = parentEdge.branchConflict || parentEdge.branch && inferredBranch && parentEdge.branch !== inferredBranch
+          ? null : parentEdge.branch || inferredBranch;
+        for (const grandparentId of parentsOf(parentId)) {
+          add(grandparentId, childId, "GRANDPARENT_OF", [grandparentId, parentId, childId], 0.95, { source: "DERIVED_KINSHIP", branch });
+          add(childId, grandparentId, "GRANDCHILD_OF", [childId, parentId, grandparentId], 0.95, { source: "DERIVED_KINSHIP", branch });
+        }
+        for (const parentSibling of outgoing(parentId, "SIBLING_OF").map((edge) => edge.to)) {
+          add(parentSibling, childId, "AUNT_UNCLE_OF", [parentSibling, parentId, childId], 0.9, { source: "DERIVED_KINSHIP", branch });
+          add(childId, parentSibling, "NIECE_NEPHEW_OF", [childId, parentId, parentSibling], 0.9, { source: "DERIVED_KINSHIP", branch });
+          const parentSiblingNode = nodes.get(parentSibling);
+          const sex = resolveCharacterSexConsensus({ snapshot: parentSiblingNode }).sex;
+          const cousinBranch = branch === "PATERNAL" ? sex === "male" ? "PATERNAL_MALE" : sex === "female" ? "PATERNAL_FEMALE" : null : branch;
+          for (const cousinId of childrenOf(parentSibling)) {
+            add(cousinId, childId, "COUSIN_OF", [cousinId, parentSibling, parentId, childId], 0.85, { source: "DERIVED_KINSHIP", branch: cousinBranch });
+            // The reverse relation is derived from its own parent branch, not ours.
+          }
         }
       }
     }
   }
+  for (const edge of edges) if (edge.type === "SIBLING_OF" && rejectedSiblingPairs.has(unorderedPairKey(edge.from, edge.to))) edge.evidenceConflict = true;
   const resolveRelationBetween = (from, to, allowedTypes = null) => {
     const allowed = allowedTypes === null ? null : new Set((Array.isArray(allowedTypes) ? allowedTypes : []).map(String));
     const matches = outgoing(from).filter((edge) => edge.to === String(to) && (!allowed || allowed.has(edge.type)));
@@ -427,11 +689,17 @@ function buildKinshipGraphInternal(source = {}, { includeOtherParents = true, ot
     const edge = matches[0] || null;
     if (!edge) return { relation: null, diagnostic: null };
     if (edge.branchConflict) return { relation: null, diagnostic: { code: "RELATION_CONFLICT_PATH", from: String(from), to: String(to) } };
-    if (edge.parentEvidenceConflict || edge.relationshipKindConflict) {
-      return { relation: null, diagnostic: { code: edge.parentEvidenceConflict ? "RELATION_CONFLICT_EVIDENCE" : "RELATIONSHIP_KIND_CONFLICT", from: String(from), to: String(to) } };
+    if (edge.parentEvidenceConflict || edge.relationshipKindConflict || edge.evidenceConflict) {
+      return { relation: null, diagnostic: { code: edge.relationshipKindConflict ? "RELATIONSHIP_KIND_CONFLICT" : "RELATION_CONFLICT_EVIDENCE", from: String(from), to: String(to) } };
     }
     const node = nodes.get(String(from));
-    const sex = resolveCharacterSexConsensus({ snapshot: node });
+    const targetGenderClaims = edge.type === "BETROTHED_TO"
+      ? [...new Set((edge.betrothalSources || []).filter(source => String(source.targetId) === String(from)
+        && (source.targetGender === "male" || source.targetGender === "female")).map(source => source.targetGender))]
+      : [];
+    const sex = targetGenderClaims.length > 1
+      ? { sex: "unknown", source: "CONFLICT", conflict: true, status: "RELATION_GENDER_CONFLICT" }
+      : resolveCharacterSexConsensus({ snapshot: node, relation: targetGenderClaims.length ? { gender: targetGenderClaims[0] } : null });
     const seniorityReferenceId = edge.type === "AUNT_UNCLE_OF" ? edge.relationPath[1] : String(to);
     const seniority = compareCharacterSeniority(node, nodes.get(seniorityReferenceId));
     const structuredPath = [];
@@ -444,7 +712,10 @@ function buildKinshipGraphInternal(source = {}, { includeOtherParents = true, ot
       structuredPath.push({ type: direct?.type || edge.type, from: pathFrom, to: pathTo, ...(relationshipKind ? { relationshipKind } : {}) });
     }
     const relationshipKind = edge.relationshipKind || (edge.type.startsWith("STEP_") ? "STEP" : "UNSPECIFIED");
-    return { relation: { ...edge, seniority, seniorityReferenceId, relationshipKind, sex: sex.sex, sexSource: sex.source, label: resolveKinshipLabel({ type: edge.type, sex: sex.sex, branch: edge.branch, seniority, relationshipKind }), structuredPath }, diagnostic: null };
+    const label = edge.type === "BETROTHED_TO" ? sex.sex === "male" ? "未婚夫" : sex.sex === "female" ? "未婚妻" : "订婚对象"
+      : resolveKinshipLabel({ type: edge.type, sex: sex.sex, branch: edge.branch, seniority, relationshipKind });
+    return { relation: { ...edge, seniority, seniorityReferenceId, relationshipKind, sex: sex.sex, sexSource: sex.source,
+      sexConflict: sex.conflict === true, label, structuredPath }, diagnostic: null };
   };
   const relationBetween = (from, to) => resolveRelationBetween(from, to);
   const relationBetweenOfTypes = (from, to, allowedTypes) => resolveRelationBetween(from, to, allowedTypes);
@@ -460,7 +731,7 @@ function buildKinshipGraph(source = {}, options = {}) {
 function buildLegacyStructuralKinshipGraph(source = {}, options = {}) {
   // This explicitly named API is for historical structural tests/diagnostics only.
   // It does not verify freshness or grant current-fact/Memory permission.
-  return buildKinshipGraphInternal(source, options);
+  return buildKinshipGraphInternal(source, { ...options, allowUnverifiedFormerSpouses: options.allowUnverifiedFormerSpouses ?? true });
 }
 
 module.exports = { buildKinshipGraph, buildLegacyStructuralKinshipGraph, explicitRelationshipKind };

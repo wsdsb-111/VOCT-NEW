@@ -2,7 +2,8 @@
 
 const { normalizeGameDate, resolveLifeStatus } = require("../worldline/character-temporal-facts");
 const { getCharacterPersonalName } = require("../memory-system/character-identity");
-const { currentDirectParentFilter, currentPublicParentFilter, getTargetedKinshipGraph } = require("../worldline/kinship-graph-cache");
+const { currentDirectParentFilter, currentPublicParentFilter } = require("../worldline/kinship-graph-cache");
+const { getFamilyVisibility } = require("../worldline/family-visibility");
 const PRIVATE_FIELDS = ["personality", "sexuality", "boldness", "compassion", "energy", "greed", "honor", "rationality", "sociability", "vengefulness", "zeal", "capitalLocation"];
 const profileViewSources = new WeakMap();
 
@@ -24,155 +25,15 @@ function runtimeCharacterId(value) {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
-function characterAt(gameData, characterId) {
-  if (!characterId) return null;
-  const characters = gameData?.characters;
-  return characters instanceof Map
-    ? characters.get(characterId) ?? characters.get(String(characterId)) ?? null
-    : characters?.[characterId] ?? characters?.[String(characterId)] ?? null;
-}
-
-function parentReferences(character) {
-  if (Array.isArray(character?.parents)) return character.parents;
-  const parents = character?.parents && typeof character.parents === "object" ? Object.values(character.parents) : [];
-  return [...parents, character?.father, character?.mother].filter(value => value !== null && value !== undefined);
-}
-
-function evidenceRows(character) {
-  return Array.isArray(character?.evidence?.relations) ? character.evidence.relations : [];
-}
-
-function explicitStepRelationship(record) {
-  return ["relationshipKind", "parentage", "parentType", "kinshipType", "kind"]
-    .some(key => typeof record?.[key] === "string" && /STEP|继亲|繼親/iu.test(record[key]));
-}
-
-function directParentCandidates(child, parent, childId, parentId) {
-  const candidates = [];
-  const add = value => {
-    if (!value || typeof value !== "object") return;
-    let proof = value.directParentEvidence || value.parentEvidence || value;
-    if (!proof || typeof proof !== "object") return;
-    // A typed step-parent must not become a direct relative through an otherwise
-    // valid nested parent source; keep the conflict in the complete candidate set.
-    if (explicitStepRelationship(value) || explicitStepRelationship(proof)) proof = { ...proof, evidenceConflict: true };
-    const key = JSON.stringify(proof);
-    if (!candidates.some(item => JSON.stringify(item) === key)) candidates.push(proof);
-  };
-  for (const reference of parentReferences(child)) {
-    if (runtimeCharacterId(reference) === parentId && typeof reference === "object") add(reference);
-  }
-  for (const evidence of evidenceRows(child)) {
-    if (runtimeCharacterId(evidence?.ownerId) === parentId && evidence?.directParentEvidence) add(evidence);
-  }
-  for (const evidence of evidenceRows(parent)) {
-    if (runtimeCharacterId(evidence?.ownerId) === childId && evidence?.relationType === "parent") add(evidence);
-  }
-  for (const entry of Array.isArray(parent?.children) ? parent.children : []) {
-    if (runtimeCharacterId(entry) === childId && (entry.directParentEvidence || entry.parentEvidence)) add(entry);
-  }
-  return candidates;
-}
-
-function hasCurrentPublicParent(gameData, childId, parentId) {
-  const child = characterAt(gameData, childId);
-  const parent = characterAt(gameData, parentId);
-  // A current CK3 parent row remains proof when that parent is not a speaker.
-  if (!child) return false;
-  const candidates = directParentCandidates(child, parent, childId, parentId);
-  if (!candidates.length) return false;
-  const accepts = currentDirectParentFilter(gameData);
-  // A valid duplicate must not upgrade a conflicting or stale record for the same pair.
-  return candidates.every(proof => accepts(proof, { childId, parentId }));
-}
-
-function currentPublicOtherParent(gameData, sourceParentId, childId) {
-  const sourceParent = characterAt(gameData, sourceParentId);
-  if (!sourceParent) return [];
-  const accepts = currentPublicParentFilter(gameData);
-  const candidates = [];
-  for (const entry of Array.isArray(sourceParent.children) ? sourceParent.children : []) {
-    if (runtimeCharacterId(entry) !== childId) continue;
-    const evidence = entry.otherParent;
-    if (evidence === null || evidence === undefined) continue;
-    const parentId = runtimeCharacterId(evidence?.parentId ?? evidence?.otherParentId ?? evidence?.id);
-    const identityFields = [evidence.id, evidence.parentId, evidence.otherParentId].filter(value => value !== null && value !== undefined);
-    if (!parentId || explicitStepRelationship(entry) || explicitStepRelationship(evidence) || evidence.sourceRelation !== "kids.otherParent"
-      || identityFields.some(value => runtimeCharacterId(value) !== parentId)
-      || runtimeCharacterId(evidence.sourceOwnerId) !== sourceParentId
-      || !accepts(evidence, evidence, { childId, sourceOwnerId: sourceParentId })) return [];
-    candidates.push(evidence);
-  }
-  if (!candidates.length) return [];
-  const signatures = new Set(candidates.map(evidence => JSON.stringify([
-    runtimeCharacterId(evidence.id ?? evidence.parentId ?? evidence.otherParentId),
-    runtimeCharacterId(evidence.sourceOwnerId),
-    runtimeCharacterId(evidence.childId),
-    evidence.source,
-    evidence.sourceRelation,
-    evidence.relationType,
-    evidence.publicStatus,
-    evidence.knowledgeStatus,
-    evidence.campaignToken,
-    evidence.sourceSnapshotId,
-    evidence.evidenceConflict === true
-  ])));
-  // Repeated source rows must agree as a whole; a current row cannot mask a bad duplicate.
-  return signatures.size === 1 ? [runtimeCharacterId(candidates[0].parentId ?? candidates[0].otherParentId ?? candidates[0].id)] : [];
-}
-
-function publicParentsOf(gameData, character) {
-  const childId = runtimeCharacterId(character);
-  if (!childId || !characterAt(gameData, childId)) return new Set();
-  const candidateIds = new Set(parentReferences(character).map(runtimeCharacterId).filter(Boolean));
-  for (const evidence of evidenceRows(character)) {
-    const proof = evidence?.directParentEvidence;
-    if (proof && runtimeCharacterId(evidence?.ownerId ?? proof.parentId)) candidateIds.add(runtimeCharacterId(evidence.ownerId ?? proof.parentId));
-  }
-  // CK3_OTHER_PARENT facts are bound to the current legal parent that emitted the kids.otherParent row.
-  const otherParentRows = Array.isArray(character?.evidence?.otherParentRelations) ? character.evidence.otherParentRelations : [];
-  for (const evidence of otherParentRows) {
-    const ownerId = runtimeCharacterId(evidence?.sourceOwnerId);
-    const accepts = currentPublicParentFilter(gameData);
-    if (ownerId && evidence?.sourceRelation === "kids.otherParent"
-      && accepts(evidence, evidence, { childId, sourceOwnerId: ownerId })) candidateIds.add(ownerId);
-  }
-
-  const parentIds = new Set();
-  for (const parentId of candidateIds) {
-    if (hasCurrentPublicParent(gameData, childId, parentId)) parentIds.add(parentId);
-  }
-  for (const parentId of [...parentIds]) {
-    for (const otherParentId of currentPublicOtherParent(gameData, parentId, childId)) parentIds.add(otherParentId);
-  }
-  return parentIds;
-}
-
 function isPublicCloseFamily(observerId, targetId, gameData) {
-  const observer = characterAt(gameData, observerId);
-  const target = characterAt(gameData, targetId);
-  if (!observer || !target) return false;
-  const observerParents = publicParentsOf(gameData, observer);
-  const targetParents = publicParentsOf(gameData, target);
-  const isBastard = person => getTraitsForSelfProfile(person).some(trait =>
-    ["bastard", "legitimized_bastard"].includes(normalizeTraitKey(trait)));
-  // The whitelist is not a route for biological-parent disclosure of a bastard.
-  if (observerParents.has(targetId) && !isBastard(observer)
-    || targetParents.has(observerId) && !isBastard(target)) return true;
-  for (const parentId of observerParents) if (targetParents.has(parentId)) return true;
-  // The current CK3 siblings row is independent proof even when no parent row
-  // is available. Its parser evidence binds the row to this owner and snapshot.
-  const siblingRows = [[observer, targetId], [target, observerId]].flatMap(([owner, otherId]) =>
-    (Array.isArray(owner.siblings) ? owner.siblings : []).filter(row => runtimeCharacterId(row) === otherId)
-      .map(row => ({ ownerId: runtimeCharacterId(owner), row })));
-  if (siblingRows.length && typeof gameData.campaignToken === "string" && gameData.campaignToken
-    && normalizeGameDate(gameData.date) && Number.isFinite(gameData.totalDays)
-    && siblingRows.every(({ ownerId, row }) => !explicitStepRelationship(row) && !row.evidenceConflict
-      && (row.evidence?.age || []).some(proof => proof.ageSource === "CK3_LIVE_RELATIVE_AGE"
-        && Number(proof.sourceOwnerId) === ownerId && proof.relationType === "sibling"
-        && proof.source === `${ownerId}.siblings` && proof.campaignToken === gameData.campaignToken
-        && proof.sourceSnapshotId === `${gameData.date}/${gameData.totalDays}`))) return true;
-  return false;
+  const observer = runtimeCharacterId(observerId);
+  const target = runtimeCharacterId(targetId);
+  return !!observer && !!target && getFamilyVisibility(profileViewSources.get(gameData) || gameData, observer).ids.has(String(target));
+}
+
+function familyKnown(observer, target, context) {
+  return context.familyVisibility ? context.familyVisibility.ids.has(String(runtimeCharacterId(target)))
+    : isPublicCloseFamily(runtimeCharacterId(observer), runtimeCharacterId(target), context.identitySource || context.gameData);
 }
 
 function traitFactKeys(character, observableOnly = false) {
@@ -186,7 +47,7 @@ function getAutomaticTraitAccess(observer, target, gameData, options = {}) {
   if (!observerId || !targetId || observerId === targetId) return { source: null, traitKeys: [] };
   const traitKeys = traitFactKeys(target);
   if (!traitKeys.length) return { source: null, traitKeys: [] };
-  if (isPublicCloseFamily(observerId, targetId, gameData)) return { source: "PUBLIC_CLOSE_FAMILY", traitKeys };
+  if (options.familyVisibility ? options.familyVisibility.ids.has(String(targetId)) : isPublicCloseFamily(observerId, targetId, gameData)) return { source: "PUBLIC_CLOSE_FAMILY", traitKeys };
   const activeParticipantIds = Array.isArray(options?.activeParticipantIds) ? options.activeParticipantIds : [];
   const present = new Set(activeParticipantIds.map(runtimeCharacterId).filter(Boolean));
   if (present.has(observerId) && present.has(targetId)) {
@@ -203,15 +64,14 @@ function getTraitsForKnownProfile(observer, target, knowledgeContext = {}) {
   const secretTraits = { secret_bastard: "bastard", secret_disputed_heritage: "disputed_heritage", secret_witch: "witch",
     secret_cannibal: "cannibal", secret_deviant: "deviant", secret_incest: "incestuous", secret_adulterer: "adulterer" };
   const automatic = getAutomaticTraitAccess(observer, target, knowledgeContext.gameData,
-    { activeParticipantIds: knowledgeContext.activeParticipantIds });
+    { activeParticipantIds: knowledgeContext.activeParticipantIds, familyVisibility: knowledgeContext.familyVisibility });
   const automaticTraitKeys = new Set(automatic.traitKeys);
   return getTraitsForSelfProfile(target).filter(trait => {
     const factKey = `trait_${normalizeTraitKey(trait)}`;
-    if (automaticTraitKeys.has(factKey)) return true;
     const facts = scopedDisclosureFacts(observer, target, knowledgeContext).filter(fact => fact.factType === "TRAIT" && fact.factKey === factKey);
-    if (facts.some(fact => fact.currentDirectObservation === true && fact.effectiveKnown === true)) return true;
     if (facts.some(fact => fact.status === "MANUAL_HIDDEN")) return false;
-    return facts.some(fact => fact.effectiveKnown === true)
+    if (facts.some(fact => fact.currentDirectObservation === true && fact.effectiveKnown === true)) return true;
+    return automaticTraitKeys.has(factKey) || facts.some(fact => fact.effectiveKnown === true)
       || secrets.some(secret => Number(secret.ownerId) === Number(target?.id) && secretTraits[secret.type] === normalizeTraitKey(trait));
   });
 }
@@ -227,13 +87,12 @@ function scopedDisclosureFacts(observer, target, context) {
 
 function knownTitle(observer, target, value, context) {
   if (!value || /^none(?:\s|$)|^concept_none$/i.test(value)) return "";
-  if (isPublicCloseFamily(runtimeCharacterId(observer), runtimeCharacterId(target), context.gameData)) return value;
   const normalize = text => String(text).normalize("NFKC").trim();
   const facts = scopedDisclosureFacts(observer, target, context).filter(fact => fact.factType === "TITLE"
     && (normalize(fact.value) === normalize(value)
       || /^concept_/.test(value) && fact.aliases?.includes(normalize(value).toLowerCase())));
   if (facts.some(fact => fact.status === "MANUAL_HIDDEN")) return "";
-  if (facts.some(fact => fact.effectiveKnown === true)) return value;
+  if (familyKnown(observer, target, context) || facts.some(fact => fact.effectiveKnown === true)) return value;
   return "";
 }
 
@@ -249,24 +108,27 @@ function knownPersonalName(observer, target, context) {
   return known ? normalize(known.value) : null;
 }
 
+function isNameManuallyHidden(observer, target, context) {
+  return scopedDisclosureFacts(observer, target, context).some(fact => fact.factType === "NAME" && fact.status === "MANUAL_HIDDEN");
+}
+
+function isAgeManuallyHidden(observer, target, context) {
+  return scopedDisclosureFacts(observer, target, context).some(fact => fact.factType === "AGE" && fact.status === "MANUAL_HIDDEN");
+}
+
 // A per-request presentation copy protects custom templates and scripts as well as bundled ones.
 function createTraitProfileView(gameData, character, memoryContext = null, { includeStepFamily = false } = {}) {
   const observer = gameData?.characters?.get(Number(character?.id)) || character;
   const identityData = profileViewSources.get(gameData) || gameData;
-  const identityGraph = getTargetedKinshipGraph(identityData, [...(identityData?.characters?.keys?.() || [])], { maxDepth: 3, maxNodes: 4096 });
-  const sourceProfiles = new Map(identityGraph.nodes);
-  // Off-scene kids rows carry their parent proof on the edge, not on the child node.
-  for (const edge of identityGraph.edges) {
-    if (edge.type !== "PARENT_OF" || edge.relationshipKind === "STEP" || edge.parentEvidenceConflict || edge.relationshipKindConflict || !edge.parentEvidence?.length) continue;
-    const child = sourceProfiles.get(String(edge.to));
-    if (!child) continue;
-    const parents = Array.isArray(child.parents) ? child.parents : Object.values(child.parents || {});
-    sourceProfiles.set(String(edge.to), { ...child, parents: [...parents, ...edge.parentEvidence] });
-  }
-  const identitySource = { ...identityData, characters: sourceProfiles };
-  const knowledge = { ...memoryContext, campaignToken: gameData?.campaignToken, currentGameDate: gameData?.date, gameData, identitySource };
+  // Identity aliases cover the entire raw directory; the bounded graph serves
+  // family authorization only and cannot truncate the identity scrub table.
+  const sourceProfiles = identityData?.characters instanceof Map ? identityData.characters : new Map(Object.entries(identityData?.characters || {}));
+  const familyVisibility = getFamilyVisibility(identityData, observer?.id);
+  const identitySource = identityData;
+  const knowledge = { ...memoryContext, campaignToken: gameData?.campaignToken, currentGameDate: gameData?.date,
+    gameData: identityData, identitySource, familyVisibility };
   const copies = new Map();
-  const relativeFields = new Set(["parents", "children", "siblings", "spouses", "concubines", "otherParent", "concubineOf", "betrothed"]);
+  const relativeFields = new Set(["parents", "children", "siblings", "spouse", "spouses", "formerSpouses", "deceasedSpouses", "concubines", "otherParent", "concubineOf", "betrothed"]);
   const currentParentBindings = new Set();
   for (const owner of gameData?.characters?.values?.() || []) {
     for (const [field, sourceRelation] of [["children", "kids.otherParent"], ["siblings", "siblings.otherParent"]]) {
@@ -366,7 +228,8 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
         }
         if (key === "parentName" && typeof value[key] === "string") {
           const parentId = runtimeCharacterId(value.parentId ?? value.otherParentId);
-          result[key] = parentId === runtimeCharacterId(observer) || isPublicCloseFamily(runtimeCharacterId(observer), parentId, identitySource)
+          result[key] = parentId === runtimeCharacterId(observer) || familyKnown(observer, { id: parentId }, knowledge)
+            && !isNameManuallyHidden(observer, { id: parentId }, knowledge)
             ? value[key] : knownPersonalName(observer, { id: parentId }, knowledge) || "未获知姓名的人物";
           continue;
         }
@@ -376,27 +239,27 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
         const isSelf = Number(value.id) > 0 && Number(value.id) === Number(observer?.id);
         if (Array.isArray(value.traits)) result.traits = (isSelf ? getTraitsForSelfProfile(value) : getTraitsForKnownProfile(observer, value, knowledge)).map(trait => copy(trait));
         if (!isSelf) {
-          const closeFamily = isPublicCloseFamily(runtimeCharacterId(observer), runtimeCharacterId(value), identitySource);
-          const knowsAge = closeFamily
-            || scopedDisclosureFacts(observer, value, knowledge).some(fact => fact.factType === "AGE"
-            && fact.effectiveKnown === true && fact.status !== "MANUAL_HIDDEN");
+          const closeFamily = familyKnown(observer, value, knowledge);
+          const ageFacts = scopedDisclosureFacts(observer, value, knowledge).filter(fact => fact.factType === "AGE");
+          const knowsAge = !ageFacts.some(fact => fact.status === "MANUAL_HIDDEN")
+            && (closeFamily || ageFacts.some(fact => fact.effectiveKnown === true));
           if (!knowsAge) {
             if ("age" in result) result.age = null;
-            for (const key of ["birth", "birthDate", "birthDateTotalDays", "birthTotalDays"]) delete result[key];
+            for (const key of ["birth", "birthDate", "birthDateTotalDays", "birthTotalDays", "ageAtDeath", "ageAtDeathSource"]) delete result[key];
           }
           for (const key of ["primaryTitle", "titleRankConcept", "heldCourtAndCouncilPositions"]) {
             if (key in result) result[key] = key === "heldCourtAndCouncilPositions"
               ? String(value[key] || "").split(/[,，、;；\n|]/).map(title => knownTitle(observer, value, title.trim(), knowledge)).filter(Boolean).join("、")
               : knownTitle(observer, value, String(value[key] || ""), knowledge);
           }
-          if (!closeFamily) {
+          if (!closeFamily || isNameManuallyHidden(observer, value, knowledge)) {
             const personalName = knownPersonalName(observer, value, knowledge) || "未获知姓名的人物";
             for (const key of ["name", "firstName", "shortName"]) if (key in result) result[key] = personalName;
             result.shortName = personalName;
             result.fullName = value.nickname ? `${personalName} '${value.nickname}'` : personalName;
             if ("house" in result) result.house = "未获知家族";
           }
-          for (const key of PRIVATE_FIELDS) delete result[key];
+          if (!closeFamily) for (const key of PRIVATE_FIELDS) delete result[key];
           for (const key of ["secrets", "knownSecrets", "memories", "conversationSummaries"]) if (key in result) result[key] = [];
         }
       }
@@ -414,7 +277,8 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
   for (const person of sourceProfiles.values()) {
     const projected = view.characters?.get(Number(person.id)) || projectedById.get(runtimeCharacterId(person));
     if (!projected) continue;
-    const fullIdentity = Number(person.id) === Number(observer.id) || isPublicCloseFamily(Number(observer.id), Number(person.id), identitySource);
+    const fullIdentity = Number(person.id) === Number(observer.id)
+      || familyKnown(observer, person, knowledge) && !isNameManuallyHidden(observer, person, knowledge);
     for (const alias of [person.name, person.firstName, person.shortName, person.fullName].filter(value => typeof value === "string" && value.length > 1)) {
       const names = relationAliases.get(alias) || new Set();
       names.add(projected.shortName || projected.name || "未获知姓名的人物");
@@ -428,14 +292,13 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
       }
     }
   }
-  const replacements = [...hiddenAliases].sort(([left], [right]) => right.length - left.length);
-  const scrubDisplay = text => replacements.reduce((result, [alias, replacement]) => {
-    if (/^[\p{Script=Latin}\d .'-]+$/u.test(alias)) {
-      const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      return result.replace(new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, "gu"), replacement);
-    }
-    return result.replaceAll(alias, replacement);
-  }, text);
+  const aliases = [...hiddenAliases.keys()].sort((left, right) => right.length - left.length);
+  const aliasPattern = aliases.length ? new RegExp(aliases.map(alias => alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "gu") : null;
+  const scrubDisplay = text => aliasPattern ? text.replace(aliasPattern, (alias, offset) => {
+    if (/^[\p{Script=Latin}\d .'-]+$/u.test(alias)
+      && (/[\p{L}\p{N}_]/u.test(text[offset - 1] || "") || /[\p{L}\p{N}_]/u.test(text[offset + alias.length] || ""))) return alias;
+    return hiddenAliases.get(alias);
+  }) : text;
   const visited = new WeakSet();
   const scrubMetadata = value => {
     if (!value || typeof value !== "object" || visited.has(value)) return;
@@ -474,4 +337,4 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
 }
 
 module.exports = { NON_OBSERVABLE_TO_OTHERS, OBSERVABLE_TO_OTHERS, normalizeTraitKey, getTraitAliases, resolveTraitVisibility,
-  getTraitsForSelfProfile, getTraitsForObservedProfile, isPublicCloseFamily, getAutomaticTraitAccess, getTraitsForKnownProfile, createTraitProfileView };
+  getTraitsForSelfProfile, getTraitsForObservedProfile, isPublicCloseFamily, getAutomaticTraitAccess, getTraitsForKnownProfile, createTraitProfileView, isNameManuallyHidden, isAgeManuallyHidden };

@@ -922,6 +922,8 @@ ${nameAccessRule}
         query: latestUserQuery,
         currentFactRegistry,
         ageAuthorityGameData,
+        relationAuthorityGameData: ageAuthorityGameData,
+        memoryContext,
         ageDiagnostics,
         familyDiagnostics
       });

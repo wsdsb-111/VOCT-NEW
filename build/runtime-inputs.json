@@ -854,6 +854,10 @@
       "target": "out/main/worldline/family-entity-fact-bundle.js"
     },
     {
+      "source": "main/worldline/family-visibility.js",
+      "target": "out/main/worldline/family-visibility.js"
+    },
+    {
       "source": "main/worldline/frozen-coverage-manifest.js",
       "target": "out/main/worldline/frozen-coverage-manifest.js"
     },

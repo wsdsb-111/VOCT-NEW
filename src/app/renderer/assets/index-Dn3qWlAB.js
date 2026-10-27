@@ -59,7 +59,7 @@ function V95UiSettings() {
     error && jsxRuntimeExports.jsx("p", { role: "status", children: error })
   ] });
 }
-const VOTC_FEATURE_VERSION = "V9.6.0";
+const VOTC_FEATURE_VERSION = "V9.6.1";
 const VOTC_WORKSHOP_MOD_VERSION = "2.0.5";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;

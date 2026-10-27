@@ -119,7 +119,7 @@ custom = false;
   assert.equal(projected().age, null);
   delete child.relationshipKind;
   child.traits = [{ traitId: "bastard" }];
-  assert.equal(projected().name, "未获知姓名的人物", "a bastard child does not gain parent disclosure through the edge projection");
+  assert.equal(projected().name, "场外子女", "V9.6.1 preserves verified public legal parentage regardless of a child's trait");
   child.traits = [];
   child.directParentEvidence.sourceSnapshotId = "stale";
   assert.equal(projected(), undefined, "an expired public-child row is removed rather than granting identity");

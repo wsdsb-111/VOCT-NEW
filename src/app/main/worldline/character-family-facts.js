@@ -5,7 +5,7 @@ const { inferGenderFromPronoun } = require("../game-data/character");
 const { createRelationshipResolver } = require("../game-data/relationship-resolver");
 const { resolveCharacterAge } = require("./character-age-service");
 const { normalizeSpouseRecords } = require("./canonical-spouse-record");
-const { getCachedKinshipGraph, getTargetedKinshipGraph } = require("./kinship-graph-cache");
+const { getTargetedKinshipGraph } = require("./kinship-graph-cache");
 const { formatDeathFact, resolveLifeStatus } = require("./character-temporal-facts");
 const { resolveKinshipLabel } = require("./kinship-label-resolver");
 const { resolveCharacterSexConsensus } = require("./character-demographic-normalizer");
@@ -13,12 +13,12 @@ const { resolveAnchoredRelationMention } = require("./anchored-relation-resolver
 const { buildFamilyEntityFactBundle } = require("./family-entity-fact-bundle");
 const { resolveRelationshipCurrentTruth } = require("./relationship-current-truth");
 const { buildStepFamilyFactBlock, isStepFamilyQuery } = require("./step-family-facts");
-const { isPublicCloseFamily } = require("../prompts/trait-profile-selector");
+const { isPublicCloseFamily, isNameManuallyHidden, isAgeManuallyHidden } = require("../prompts/trait-profile-selector");
 
 const DISPLAY_TYPES = new Set(["PARENT_OF", "CHILD_OF", "STEP_PARENT_OF", "STEP_CHILD_OF", "STEP_SIBLING_OF", "SIBLING_OF", "GRANDPARENT_OF", "AUNT_UNCLE_OF", "NIECE_NEPHEW_OF", "COUSIN_OF", "SPOUSE_OF", "FORMER_SPOUSE_OF", "DECEASED_SPOUSE_OF"]);
 
 function characterName(character, id) {
-  return character?.fullName || character?.shortName || character?.firstName || character?.name || `#${id}`;
+  return character?.fullName || character?.shortName || character?.firstName || character?.name || "姓名未载入";
 }
 
 function isExplicitCurrentAgeQuestion(query) {
@@ -335,7 +335,7 @@ function resolveTrustedKinshipLabel(relation, sex, seniority, graph) {
   return `${label}（比${parentLabel}${seniority > 0 ? "年长" : "年幼"}）`;
 }
 
-function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId = null, currentFactRegistry = null, ageAuthorityGameData = null, ageDiagnostics = null, familyDiagnostics = null } = {}) {
+function buildFamilyFactBlockFromAuthority(character, gameData, { query = "", recentTargetId = null, currentFactRegistry = null, ageAuthorityGameData = null, ageDiagnostics = null, familyDiagnostics = null, profileGameData = gameData, memoryContext = null } = {}) {
   if (!character?.id || !gameData) return null;
   const started = performance.now();
   if (isStepFamilyQuery(query)) {
@@ -346,7 +346,10 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
       return step.text;
     }
   }
-  const graph = getCachedKinshipGraph(gameData, { includeOtherParents: /母亲|父亲|父母|母后|母妃|父王|父皇|同父|同母/u.test(query) });
+  const namedSeeds = [...(gameData.characters?.values?.() || [])].filter(person => [person.name, person.shortName, person.fullName].some(name => name && query.includes(name))).map(person => person.id);
+  const graph = getTargetedKinshipGraph(gameData, [character.id, ...namedSeeds], { maxDepth: 4, maxNodes: 4096 });
+  if (graph.scopeTruncated) return buildUnresolvedRelationConstraint({ status: "RELATION_SOURCE_INCOMPLETE" });
+  const profileGraph = profileGameData === gameData ? graph : getTargetedKinshipGraph(profileGameData, [character.id, ...namedSeeds], { maxDepth: 4, maxNodes: 4096 });
   const metrics = { nodeVisits: 0, edgeVisits: 0, targetedParentQuery: false };
   const parentQuery = buildParentQuery(character, graph, query, metrics, gameData);
   if (parentQuery) {
@@ -363,9 +366,14 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
     relationResolution = resolveAgeBoundAmbiguousRelation(relationResolution, graph, ageAuthorityGameData, gameData);
   }
   if (relationResolution?.intent?.sourcePhrase) {
-    console.log(`[VOTC Relation] query=${String(query).replace(/\s+/g, " ").trim()} intent=${relationResolution.intent.relationTypes.join(",") || "NONE"} sex=${relationResolution.intent.sexConstraint || "unknown"} anchorMention=${relationResolution.anchor.mention || "-"} anchorRuntimeId=${relationResolution.relationAnchorRuntimeId || "-"} targetRuntimeId=${relationResolution.targetRuntimeId || "-"} targetName=${relationResolution.target?.name || "-"} resolution=${relationResolution.status}`);
+    console.log(`[VOTC Relation] intent=${relationResolution.intent.relationTypes.join(",") || "NONE"} resolution=${relationResolution.status}`);
   }
-  const canUseSourceAge = isExplicitCurrentAgeQuestion(query) && relationResolution?.status === "RELATION_RESOLVED";
+  const visibleTarget = profileGraph.nodes.get(String(relationResolution?.targetRuntimeId));
+  const agePermission = visibleTarget?.age !== null && visibleTarget?.age !== undefined
+    || isPublicCloseFamily(character.id, relationResolution?.targetRuntimeId, gameData);
+  const canUseSourceAge = isExplicitCurrentAgeQuestion(query) && relationResolution?.status === "RELATION_RESOLVED"
+    && agePermission && !isAgeManuallyHidden(character, { id: relationResolution.targetRuntimeId }, {
+      ...memoryContext, campaignToken: gameData.campaignToken, currentGameDate: gameData.date });
   const selectedTargetId = canUseSourceAge ? String(relationResolution.targetRuntimeId) : null;
   let selectedAge = null;
   if (canUseSourceAge) {
@@ -419,6 +427,7 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
     if (seen.has(key)) continue;
     seen.add(key);
     const relative = graph.nodes.get(edge.from) || {};
+    const visibleRelative = profileGraph.nodes.get(edge.from) || {};
     const relationAnchorId = relationResolution?.relationAnchorRuntimeId || character.id;
     const resolution = relationResolution?.status === "RELATION_RESOLVED" && typeof graph.relationBetweenOfTypes === "function"
       ? graph.relationBetweenOfTypes(edge.from, relationAnchorId, relationResolution.intent.relationTypes)
@@ -439,18 +448,19 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
       : edge.relationshipKind === "STEP" || edge.type.startsWith("STEP_")
         ? resolveTrustedKinshipLabel(trustedRelation, "unknown", null, graph)
         : currentFact?.relations[String(relationAnchorId)]?.label || resolveKinshipLabel({ type: edge.type, sex: "unknown", branch: edge.branch, relationshipKind: edge.relationshipKind });
-    const death = bundle.death ? { fact: bundle.death, text: formatDeathFact(relative, { ...temporal, characters: graph.nodes })?.text || "已故" } : null;
+    const death = bundle.death ? { fact: bundle.death, text: formatDeathFact(visibleRelative, { ...temporal, characters: profileGraph.nodes })?.text || "已故" } : null;
     const lifeStatus = resolveLifeStatus(relative);
-    const age = selectedTargetId === String(edge.from) && selectedAge ? selectedAge : { age: bundle.age, label: bundle.ageLabel };
+    const age = selectedTargetId === String(edge.from) && selectedAge ? selectedAge : resolveCharacterAge(visibleRelative, temporal);
+    const profileVisible = profileGameData === gameData || isPublicCloseFamily(character.id, edge.from, gameData);
     const details = [];
     if (!bundle.sourceComplete) details.push("来源范围不完整");
     if (sex.conflict && sex.sex === "unknown") details.push("性别数据存在冲突，未输出性别结论");
-    if (lifeStatus.conflict) details.push("生死状态存在冲突，未输出结论");
-    else if (death) {
+    if (profileVisible && lifeStatus.conflict) details.push("生死状态存在冲突，未输出结论");
+    else if (profileVisible && death) {
       details.push(death.text);
       if (age.label === "ageAtDeath" && age.age !== null && !/终年\s*\d+\s*岁/u.test(death.text)) details.push(`终年${age.age}岁`);
     }
-    else if (lifeStatus.alive === true) details.push("在世");
+    else if (profileVisible && lifeStatus.alive === true) details.push("在世");
     if (selectedTargetId === String(edge.from) && age.age === null) {
       details.push(age.label === "ageAtDeath" ? "去世年龄未知"
         : age.ageSource === "AGE_SOURCE_CONFLICT" ? "年龄来源冲突，当前年龄未知"
@@ -460,7 +470,7 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
     if (relationResolution?.status === "RELATION_RESOLVED") {
       const anchor = graph.nodes.get(String(relationAnchorId)) || {};
       const useAgeAwareLabel = trustedOrder !== null && ["SIBLING_OF", "STEP_SIBLING_OF", "COUSIN_OF", "AUNT_UNCLE_OF"].includes(resolution.relation.type);
-      lines.push(`- 查询关系主体：${characterName(anchor, relationAnchorId)}；查询关系：${useAgeAwareLabel ? label : relationResolution.intent.label || label}；目标人物：${characterName(relative, edge.from)}（Runtime ID：${edge.from}；性别：${sex.sex === "male" ? "男性" : sex.sex === "female" ? "女性" : "未知"}${details.length ? `；${details.join("；")}` : ""}）`);
+      lines.push(`- 查询关系主体：${characterName(anchor, relationAnchorId)}；查询关系：${useAgeAwareLabel ? label : relationResolution.intent.label || label}；目标人物：${characterName(relative, edge.from)}${profileVisible ? `（性别：${sex.sex === "male" ? "男性" : sex.sex === "female" ? "女性" : "未知"}${details.length ? `；${details.join("；")}` : ""}）` : details.length ? `（${details.join("；")}）` : ""}`);
     } else {
       lines.push(`- ${label}：${characterName(relative, edge.from)}${details.length ? `（${details.join("；")}）` : ""}`);
     }
@@ -474,6 +484,29 @@ function buildFamilyFactBlock(character, gameData, { query = "", recentTargetId 
   metrics.buildMs = performance.now() - started;
   if (Array.isArray(familyDiagnostics)) familyDiagnostics.push(metrics);
   return `=== 当前结构化家庭事实（本轮 CK3 数据） ===\n${lines.join("\n")}\n权威规则：亲属身份、性别、是否已故、死亡日期和年龄以本块结构化结果为准；相对时间只能使用系统给出的结果。若本块明确给出致死者，则以本块为准；若本块未给出致死者，可使用后续获准的 Current Game Truth / Worldline Game Truth。不得从 Memory 或模型推测致死者。Memory 只可补充过去经历与主观感受，不得覆盖这些事实。`;
+}
+
+function buildFamilyFactBlock(character, gameData, options = {}) {
+  const authority = currentAgeSnapshotMatches(options.relationAuthorityGameData, gameData)
+    ? options.relationAuthorityGameData : gameData;
+  const sourceCharacter = authority.characters?.get(Number(character?.id)) || authority.characters?.get(String(character?.id)) || character;
+  // Relation authority stays inside this module. Only its minimal structured
+  // answer is returned; templates continue receiving the ordinary profile view.
+  let text = buildFamilyFactBlockFromAuthority(sourceCharacter, authority, { ...options, profileGameData: gameData });
+  if (!text) return text;
+  const knowledge = { ...options.memoryContext, campaignToken: gameData.campaignToken, currentGameDate: gameData.date };
+  const seen = new WeakSet();
+  const hideNames = value => {
+    if (!value || typeof value !== "object" || seen.has(value)) return;
+    seen.add(value);
+    if (value instanceof Map) { for (const person of value.values()) hideNames(person); return; }
+    if (value.id && isNameManuallyHidden(sourceCharacter, value, knowledge)) {
+      for (const name of [value.fullName, value.shortName, value.firstName, value.name].filter(name => typeof name === "string" && name.length > 1).sort((a, b) => b.length - a.length)) text = text.replaceAll(name, "未获知姓名的人物");
+    }
+    for (const [key, entry] of Object.entries(value)) if (!["memories", "conversationSummaries", "secrets", "knownSecrets"].includes(key)) hideNames(entry);
+  };
+  hideNames(authority.characters);
+  return text;
 }
 
 module.exports = { buildFamilyFactBlock, formatStructuredCharacter, buildUnresolvedRelationConstraint, isExplicitCurrentAgeQuestion };
