@@ -28,7 +28,7 @@ function runtimeCharacterId(value) {
 function isPublicCloseFamily(observerId, targetId, gameData) {
   const observer = runtimeCharacterId(observerId);
   const target = runtimeCharacterId(targetId);
-  return !!observer && !!target && getFamilyVisibility(profileViewSources.get(gameData) || gameData, observer).ids.has(String(target));
+  return !!observer && !!target && getFamilyVisibility(profileViewSources.get(gameData) || gameData, observer, { targetId: target }).ids.has(String(target));
 }
 
 function familyKnown(observer, target, context) {

@@ -11,7 +11,7 @@ function id(value) {
 
 // One generational window per responder. Marriage may occur at either endpoint
 // of the blood relationship, never recursively through another affine family.
-function getFamilyVisibility(gameData, observerId, { maxNodes = 4096 } = {}) {
+function getFamilyVisibility(gameData, observerId, { maxNodes = 4096, targetId = null } = {}) {
   const observer = id(observerId);
   // Incoming-only parent/spouse records must be discoverable too. This small
   // index is rebuilt for each read (the parser permits same-day mutations);
@@ -36,9 +36,13 @@ function getFamilyVisibility(gameData, observerId, { maxNodes = 4096 } = {}) {
       }
     }
   };
-  const people = gameData?.characters instanceof Map ? gameData.characters.values() : Object.values(gameData?.characters || {});
-  for (const person of people) discover(person);
-  const graph = getTargetedKinshipGraph(gameData, [observer], { maxDepth: 9, maxNodes, deriveExtendedRelations: false, discoveryIndex });
+  const target = id(targetId);
+  if (!target) {
+    const people = gameData?.characters instanceof Map ? gameData.characters.values() : Object.values(gameData?.characters || {});
+    for (const person of people) discover(person);
+  }
+  const graph = getTargetedKinshipGraph(gameData, target ? [observer, target] : [observer],
+    { maxDepth: 9, maxNodes, deriveExtendedRelations: false, discoveryIndex });
   const ids = new Set(observer ? [observer] : []);
   const metrics = { ...graph.scopeMetrics, edgeVisits: 0 };
   if (!observer || graph.scopeTruncated) return { ids, scopeTruncated: !!graph.scopeTruncated, metrics };
