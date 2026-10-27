@@ -12,7 +12,8 @@ const truncated = getTargetedKinshipGraph({
   }
 }, [1], { maxDepth: 3, maxNodes: 2 });
 assert.equal(truncated.scopeTruncated, true, "an unseen neighbor at the exact cap must mark the graph incomplete");
-assert.equal(truncated.nodes.get("3").partial, true, "the unexpanded neighbor may exist only as a partial relation endpoint");
+assert.equal(truncated.nodes.size, 2, "the graph must honor the exact node cap without synthesizing extra endpoints");
+assert.equal(truncated.nodes.has("3"), false, "an unexpanded neighbor must remain outside the bounded graph");
 
 const complete = getTargetedKinshipGraph({
   contentFingerprint: "cap-complete",

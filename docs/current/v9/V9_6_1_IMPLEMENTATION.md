@@ -58,3 +58,5 @@ Runtime 的 353 项资源已构建、部署到原安装目录并逐项核对一�
 `07bbfe2`／[CI 40491998176](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40491998176) 回归为 **FAILED**：旧特质投影用例要求有当前合法亲子证据的场外子女仍隐藏资料，已按本轮五代规则更新，并新增快照过期后整条场外亲属被移除的反例；秘密及陌生人断言保持。该组与发布清单中的 visible-traits 专项均通过，完整 EXE 检查也通过。额外误运行了清单中已归档的 `test-v8.15.2-provider-visible-traits.js`，其依赖已退役 `engine.memory4.buildOwnerSnapshot` 而失败；未把它计入发布通过数，未为旧测试恢复 Memory4，未发起外部请求。
 
 `680f087`／[CI 40493089651](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40493089651) 回归为 **FAILED**：根目录主题预览页仍显示 9.6.0，与已交付包版本不符。已将预览标题及页脚同步 9.6.1，版本一致性测试不变；该次完整 EXE 检查通过。
+
+`69315ee`／[CI 40493953826](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40493953826) 已运行到第 421 组，回归为 **FAILED**：多重亲属正例仍使用无来源婚姻及不完整 checkpoint，现保留 Legacy 多重关系检查，当前查询补来源，检查器改用真实 `parseGameState` 合成存档。另九组定向关系边界检查发现旧上限测试期待在上限之外合成第 3 个 partial 节点，已改为更严格的恰好 2 节点、无第 3 节点及 `scopeTruncated=true`，完整范围正例保持。两项专项已通过；该次完整 EXE 检查通过，Runtime payload 保持。
