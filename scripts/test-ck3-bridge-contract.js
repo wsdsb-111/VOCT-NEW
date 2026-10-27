@@ -133,7 +133,7 @@ const canonicalFileList = [...modInputs.files]
   .map(file => `${file.relativePath}\0${file.size}\0${file.sha256}\n`)
   .join('');
 const payloadFingerprint = crypto.createHash('sha256').update(canonicalFileList, 'utf8').digest('hex');
-assert.equal(payloadFingerprint, 'd3bd9b0ecca796f5cbe404672e3b10ff2fbb1ad51fb31698f51f4f0a1ede58fd');
+assert.equal(payloadFingerprint, '866f32ba82bb6d9c7d0dec4aee8568450efbfe60e7f4e151c1c13d7c0c4db8eb');
 assert.equal(modInputs.sourceRevision, payloadFingerprint);
 assert.equal(modInputs.modPayloadTreeSha256, payloadFingerprint);
 assert.equal(modInputs.artifactSha256, payloadFingerprint);

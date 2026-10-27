@@ -36,3 +36,5 @@ Runtime 的 353 项资源已构建、部署到原安装目录并逐项核对一�
 本机 VOTC Workshop 导出文件已同步，旧文件备份在 `.build/v961-local-mod-backup`；新文件 SHA-256 为 `235fd463ff099cf63577a73cb2136caaa41625b2a9482abc431d6edc65bc35d4`，独立 Mod 的 97 文件 payload 为 `866f32ba82bb6d9c7d0dec4aee8568450efbfe60e7f4e151c1c13d7c0c4db8eb`。Steam 未上传。获取新增字段须重启 CK3 并重新发起对话。
 
 真实 CK3 对话、Provider 新回复、缓存命中率及 Soak 尚待用户实机验收。自动化、程序启动和完整发布门禁分别记录，不宣称 Full Freeze。
+
+首个代码提交 `f1a6423`／[Windows CI 40483188318](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40483188318) 的完整回归为 **FAILED**：Bridge 合同测试仍固定旧 Mod payload 指纹，未跟随本轮有审查的导出更新。已将固定断言更新为本轮 97 文件的完整指纹，未取消哈希检查。该次 CI 的独立 Mod、构建部署及完整 EXE 冷启动／同配置重启／媒体解码和正常退出已通过；本机退出失败仍独立保留。后续准确提交的全量结果另记。
