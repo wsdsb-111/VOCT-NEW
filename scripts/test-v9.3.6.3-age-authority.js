@@ -84,6 +84,15 @@ function makeCurrentDirectParentEvidence(sample, childId, parentId = sample.resp
   };
 }
 
+function currentSpouseEvidence(sample, targetBound) {
+  const ownerId = sample.responder.id;
+  return { source: "CK3_GAME_CURRENT_SPOUSE", sourceOwnerId: ownerId, relatedCharacterId: ownerId,
+    observerRuntimeId: ownerId, sourceRelation: "spouses", relationType: "CURRENT_SPOUSE",
+    evidenceScope: "SOURCE_OWNER_RECORD_ONLY", publicStatus: "PUBLIC_LEGAL_MARRIAGE", knowledgeStatus: "UNKNOWN",
+    campaignToken: sample.gameData.campaignToken, sourceSnapshotId: `${sample.gameData.date}/${sample.gameData.totalDays}`,
+    evidenceConflict: false, targetBound };
+}
+
 function link(relative, sample, field) {
   const relationType = ({ parents: "parent", children: "child", siblings: "sibling", spouses: "spouse" })[field];
   const age = Number.isInteger(relative.age) && relative.age >= 0 ? relative.age : null;
@@ -94,6 +103,7 @@ function link(relative, sample, field) {
     age,
     ageSource: age === null ? null : "CK3_LIVE_RELATIVE_AGE",
     ...(field === "children" ? { directParentEvidence: makeCurrentDirectParentEvidence(sample, relative.id) } : {}),
+    ...(field === "spouses" ? currentSpouseEvidence(sample, true) : {}),
     evidence: age === null ? undefined : {
       age: [makeAgeEvidence(sample, age, { relationType, source: `${sample.responder.id}.${field}` })]
     },
@@ -258,7 +268,8 @@ for (const [date, expected] of [["1190年5月1日", 17], ["1190年5月2日", 18]
   assert.match(familyFacts(offscreenResult), /16岁/);
   assert.strictEqual(ageDiagnostic(offscreenResult).ageSource, "CK3_LIVE_RELATIVE_AGE");
   const offscreenSpouse = fixture();
-  offscreenSpouse.responder.spouses = [addRelativeAgeEvidence(offscreenSpouse, { id: 88, name: "场外妻子", gender: "female", age: 22, alive: true }, "spouses", { source: "spouse.spouses" })];
+  offscreenSpouse.responder.spouses = [addRelativeAgeEvidence(offscreenSpouse, { id: 88, name: "场外妻子", gender: "female", age: 22, alive: true,
+    ...currentSpouseEvidence(offscreenSpouse, false) }, "spouses", { source: "spouse.spouses" })];
   const offscreenSpouseResult = buildPrompt(offscreenSpouse, "你妻子今年几岁？");
   assert.match(familyFacts(offscreenSpouseResult), /22岁/);
   assert.strictEqual(ageDiagnostic(offscreenSpouseResult).ageSource, "CK3_LIVE_RELATIVE_AGE");
