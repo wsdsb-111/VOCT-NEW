@@ -147,30 +147,36 @@ function buildKinshipGraphInternal(source = {}, { includeOtherParents = true, ot
     const candidateKeys = new Set();
     const addCandidate = (record) => {
       if (!record || typeof record !== "object") return;
-      const key = JSON.stringify(record);
+      const proof = record.directParentEvidence || record.parentEvidence || record;
+      const candidate = explicitRelationshipKind(record) === "STEP" || explicitRelationshipKind(proof) === "STEP"
+        ? { ...proof, evidenceConflict: true } : proof;
+      const key = JSON.stringify(candidate);
       if (candidateKeys.has(key)) return;
       candidateKeys.add(key);
-      candidates.push(record);
+      candidates.push(candidate);
     };
     addCandidate(sourceRecord);
     const child = characters.get(String(childId));
     const childParents = Array.isArray(child?.parents) ? child.parents
       : [child?.parents?.father ?? child?.father, child?.parents?.mother ?? child?.mother].filter(Boolean);
     for (const record of childParents) {
-      if (positiveRuntimeId(record) === Number(parentId) && explicitRelationshipKind(record) !== "STEP") {
-        addCandidate(record?.directParentEvidence || record);
+      if (positiveRuntimeId(record) === String(parentId)) {
+        addCandidate(record);
       }
     }
     const parent = characters.get(String(parentId));
     for (const evidence of parent?.evidence?.relations || []) {
-      if (positiveRuntimeId(evidence?.ownerId) === Number(childId) && evidence?.relationType === "parent") {
-        addCandidate(evidence.directParentEvidence || evidence);
+      if (positiveRuntimeId(evidence?.ownerId) === String(childId) && evidence?.relationType === "parent") {
+        addCandidate(evidence);
       }
     }
     for (const evidence of child?.evidence?.relations || []) {
-      if (positiveRuntimeId(evidence?.ownerId) === Number(parentId) && evidence?.directParentEvidence) {
-        addCandidate(evidence.directParentEvidence);
+      if (positiveRuntimeId(evidence?.ownerId) === String(parentId) && evidence?.directParentEvidence) {
+        addCandidate(evidence);
       }
+    }
+    for (const record of values(parent?.children)) {
+      if (positiveRuntimeId(record) === String(childId) && (record.directParentEvidence || record.parentEvidence)) addCandidate(record);
     }
     if (typeof directParentEvidenceFilter !== "function") {
       const hasUnverifiedSourceEvidence = candidates.some((record) => [

@@ -223,7 +223,10 @@ function testCacheTracksMarriageChanges() {
   const data = scope(new Map([[1, { id: 1, spouses: [] }], [2, { id: 2 }]]));
   const before = getCachedKinshipGraph(data);
   assert.equal(before.relationBetween(1, 2).relation, null, "no spouse is inferred before a spouse record exists");
-  data.characters.get(1).spouses.push({ id: 2, name: "当前配偶" });
+  data.characters.get(1).spouses.push({ id: 2, name: "当前配偶", relationType: "CURRENT_SPOUSE",
+    source: "CK3_GAME_CURRENT_SPOUSE", sourceOwnerId: 1, relatedCharacterId: 1, observerRuntimeId: 1,
+    sourceRelation: "spouses", evidenceScope: "SOURCE_OWNER_RECORD_ONLY", publicStatus: "PUBLIC_LEGAL_MARRIAGE",
+    knowledgeStatus: "UNKNOWN", campaignToken: CAMPAIGN, sourceSnapshotId: SNAPSHOT, evidenceConflict: false, targetBound: true });
   const after = getCachedKinshipGraph(data);
   assert.notStrictEqual(after, before, "spouse changes invalidate the fallback structural fingerprint");
   assert.equal(after.relationBetween(1, 2).relation?.type, "SPOUSE_OF", "the refreshed graph reflects the current spouse record");

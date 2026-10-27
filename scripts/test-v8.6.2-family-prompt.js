@@ -6,6 +6,11 @@ const CAMPAIGN = "votc8c-202610180003";
 const DATE = "1171.9.20";
 const TOTAL_DAYS = 428000;
 const characters = familyCharacters();
+characters["1"].spouses = [{ id: 13, name: "亡妻", source: "CK3_GAME_CURRENT_SPOUSE", sourceOwnerId: 1,
+  relatedCharacterId: 1, observerRuntimeId: 1, sourceRelation: "spouses", relationType: "CURRENT_SPOUSE",
+  evidenceScope: "SOURCE_OWNER_RECORD_ONLY", publicStatus: "PUBLIC_LEGAL_MARRIAGE", knowledgeStatus: "UNKNOWN",
+  campaignToken: CAMPAIGN, sourceSnapshotId: `${DATE}/${TOTAL_DAYS}`, evidenceConflict: false, targetBound: true }];
+delete characters["1"].spouse;
 for (const [characterId, character] of Object.entries(characters)) {
   if (character.parents && typeof character.parents === "object") {
     character.parents = Object.fromEntries(Object.entries(character.parents).map(([branch, parentId]) => {

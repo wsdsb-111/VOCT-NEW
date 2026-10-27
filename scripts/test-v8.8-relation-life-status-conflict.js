@@ -81,12 +81,17 @@ const previous = checkpoint("1175.1.1", { alive: true });
 assert.equal(WorldlineService.prototype._delta(previous, checkpoint("1176.1.1", {})).length, 0, "missing life status must not be treated as death");
 assert.equal(WorldlineService.prototype._delta(previous, checkpoint("1176.1.1", { alive: true, deathDate: "1175.6.1" })).length, 0, "conflicting life status must not be treated as death");
 assert.equal(WorldlineService.prototype._delta(previous, checkpoint("1176.1.1", { alive: false, deathDate: "1175.6.1" }))[0].type, "IMPORTANT_CHARACTER_DIED");
-const spouseConflictGraph = buildKinshipGraph({
-  10: { id: 10, fullName: "夫", spouses: [{ id: 11, fullName: "妻", alive: true, deathDate: "1175.1.1" }] },
+const spouseConflictCharacters = new Map(Object.entries({
+  10: { id: 10, fullName: "夫", spouses: [{ id: 11, name: "妻", alive: true, deathDate: "1175.1.1",
+    source: "CK3_GAME_CURRENT_SPOUSE", sourceOwnerId: 10, relatedCharacterId: 10, observerRuntimeId: 10,
+    sourceRelation: "spouses", relationType: "CURRENT_SPOUSE", evidenceScope: "SOURCE_OWNER_RECORD_ONLY",
+    publicStatus: "PUBLIC_LEGAL_MARRIAGE", knowledgeStatus: "UNKNOWN", campaignToken, sourceSnapshotId,
+    evidenceConflict: false, targetBound: true }] },
   11: { id: 11, fullName: "妻", gender: "female", alive: true, deathDate: "1175.1.1" }
-});
+}).map(([id, character]) => [Number(id), character]));
+const spouseConflictGraph = buildKinshipGraph(spouseConflictCharacters);
 assert.equal(spouseConflictGraph.relationBetween(11, 10).relation.type, "SPOUSE_OF", "life-status conflict must not become deceased-spouse truth");
-const spouseConflictBlock = buildFamilyFactBlock(spouseConflictGraph.nodes.get("10"), { date: "1175.2.1", getMentionableCharacterProfiles: () => spouseConflictGraph.nodes }, { query: "你妻子怎么样" });
+const spouseConflictBlock = buildFamilyFactBlock(spouseConflictCharacters.get(10), { date: gameDate, totalDays, campaignToken, characters: spouseConflictCharacters, getMentionableCharacterProfiles: () => spouseConflictCharacters }, { query: "你妻子怎么样" });
 assert(spouseConflictBlock.includes("生死状态存在冲突，未输出结论"));
 assert(!spouseConflictBlock.includes("亡妻") && !spouseConflictBlock.includes("去世"));
 const summaryFor = character => buildDeterministicWorldSummary({ selected: { gameTruth: [{ kind: "CHARACTER", payload: { id: character.id, character, match: {} } }] } }).topicItems[0].text;

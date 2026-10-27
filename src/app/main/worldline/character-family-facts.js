@@ -487,12 +487,18 @@ function buildFamilyFactBlockFromAuthority(character, gameData, { query = "", re
 }
 
 function buildFamilyFactBlock(character, gameData, options = {}) {
-  const authority = currentAgeSnapshotMatches(options.relationAuthorityGameData, gameData)
+  const snapshot = currentAgeSnapshotMatches(options.relationAuthorityGameData, gameData)
     ? options.relationAuthorityGameData : gameData;
-  const sourceCharacter = authority.characters?.get(Number(character?.id)) || authority.characters?.get(String(character?.id)) || character;
+  const authority = typeof snapshot?.getMentionableCharacterProfiles === "function"
+    ? { ...snapshot, characters: snapshot.getMentionableCharacterProfiles() } : snapshot;
+  const sourceCharacter = (authority?.characters instanceof Map
+    ? authority.characters.get(Number(character?.id)) || authority.characters.get(String(character?.id))
+    : authority?.characters?.[character?.id]) || character;
   // Relation authority stays inside this module. Only its minimal structured
   // answer is returned; templates continue receiving the ordinary profile view.
-  let text = buildFamilyFactBlockFromAuthority(sourceCharacter, authority, { ...options, profileGameData: gameData });
+  let text = buildFamilyFactBlockFromAuthority(sourceCharacter, authority, {
+    ...options, profileGameData: snapshot === gameData ? authority : gameData
+  });
   if (!text) return text;
   const knowledge = { ...options.memoryContext, campaignToken: gameData.campaignToken, currentGameDate: gameData.date };
   const seen = new WeakSet();

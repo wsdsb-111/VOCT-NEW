@@ -142,8 +142,8 @@ function testCurrentPublicMotherBindings() {
   };
   assert.deepEqual(getTraitsForKnownProfile(father, wife, privacyContext), [],
     "a public mother/parent edge does not disclose the wife's witch trait");
-  assert.deepEqual(getTraitsForKnownProfile(father, youngerChild, privacyContext), [],
-    "V9.3.9.2 excludes a bastard parent-child pair from the automatic whitelist");
+  assert.deepEqual(getTraitsForKnownProfile(father, youngerChild, privacyContext), youngerChild.traits,
+    "V9.6.1 preserves a proven public legal parent-child bond regardless of a bastard trait");
   elderChild.traits = [{ name: "brave" }];
   assert.deepEqual(getTraitsForKnownProfile(father, elderChild, privacyContext), elderChild.traits,
     "the current non-bastard public parent-child bond permits trait knowledge without disclosure");

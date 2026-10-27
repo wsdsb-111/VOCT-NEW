@@ -84,6 +84,12 @@ function currentFamilyFixture() {
           } };
       });
     }
+    if (Array.isArray(character.siblings)) {
+      character.siblings = character.siblings.map(sibling => ({ ...sibling, evidence: { age: [{
+        ageSource: "CK3_LIVE_RELATIVE_AGE", sourceOwnerId: Number(characterId), relationType: "sibling",
+        source: `${characterId}.siblings`, campaignToken: data.campaignToken, sourceSnapshotId: `${data.date}/${data.totalDays}`
+      }] } }));
+    }
   }
   return data;
 }

@@ -118,6 +118,7 @@ function currentPublicParentFilter(gameData) {
   const campaignToken = gameData?.campaignToken;
   const snapshotId = currentParentSnapshotId(gameData);
   return (evidence, record, context = {}) => {
+    if (["relationshipKind", "parentage", "parentType", "kinshipType", "kind"].some(key => /STEP|继亲|繼親/iu.test(record?.[key] || ""))) return false;
     const parentId = positiveRuntimeId(evidence?.parentId ?? evidence?.otherParentId ?? evidence?.id);
     const childId = positiveRuntimeId(context.childId ?? evidence?.childId ?? record?.childId);
     const sourceOwnerId = positiveRuntimeId(evidence?.sourceOwnerId);

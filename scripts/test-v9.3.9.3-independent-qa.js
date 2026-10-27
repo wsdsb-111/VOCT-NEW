@@ -263,8 +263,8 @@ async function testWithdrawnSourceBlocksBeforeTransport() {
   assert.equal(fixture.counts.confirmations, 1);
 }
 
-// The pair-fact Prompt Builder uses current spouse and kinship edges, but its
-// public-path ACL currently delegates every edge to the narrower trait whitelist.
+// Pair facts require current source-bound marriage evidence; V9.6.1 includes
+// legal spouses in the user's expanded family visibility policy.
 const versionPath = require.resolve("../src/app/main/version");
 require.cache[versionPath] = { id: versionPath, filename: versionPath, loaded: true, exports: { MEMORY_ENGINE_VERSION: "3.0" } };
 const { Character } = require("../src/app/main/game-data/character");
@@ -341,20 +341,33 @@ function testPublicCurrentSpousePath() {
   const husband = makeCharacter(1, "丈夫甲", 35, "male");
   const wife = makeCharacter(2, "妻子乙", 33, "female");
   wife.traits = [{ name: "brave" }, { name: "beauty_good_1" }];
-  husband.spouse = { id: wife.id, name: wife.fullName, gender: "female" };
-  wife.spouse = { id: husband.id, name: husband.fullName, gender: "male" };
+  addPublicSpouse(husband, wife);
+  addPublicSpouse(wife, husband);
   const prompt = makePrompt([husband, wife], { playerId: husband.id, responderId: wife.id });
   assert.match(prompt.relationshipBlock, /丈夫甲是妻子乙的丈夫/u, JSON.stringify(prompt.relationshipBlock));
   assert.match(prompt.relationshipBlock, /妻子乙是丈夫甲的妻子/u,
     "a current public spouse edge must keep its legal pair title through the kinship path ACL");
 
   const traitAccess = getAutomaticTraitAccess(husband, wife, {
+    date: "1190年5月2日", totalDays: 106575, campaignToken: "qa-public-kinship-campaign",
     characters: new Map([[husband.id, husband], [wife.id, wife]])
   }, { activeParticipantIds: [husband.id, wife.id] });
-  assert.equal(traitAccess.source, "OBSERVABLE",
-    "a spouse edge must not upgrade the separate close-family trait whitelist");
-  assert.deepEqual(traitAccess.traitKeys, ["trait_beauty_good_1"],
-    "a spouse may receive observable appearance, but not private personality traits");
+  assert.equal(traitAccess.source, "PUBLIC_CLOSE_FAMILY",
+    "a current verified legal spouse belongs to the expanded family policy");
+  assert.deepEqual(traitAccess.traitKeys, ["trait_brave", "trait_beauty_good_1"],
+    "verified legal spouses know personality and appearance under the V9.6.1 policy");
+}
+
+function addPublicSpouse(owner, spouse, overrides = {}) {
+  owner.spouses.push({
+    id: spouse.id, name: spouse.fullName, gender: spouse.gender,
+    relationType: "CURRENT_SPOUSE", source: "CK3_GAME_CURRENT_SPOUSE",
+    sourceOwnerId: owner.id, relatedCharacterId: owner.id, observerRuntimeId: owner.id,
+    sourceRelation: "spouses", evidenceScope: "SOURCE_OWNER_RECORD_ONLY",
+    publicStatus: "PUBLIC_LEGAL_MARRIAGE", knowledgeStatus: "UNKNOWN",
+    campaignToken: "qa-public-kinship-campaign", sourceSnapshotId: "1190年5月2日/106575",
+    evidenceConflict: false, targetBound: true, ...overrides
+  });
 }
 
 function testSpousePathRejectsUntrustedEvidence() {
@@ -367,8 +380,8 @@ function testSpousePathRejectsUntrustedEvidence() {
   for (const [label, evidence] of cases) {
     const husband = makeCharacter(1, "丈夫甲", 35, "male");
     const wife = makeCharacter(2, "妻子乙", 33, "female");
-    husband.spouse = { id: wife.id, name: wife.fullName, gender: "female", ...evidence };
-    wife.spouse = { id: husband.id, name: husband.fullName, gender: "male", ...evidence };
+    addPublicSpouse(husband, wife, evidence);
+    addPublicSpouse(wife, husband, evidence);
     const prompt = makePrompt([husband, wife], { playerId: husband.id, responderId: wife.id });
     assert.doesNotMatch(prompt.relationshipBlock, /丈夫甲是妻子乙的丈夫|妻子乙是丈夫甲的妻子/u,
       `${label} spouse evidence must not pass the public relationship path ACL: ${JSON.stringify(prompt.relationshipBlock)}`);
@@ -424,7 +437,7 @@ const failures = [];
   await capture("cancellation after partial stream", testCancellationAfterPartialStreamKeepsNarration);
   await capture("stale scene and different player turn", testStaleSceneAndDifferentPlayerTurnRejectRewrite);
   await capture("withdrawn source before transport", testWithdrawnSourceBlocksBeforeTransport);
-  await capture("public spouse path ACL and separate trait whitelist", testPublicCurrentSpousePath);
+  await capture("public spouse path ACL and expanded family traits", testPublicCurrentSpousePath);
   await capture("spouse path rejects wrong campaign, stale snapshot, and secret evidence", testSpousePathRejectsUntrustedEvidence);
   await capture("aunt/uncle seniority knowledge", testAuntUncleSeniorityUsesThePublicParentPath);
   await capture("unrelated responder age privacy", testUnrelatedResponderDoesNotReceiveRelativeAge);

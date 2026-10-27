@@ -113,8 +113,8 @@ function testPresenceScopedObservableAccess() {
   ]]]);
   const activeContext = { gameData, campaignToken: CAMPAIGN, currentGameDate: DATE,
     activeParticipantIds: [stranger.id, younger.id], disclosureProfiles: hiddenFacts };
-  assert.deepEqual(getTraitsForKnownProfile(stranger, younger, activeContext).map(trait => trait.traitId), ["scarred"],
-    "current observable access precedes a manual hide, while secret traits remain hidden");
+  assert.deepEqual(getTraitsForKnownProfile(stranger, younger, activeContext), [],
+    "manual hidden takes priority over current observable access");
   const absentContext = { ...activeContext, activeParticipantIds: [], disclosureProfiles: new Map([[younger.id, [
     fact(stranger.id, younger.id, "trait_scarred", "MANUAL_HIDDEN", false)
   ]]]) };
@@ -139,7 +139,7 @@ function testCurrentPublicCloseFamilyAccess() {
   const hidden = new Map([[younger.id, [fact(father.id, younger.id, "trait_witch", "MANUAL_HIDDEN", false)]]]);
   const familyContext = { gameData, campaignToken: CAMPAIGN, currentGameDate: DATE, disclosureProfiles: hidden };
   assert.deepEqual(getTraitsForKnownProfile(father, younger, familyContext).map(trait => trait.traitId),
-    ["scarred", "witch", "deceitful"], "public close-family automatic access precedes manual hidden fallback");
+    ["scarred", "deceitful"], "manual hidden takes priority over automatic family access");
   const noAutomatic = new Map([[younger.id, [fact(wife.id, younger.id, "trait_deceitful", "MANUAL_KNOWN")]]]);
   const manualContext = { gameData, campaignToken: CAMPAIGN, currentGameDate: DATE, disclosureProfiles: noAutomatic };
   assert.deepEqual(getTraitsForKnownProfile(wife, younger, manualContext).map(trait => trait.traitId), ["deceitful"],

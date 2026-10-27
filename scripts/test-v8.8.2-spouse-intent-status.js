@@ -49,10 +49,28 @@ for (const [query, spouseStatus, targetRuntimeId] of responderCases) {
   assert.equal(result.targetRuntimeId, targetRuntimeId, query);
 }
 
-const gameData = { date: "1175.1.1", characters };
-const currentFact = buildFamilyFactBlock(characters[1], gameData, { query: "甲君的妻子是谁" });
-const formerFact = buildFamilyFactBlock(characters[1], gameData, { query: "甲君的前妻是谁" });
-const deceasedFact = buildFamilyFactBlock(characters[1], gameData, { query: "甲君的亡妻是谁" });
+const campaignToken = "spouse-intent-fixture";
+const date = "1175.1.1";
+const totalDays = 430000;
+const sourceSnapshotId = `${date}/${totalDays}`;
+const currentSpouse = (id, name) => ({ id, name, source: "CK3_GAME_CURRENT_SPOUSE", sourceOwnerId: 1,
+  relatedCharacterId: 1, observerRuntimeId: 1, sourceRelation: "spouses", relationType: "CURRENT_SPOUSE",
+  evidenceScope: "SOURCE_OWNER_RECORD_ONLY", publicStatus: "PUBLIC_LEGAL_MARRIAGE", knowledgeStatus: "UNKNOWN",
+  campaignToken, sourceSnapshotId, evidenceConflict: false, targetBound: true });
+const familyCharacters = {
+  1: { ...characters[1], spouses: [currentSpouse(2, "乙氏"), currentSpouse(4, "丁氏")], deceasedSpouses: [],
+    formerSpouses: [{ id: 3, name: "丙氏", source: "CK3_FORMER_SPOUSE", sourceOwnerId: 1,
+      sourceRelation: "formerSpouses", relationType: "FORMER_SPOUSE", publicStatus: "FORMER_SPOUSE",
+      historicalStatus: "FORMER", knowledgeStatus: "UNKNOWN", campaignToken, sourceSnapshotId,
+      evidenceConflict: false, targetBound: true }] },
+  2: { ...characters[2], spouses: [] },
+  3: { ...characters[3], formerSpouses: [] },
+  4: { ...characters[4], spouses: [] }
+};
+const gameData = { date, totalDays, campaignToken, characters: familyCharacters };
+const currentFact = buildFamilyFactBlock(familyCharacters[1], gameData, { query: "甲君的妻子是谁" });
+const formerFact = buildFamilyFactBlock(familyCharacters[1], gameData, { query: "甲君的前妻是谁" });
+const deceasedFact = buildFamilyFactBlock(familyCharacters[1], gameData, { query: "甲君的亡妻是谁" });
 assert.match(currentFact, /查询关系：妻子；目标人物：乙氏/);
 assert.match(currentFact, /在世/);
 assert.match(formerFact, /查询关系：前妻；目标人物：丙氏/);
