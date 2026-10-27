@@ -215,11 +215,37 @@ function selectRelationScope(gameData, seedIds, { maxDepth, maxNodes, discoveryI
   return { selected, truncated, metrics: { nodeVisits: selected.size, queued: queued.size, queueReads, fingerprintComputations: 1 } };
 }
 
+function currentCheckpointSpouse(record, context, gameData) {
+  if (record && typeof record === "object" || gameData?.schemaVersion !== 1
+    || typeof gameData.playthroughId !== "string" || !gameData.playthroughId
+    || !normalizeGameDate(gameData.gameDate) || !/^[a-f0-9]{64}$/iu.test(gameData.contentFingerprint || "")) return false;
+  const ownerId = positiveRuntimeId(context.sourceOwnerId);
+  const targetId = positiveRuntimeId(context.targetId);
+  const people = gameData.characters;
+  const lookup = id => people instanceof Map ? people.get(id) ?? people.get(String(id)) : people?.[id];
+  const owner = lookup(ownerId);
+  if (!ownerId || !targetId || ownerId === targetId || !lookup(targetId)
+    || positiveRuntimeId(record) !== targetId || positiveRuntimeId(owner?.spouse) !== targetId
+    || owner.evidence?.conflicts?.spouse === true) return false;
+  const rows = (owner.evidence?.relations || []).filter(row => row.relationType === "spouse" && positiveRuntimeId(row.ownerId) === targetId);
+  return rows.length > 0 && rows.every(row => {
+    const proof = row.spouseEvidence;
+    return row.evidenceConflict !== true && row.source === "CK3_SAVE_LEGAL_SPOUSE" && proof?.source === row.source && proof.sourceSchemaVersion === 1
+      && proof.sourceOwnerId === String(ownerId) && proof.spouseId === String(targetId)
+      && proof.relationType === "spouse" && proof.sourceRelation === "family_data.spouse"
+      && proof.publicStatus === "PUBLIC_LEGAL_MARRIAGE" && proof.knowledgeStatus === "UNKNOWN" && proof.evidenceConflict !== true
+      && proof.playthroughId === gameData.playthroughId && proof.gameDate === gameData.gameDate
+      && proof.contentFingerprint === gameData.contentFingerprint
+      && proof.sourceSnapshotId === `${gameData.playthroughId}/${gameData.gameDate}/${gameData.contentFingerprint}`;
+  });
+}
+
 function relationshipOptions(gameData) {
+  const liveMarriage = currentSpouseEvidenceFilter(gameData);
   return { otherParentEvidenceFilter: currentPublicParentFilter(gameData),
     directParentEvidenceFilter: currentDirectParentFilter(gameData),
     siblingEvidenceFilter: (record, ownerId) => isCurrentSiblingRow({ id: ownerId }, record, gameData),
-    currentSpouseEvidenceFilter: currentSpouseEvidenceFilter(gameData),
+    currentSpouseEvidenceFilter: (record, context) => liveMarriage(record, context) || currentCheckpointSpouse(record, context, gameData),
     formerSpouseEvidenceFilter: currentFormerSpouseEvidenceFilter(gameData),
     betrothalEvidenceFilter: currentBetrothalEvidenceFilter(gameData) };
 }

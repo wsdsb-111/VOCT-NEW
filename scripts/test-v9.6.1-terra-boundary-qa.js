@@ -7,7 +7,9 @@ const path = require("node:path");
 const { Character } = require("../src/app/main/game-data/character");
 const { createLogParser } = require("../src/app/main/game-data/log-parser");
 const { getFamilyVisibility } = require("../src/app/main/worldline/family-visibility");
-const { getTargetedKinshipGraph } = require("../src/app/main/worldline/kinship-graph-cache");
+const { getCachedKinshipGraph, getTargetedKinshipGraph } = require("../src/app/main/worldline/kinship-graph-cache");
+const { parseGameState } = require("../src/app/main/worldline/game-state-adapter");
+const { resolveRelationshipCurrentTruth } = require("../src/app/main/worldline/relationship-current-truth");
 const { resolveAnchoredRelationMention } = require("../src/app/main/worldline/anchored-relation-resolver");
 const { createTraitProfileView } = require("../src/app/main/prompts/trait-profile-selector");
 const { buildFamilyFactBlock } = require("../src/app/main/worldline/character-family-facts");
@@ -238,6 +240,31 @@ function checkShortestDiscoveryDepth() {
   assert.equal(graph.nodes.has("6"), true, "the shorter path expands X and discovers its spouse within the depth limit");
 }
 
+function checkSaveSpouseProvenance() {
+  const snapshot = parseGameState(`date=1180.3.12 playthrough_id="v961-save-fixture" played_character=1
+    living={ 1={first_name="甲" female=no family_data={spouse=2}} 2={first_name="乙" female=yes} 3={first_name="丙" female=yes} }`);
+  assert.equal(snapshot.characters["1"].spouse, "2");
+  const proof = snapshot.characters["1"].evidence.relations.find(item => item.spouseEvidence)?.spouseEvidence;
+  assert.equal(proof?.source, "CK3_SAVE_LEGAL_SPOUSE", "save parser binds the legal spouse to its snapshot");
+  const graph = getCachedKinshipGraph(snapshot);
+  for (const [subjectRuntimeId, anchorRuntimeId] of [[1, 2], [2, 1]]) {
+    assert.equal(graph.relationBetweenOfTypes(subjectRuntimeId, anchorRuntimeId, ["SPOUSE_OF"]).relation?.type, "SPOUSE_OF");
+    const fact = resolveRelationshipCurrentTruth({ gameData: snapshot, subjectRuntimeId, anchorRuntimeId });
+    assert.equal(fact.relations[String(anchorRuntimeId)]?.type, "SPOUSE_OF");
+  }
+  const live = { campaignToken, date, totalDays: days, characters: new Map([
+    [1, { id: 1, spouse: 2 }], [2, { id: 2 }]
+  ]) };
+  assert.equal(getCachedKinshipGraph(live).relationBetweenOfTypes(1, 2, ["SPOUSE_OF"]).relation, null,
+    "an unproven live scalar spouse does not authorize a marriage");
+  snapshot.characters["1"].spouse = "3";
+  const changedGraph = getCachedKinshipGraph(snapshot);
+  assert.equal(changedGraph.relationBetweenOfTypes(1, 2, ["SPOUSE_OF"]).relation, null,
+    "old proof cannot authorize the former raw spouse");
+  assert.equal(changedGraph.relationBetweenOfTypes(1, 3, ["SPOUSE_OF"]).relation, null,
+    "old proof cannot authorize a newly substituted raw spouse");
+}
+
 async function main() {
   await checkHiddenDeathAge();
   await checkNestedMarriages();
@@ -245,6 +272,7 @@ async function main() {
   await checkUnknownGender();
   checkStoredManualHiddenAfterFamilyProof();
   checkShortestDiscoveryDepth();
+  checkSaveSpouseProvenance();
   console.log("V9.6.1 Terra boundary QA: PASS");
 }
 

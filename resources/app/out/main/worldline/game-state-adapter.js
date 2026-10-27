@@ -479,6 +479,18 @@ function parseGameState(gamestate) {
         };
         child.evidence.relations.push({ ownerId: String(parentId), relationType: "child", source: directParentEvidence.source, directParentEvidence });
       }
+      const spouseId = String(child.spouse || "");
+      if (/^\d{1,32}$/.test(childId) && /^\d{1,32}$/.test(spouseId) && spouseId !== childId && characters[spouseId]) {
+        if (!child.evidence || typeof child.evidence !== "object") child.evidence = {};
+        if (!Array.isArray(child.evidence.relations)) child.evidence.relations = [];
+        const spouseEvidence = {
+          source: "CK3_SAVE_LEGAL_SPOUSE", sourceSchemaVersion: 1, sourceOwnerId: childId, spouseId,
+          relationType: "spouse", sourceRelation: "family_data.spouse", publicStatus: "PUBLIC_LEGAL_MARRIAGE",
+          knowledgeStatus: "UNKNOWN", playthroughId: playthroughId.trim(), gameDate, contentFingerprint,
+          sourceSnapshotId: `${playthroughId.trim()}/${gameDate}/${contentFingerprint}`
+        };
+        child.evidence.relations.push({ ownerId: spouseId, relationType: "spouse", source: spouseEvidence.source, spouseEvidence });
+      }
     }
   }
   const fieldCoverage = Object.fromEntries(["faith", "culture"].map((field) => [field, {
