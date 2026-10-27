@@ -54,3 +54,5 @@ Runtime 的 353 项资源已构建、部署到原安装目录并逐项核对一�
 随后定向串行补查发现并修正生产边界：亲子重复证据 ID 的字符串／数字比较错误会漏掉冲突，现保留外层及嵌套的 STEP 冲突并校验所有候选；公开 otherParent 不可借归一化丢掉 STEP 标记。家庭事实在后台沿用 GameData 合并的当前反向亲子来源，仍不把原始 authority 暴露给模板，并保留普通对象人物目录兼容及直接查询的生死诊断。相关 60 组定向检查初次有六项失败，修正来源样例与上述实现后，全部失败组已单独复测通过；相关未知年龄、陌生人、默认 Prompt、Terra QA 和本机隔离 EXE 也通过。未重复执行性能或完整本机发布负载，最终全量 CI 另记。
 
 `6636794`／[CI 40491358079](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40491358079) 回归为 **FAILED**：旧 AGE-01 配偶年龄样例仍缺当前婚姻来源。已仅补齐 canonical／场外配偶正例的来源与不同 targetBound，保留全部年龄、来源冲突和披露断言。A01–A14 专项及另外 20 组年龄／时间专项本机串行通过。该次完整 EXE 检查通过；Runtime payload 与当前安装一致，后续仅测试与报告变更不改变该 payload。
+
+`07bbfe2`／[CI 40491998176](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/40491998176) 回归为 **FAILED**：旧特质投影用例要求有当前合法亲子证据的场外子女仍隐藏资料，已按本轮五代规则更新，并新增快照过期后整条场外亲属被移除的反例；秘密及陌生人断言保持。该组与发布清单中的 visible-traits 专项均通过，完整 EXE 检查也通过。额外误运行了清单中已归档的 `test-v8.15.2-provider-visible-traits.js`，其依赖已退役 `engine.memory4.buildOwnerSnapshot` 而失败；未把它计入发布通过数，未为旧测试恢复 Memory4，未发起外部请求。

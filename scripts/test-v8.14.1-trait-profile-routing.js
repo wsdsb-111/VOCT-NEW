@@ -102,12 +102,16 @@ check("nested family and custom script receive the same scoped profile", () => {
       campaignToken: sample.data.campaignToken, sourceSnapshotId: `${sample.data.date}/${sample.data.totalDays}` } }];
   const view = selector.createTraitProfileView(sample.data, sample.responder);
   assert.equal(Object.getPrototypeOf(view.gameData), GameData.prototype);
-  assert.deepEqual(view.character.children[0].traits, [], "a relative absent from current character bindings does not inherit observations");
-  assert.equal(view.character.children[0].personality, undefined);
+  assert.deepEqual(view.character.children[0].traits, sample.responder.children[0].traits,
+    "V9.6.1 permits a source-proven off-scene child to receive family profile visibility");
+  assert.equal(view.character.children[0].personality, sample.responder.children[0].personality);
   assert.deepEqual(view.character.children[0].secrets, []);
   assert.equal(view.character.personality, sample.responder.personality);
   assert.equal(view.character.boldness, 83);
   assert.equal(view.gameData.getPlayer().personality, undefined);
+  sample.responder.children[0].directParentEvidence.sourceSnapshotId = "1163.1.1/424635";
+  const stale = selector.createTraitProfileView(sample.data, sample.responder);
+  assert.deepEqual(stale.character.children, [], "a stale off-scene parent proof cannot expose the relative or its traits");
 });
 check("custom VM description scripts and prototype methods cannot recover raw other-person data", () => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "votc-trait-script-"));
