@@ -205,7 +205,7 @@ async function main() {
   try {
     {
       const summary = module.buildDiagnosticSummary(fixture(), "en-US");
-      assert.match(summary, /Runtime: V9\.6\.0/);
+      assert(summary.includes(`Runtime: V${require("../src/app/package.json").version}`));
       assert.match(summary, /VOCT maintained local Mod base: 2\.0\.5/);
       assert.match(summary, /Official upstream base: 2\.0\.4/);
       assert.match(summary, /Capability character_export: revision=1; supported=true/);
@@ -248,7 +248,7 @@ async function main() {
       await flushMicrotasks();
       tree = rig.render();
       const content = nodeText(tree);
-      assert.match(content, /V9\.6\.0/);
+      assert(content.includes(`V${require("../src/app/package.json").version}`));
       assert.match(content, /VOCT maintained local Mod base 2\.0\.5/);
       assert.match(content, /Official upstream base 2\.0\.4/);
       assert.match(content, /Unknown \/ unverified/);
