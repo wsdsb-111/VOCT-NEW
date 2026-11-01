@@ -176,6 +176,10 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.7-production-reference-audit", script: "test-v9.7-production-reference-audit.js" },
+  { group: "v9.7-provider-compat", script: "test-v9.7-provider-compat.js" },
+  { group: "v9.7-prompt-plan-parity", script: "test-v9.7-prompt-plan-parity.js" },
+  { group: "v9.7-legacy-data-readonly", script: "test-v9.7-legacy-data-readonly.js" },
   { group: "v9.6.1-world-memory-restart-budget", script: "test-v9.6.1-world-memory-restart-budget.js" },
   { group: "v9.6.1-relationship-recognition-regression", script: "test-v9.6.1-relationship-recognition-regression.js" },
   { group: "v9.6.1-family-visibility-independent-qa", script: "test-v9.6.1-family-visibility-independent-qa.js" },

@@ -1,3 +1,7 @@
+# 2026-11-01 当前路线覆盖说明
+
+旧 V9.7「Workshop 一体化分发 Runtime EXE」永久取消，不开发 bootstrapper，不向 Steam 上传 Runtime。当前 V9.7 承接原 V9.8 Legacy Decommission；新 V9.8 承接原 V9.9 RC／Soak／Full Freeze。Runtime 与 Workshop 独立维护、独立版本，通过现行 Bridge 配对。当前实施见 [V9.7](V9_7_IMPLEMENTATION_REPORT.md)，下一阶段见 [移交](V9_7_HANDOFF_TO_V9_8.md)。以下旧路线是历史计划快照，不代表当前进度、在线 Memory4 合同或新版本通过情况。
+
 # VOCT V9 阶段开发总路线（修订版）
 
 实施索引补记（2026-10-12）：[V9.2.1 缓存专项候选](V9_2_1_VERIFICATION_REPORT.md) 仅修复现有 Durable 前缀/Forget 重试及诊断，缓存效果 HOLD。此索引不修改下方历史路线、阶段承诺或 V9.3/V9.4 范围。

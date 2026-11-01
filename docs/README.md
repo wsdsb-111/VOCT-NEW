@@ -1,3 +1,5 @@
+**2026-11-01 V9.7 Legacy Decommission 候选**：[设计](current/v9/V9_7_DETAILED_ENGINEERING_SPEC.md)、[基线](current/v9/V9_7_BASELINE.md)、[台账与数据权威](current/v9/V9_7_DECOMMISSION_LEDGER.md)、[等价矩阵](current/v9/V9_7_BEHAVIOR_PARITY_MATRIX.md)、[数据保留](current/v9/V9_7_DATA_PRESERVATION_REPORT.md)、[实施](current/v9/V9_7_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_7_VERIFICATION.md)、[V9.8 移交](current/v9/V9_7_HANDOFF_TO_V9_8.md)。旧 V9.7 Workshop 分发取消；新 V9.8 为 RC/Soak/Full Freeze 验收阶段。下方均为历史记录。
+
 # VOTC 文档索引
 
 **2026-11-01 V9.6.1 世界记忆补丁**：[重启读取、分支恢复与 4096 Token 召回](current/v9/V9_6_1_WORLD_MEMORY_RESTART_FIX.md)。测试与正式当前轮统一上限；同日内容变化仍须确认延续，保留只读原记录；用户记忆恢复、专项和本机启动已验证，完整 CI 按准确提交记录。

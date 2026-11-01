@@ -306,7 +306,7 @@ async function runCaptureWorker() {
   };
   const originalFetch = globalThis.fetch;
   const originalModuleLoad = Module._load;
-  const packageJson = require(path.join(ROOT, "resources/app/package.json"));
+  const packageJson = require(path.join(ROOT, "src/app/package.json"));
   const versionFile = path.resolve(ROOT, "src/app/main/version.js");
   const providerFile = path.resolve(ROOT, "src/app/main/providers/index.js");
   const openAiNodeRuntimeFile = path.resolve(ROOT, "resources/app/node_modules/openai/_shims/node-runtime.js");
@@ -418,7 +418,7 @@ function captureAll() {
 function assertBaselineSource() {
   const sha = childProcess.execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
   if (sha !== BASELINE_SHA) throw new Error(`Refusing to write the frozen baseline from ${sha}; expected ${BASELINE_SHA}.`);
-  const status = childProcess.execFileSync("git", ["status", "--porcelain", "--", "src/app/main/providers/index.js", "src/app/main/version.js", "resources/app/package.json"], { cwd: ROOT, encoding: "utf8" }).trim();
+  const status = childProcess.execFileSync("git", ["status", "--porcelain", "--", "src/app/main/providers/index.js", "src/app/main/version.js", "src/app/package.json"], { cwd: ROOT, encoding: "utf8" }).trim();
   if (status) throw new Error("Refusing to write the frozen baseline while its source/runtime inputs are modified.");
 }
 

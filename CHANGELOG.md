@@ -1,3 +1,9 @@
+# V9.7.0 Legacy Decommission 候选（2026-11-01）
+
+- 建立源码/IPC/数据权威退役台账；仅删除 Provider finish 的已证明不可达 Gemini 分支，兼容求值/异常语义保持。
+- 新增四组 release guards，保留全部旧发布/归档检查与用户数据。新版本隔离构建，本机安装仍为 V9.6.1。
+- 旧 V9.7 Workshop 一体化分发取消；Runtime/Workshop 继续独立，新 V9.8 负责 RC/Soak。[实施](docs/current/v9/V9_7_IMPLEMENTATION_REPORT.md) · [验证](docs/current/v9/V9_7_VERIFICATION.md)。
+
 # V9.6.1 候选（2026-10-27）
 
 - 2026-11-01：世界记忆当前轮召回上限统一为 4096 Token；同日存档变化时保留只读记录并允许明确确认延续，预算不足返回具体原因。[修复与验证](docs/current/v9/V9_6_1_WORLD_MEMORY_RESTART_FIX.md)。

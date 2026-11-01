@@ -1,0 +1,1773 @@
+{
+  "schemaVersion": 1,
+  "generator": "votc-source-build-v1",
+  "appVersion": "9.6.1",
+  "files": [
+    {
+      "path": "default_userdata/actions/standard/AGENTS.md",
+      "bytes": 4872,
+      "sha256": "c7d8c280562dde41105588ce2a44e6a3f2cb3d3fa59de050897f4dc484eaef70"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_agreedToTruceWith.js",
+      "bytes": 4279,
+      "sha256": "0b2b0797bbfe96eed758504ecdbbbd29bd3edb34a08362abacc6946d582a7279"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_becomeBestFriendsWith.js",
+      "bytes": 8350,
+      "sha256": "59067b5d02d561d368218716474e1603103a346276d7934155acbdd82c87ae70"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_becomeBloodBrothersWith.js",
+      "bytes": 8516,
+      "sha256": "05ddaf3df4df4105e6f11b668ed5531027a037b93f8515a822cc06674c97d231"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_becomeFriendsWith.js",
+      "bytes": 8689,
+      "sha256": "f11f46fe7c944afd0096563fd1433ea47e8afa58ea6c109658d3f9774e3917be"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_becomeLoversWith.js",
+      "bytes": 7351,
+      "sha256": "77d010df82cb267a6cbcea0ee36d8e2969c169188e2e7af8bc9f2ee99e352a79"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_becomeNemesisWith.js",
+      "bytes": 8127,
+      "sha256": "b26d5159982fc78d02cab2ae11d03bd9fa4c60c534b49fc02a54ab214d5243e3"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_becomeRivalsWith.js",
+      "bytes": 8583,
+      "sha256": "e549cda1004ca3ec2c8896d705d9550edea221baf46062a555d299daca36bf5e"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_becomeSoulmatesWith.js",
+      "bytes": 8853,
+      "sha256": "c1a1970b5b104dde1ca3cc02ce1888b3900227daa62c9506ee3325b8c4bfac31"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_becomesTributaryOf.js",
+      "bytes": 4646,
+      "sha256": "6a725ea3fb02826d516bd9d55230b627f0c621733c058e873e18eb09c203f788"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_changeLocation.js",
+      "bytes": 5400,
+      "sha256": "beed0c1a256df004dc48993be7d6bb6428dd740e24b4b231553dc326c52f8e8a"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_changeOpinionOf.js",
+      "bytes": 7138,
+      "sha256": "b4cd548f369037e3a028b5375460470f4edbabeddec6623d978087cdbe1f45fc"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_changesTributaryContract.js",
+      "bytes": 7554,
+      "sha256": "b12b575d78246bca9a8e1ce6890216cb47b7448026e2a9dd52d8651eb44a0eae"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_characterIsKilled.js",
+      "bytes": 5002,
+      "sha256": "bc9f6809aad0e442b9b383b82e35fbf7d16002f0ba011eb53bc5b1d812b816cc"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_convertsToReligionOf.js",
+      "bytes": 8758,
+      "sha256": "d6b7552e07b04bf60545a789fd063911c386cc82f265af4d6307e7af66754330"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_intercourse.js",
+      "bytes": 5595,
+      "sha256": "254690cf2eb5c452c44ff92e450562487fbdf76a91db9d4f21355f21edc24002"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_isAssignedToCouncilBy.js",
+      "bytes": 11247,
+      "sha256": "147aaf80e586edf996233164f91ee338c298d2015c0f46c3f055b52cb5954cd6"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_isAssignedToCourtPositionBy.js",
+      "bytes": 14087,
+      "sha256": "8e5fed531979abec3ee454abaf67c32345ff9c3ce2ca806bda6c048d4467f7dd"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_isEmployedAsKnightBy.js",
+      "bytes": 4188,
+      "sha256": "7d61f4e5fd9163ba9dae9db8a05270ea294bd38d631f5bbd1f377d4797c49eb2"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_isEmployedBy.js",
+      "bytes": 4363,
+      "sha256": "1e321dad2bc029257e45bbef96427a96360d64ec68b872cd60e9f04b3debcafc"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_isFiredFromCouncilOf.js",
+      "bytes": 4420,
+      "sha256": "b06180efdb2edafcb6ee6ac1985c41783a89658b8f76fd625d902235c79060c0"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_isImprisonedBy.js",
+      "bytes": 13416,
+      "sha256": "c3e0629f9c906d4da08e2f6ff2170e41e9d711d34c5bbad1753eafd03e95c4a6"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_isInjured.js",
+      "bytes": 25526,
+      "sha256": "dcfde13fcbbd4620c8c5342a00d10869277a9edf0a02931eddd955f7e3ef4455"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_isUndressed.js",
+      "bytes": 2745,
+      "sha256": "f81df7fe07f036563be75eaa6218d4ebbd33af34530a0d83b9c1422420347bae"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_isVassalizedBy.js",
+      "bytes": 5998,
+      "sha256": "50dd4a3591fbccca9f4d058547a5547a32126cd1af0411d59159bba38ee3af70"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_leavesConversation.js",
+      "bytes": 12180,
+      "sha256": "a13675fb90d59a415976694f847874574a431988c921796d89c71776753974f9"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_makeAlliance.js",
+      "bytes": 3920,
+      "sha256": "476398f4758262734a7f4729fa7cc0d6c4a510e06c13739022879b057021f6f9"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_noOp.js",
+      "bytes": 1828,
+      "sha256": "def2cf65f8b484ced0e5db388e05585f064da9f86cc563672be0b4b791623c68"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_paysGoldTo.js",
+      "bytes": 9229,
+      "sha256": "ce5e907a0d4da98f8bea2603dd3859bef9187166eccff9660afa6022e4e5aba3"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_playerPaysGoldTo.js",
+      "bytes": 10041,
+      "sha256": "0d4317dce4182565eda960eabfe896b388d8cd54ff9a81919ebcf3b32ea656d0"
+    },
+    {
+      "path": "default_userdata/actions/standard/z_setEmotion.js",
+      "bytes": 4235,
+      "sha256": "db1b04fac6b6f4d95446065d7f4844966dfc90e2d46d1fd34ecc1ac1c7ff8b0a"
+    },
+    {
+      "path": "default_userdata/gamedata_typedefs.js",
+      "bytes": 21505,
+      "sha256": "07521382888b85b58bbbcfb23046844e659ea9eb7a636f55d4d6a3176fbd8bc0"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/letter/pListLetter.js",
+      "bytes": 18225,
+      "sha256": "fa1558a7bc09c0380afce12d41507b38f2385a3b621377474de023df9fadf6cc"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListMccTest2.js",
+      "bytes": 21500,
+      "sha256": "56c6c557548f2f236e46daea9962062e5943fb75dfca4878569c5eb0177ddcaf"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListMccTest2JE.js",
+      "bytes": 15788,
+      "sha256": "b1a81db1933a20c1ee0e902caa420fbf708c9998470c0c80290d3e672b146e2a"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListMccTest2JE_DE.js",
+      "bytes": 14104,
+      "sha256": "2bfafa887e3a03c9acfdccfcf413ce69d53ec992df2c3ef31488cb665d165c76"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListMccTest2JE_ES.js",
+      "bytes": 14083,
+      "sha256": "75e704c633613fca659ab6737fa2a5acaa865b0e3ab68517acdc669b2c212a03"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListMccTest2JE_FR.js",
+      "bytes": 14055,
+      "sha256": "39fc03f7c5f77cf8cf37b187a3cdcbac01cb21b8eac78ad534054815136fd633"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListMccTest2JE_JA.js",
+      "bytes": 14043,
+      "sha256": "a5707f3632dba097aa88dd63cb8190fbb0c86bf3b0128580c0ad27745cfe6d1c"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListMccTest2JE_KO.js",
+      "bytes": 14145,
+      "sha256": "8d03abdb9c7d5233673a88daf49fd5088564f4009931a3b2d74496803c7ae861"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListMccTest2JE_PL.js",
+      "bytes": 13925,
+      "sha256": "6946ac907a3e745ca2e34b5a2b89f5748a1136181eb6acd6d24e65d1ba180aad"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListMccTest2JE_RU.js",
+      "bytes": 15134,
+      "sha256": "f4d9af05417ea0411c7c0a12dec636badc914f524343f04cbb36acf0c38369aa"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListMccTest2JE_ZH.js",
+      "bytes": 15761,
+      "sha256": "8b0b6fb4f444817a9880842ac867222db52688bd503a31d1772f96095d2cb9cc"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListMccTest2_DE.js",
+      "bytes": 17721,
+      "sha256": "e55372d167ddc645205780bb3bf9d09680899c9bbe8a68a01ae041df0dd9455e"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListMccTest2_ES.js",
+      "bytes": 17778,
+      "sha256": "4fa39c8f02e3c978f898faebbbc10de2e0ab4e6bd30239d205e64b28cc639352"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListMccTest2_FR.js",
+      "bytes": 17830,
+      "sha256": "7485a11d3a5339dd74a32b6fe4f1b8b9bc56bacaeb6cfb8521326e384e3d4744"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListMccTest2_JA.js",
+      "bytes": 17605,
+      "sha256": "ad473cb28948900e0b81ef5aff063a386ecb9d2582d7193cae363d65e6f79c27"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListMccTest2_KO.js",
+      "bytes": 17880,
+      "sha256": "3e6849b07dbcf0ff75bfbe55bbb20154bf286085b084b34fc9090292285f688e"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListMccTest2_PL.js",
+      "bytes": 17539,
+      "sha256": "b58bf744ae453a03b7edeea002f6bbff45d75d3a1b97cdd4bb4de39f98c0d527"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListMccTest2_RU.js",
+      "bytes": 19407,
+      "sha256": "b2d43cc81a88383c30a5d50bfc845390f7f41862dc505f41916dce5735c0bf6f"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListMccTest2_ZH.js",
+      "bytes": 19242,
+      "sha256": "ed080214de1ff6d5087bc1dec1486cd4973f7a9f0fa94aad76135bca7e162691"
+    },
+    {
+      "path": "default_userdata/prompts/character_description/standard/pListSimple.js",
+      "bytes": 1200,
+      "sha256": "5ab717e0d6de8a15564cb739c2b87557ac29af0063111a459e29e9271f01bb65"
+    },
+    {
+      "path": "default_userdata/prompts/example_messages/standard/empty.js",
+      "bytes": 28,
+      "sha256": "781a1a02158d1576a3e77fad7f0eb234be821857c31ea0e7b5742bd24cf685e2"
+    },
+    {
+      "path": "default_userdata/prompts/example_messages/standard/mccAliChat.js",
+      "bytes": 5469,
+      "sha256": "2814b8ca3b8fc81369a1c5f5a9a5c37f7da56ede4e40fab712fceed9ef5931ef"
+    },
+    {
+      "path": "default_userdata/prompts/example_messages/standard/mccAliChat_DE.js",
+      "bytes": 6521,
+      "sha256": "eed97a3869c410870ebca915c3e310eba8cc327fdef0c6a3820f55d0db3d8304"
+    },
+    {
+      "path": "default_userdata/prompts/example_messages/standard/mccAliChat_ES.js",
+      "bytes": 5769,
+      "sha256": "2f09ea850b750e1d91a72a25b7ce917008054cfd389488f5fe5780040c460e61"
+    },
+    {
+      "path": "default_userdata/prompts/example_messages/standard/mccAliChat_FR.js",
+      "bytes": 6114,
+      "sha256": "063ac813ee0ae394bec2eb6b2881b5531c3c151128baa5834951901fb9e389aa"
+    },
+    {
+      "path": "default_userdata/prompts/example_messages/standard/mccAliChat_JA.js",
+      "bytes": 7058,
+      "sha256": "22b04ed747dbef1600dc179428f8496e24fc483ecce1ea98b7e291bae2acb686"
+    },
+    {
+      "path": "default_userdata/prompts/example_messages/standard/mccAliChat_KO.js",
+      "bytes": 6987,
+      "sha256": "f4ae432461950769e8838adb6739920f743cd3b52c963db094e6fff172a4a7e1"
+    },
+    {
+      "path": "default_userdata/prompts/example_messages/standard/mccAliChat_PL.js",
+      "bytes": 6214,
+      "sha256": "0ffb3919297f0e580953c875e9bda55afbfd566d138a07499788567847997bde"
+    },
+    {
+      "path": "default_userdata/prompts/example_messages/standard/mccAliChat_RU.js",
+      "bytes": 8101,
+      "sha256": "7cd3df17e6447bf093e4426af294cea152e176aebd1d457c4feaa73c185f291c"
+    },
+    {
+      "path": "default_userdata/prompts/example_messages/standard/mccAliChat_ZH.js",
+      "bytes": 5369,
+      "sha256": "8252fdbcb98b3b70978830e4a06c4f7c1f56fd66e0c7576b17e3492026c97ab2"
+    },
+    {
+      "path": "default_userdata/prompts/helpers/default.js",
+      "bytes": 215,
+      "sha256": "4658c7211e6edccb926fc9e89d0e60f4bc391c06cd0a8feddc66fb61b77a9547"
+    },
+    {
+      "path": "default_userdata/prompts/helpers/mainAi.js",
+      "bytes": 767,
+      "sha256": "98748431389a5df2adbf070460a52e336531edc41eec3b2ba77ebe08474a999b"
+    },
+    {
+      "path": "default_userdata/prompts/system/default.hbs",
+      "bytes": 9737,
+      "sha256": "25544c88d1556bf26c3b58308c496f748180e8f308318126b93618b24fb29004"
+    },
+    {
+      "path": "default_userdata/prompts/system/default_with_memory_guide.hbs",
+      "bytes": 3746,
+      "sha256": "ee65bea5a4873e9b513d6a9c16b35c8e08eca8919ffcd28aa7bd4d0c1aec8ae1"
+    },
+    {
+      "path": "default_userdata/prompts/system/letter.hbs",
+      "bytes": 1889,
+      "sha256": "98bcce01b4c77a1ae747b24a758e521062109a938aedc7e5d780edb57cd94c22"
+    },
+    {
+      "path": "out/main/AGENTS.md",
+      "bytes": 12838,
+      "sha256": "94f7ac10230afb55af25974c01a936c006923d808f23c1f5dd07ec278b31212e"
+    },
+    {
+      "path": "out/main/actions/action-command-readback.js",
+      "bytes": 2724,
+      "sha256": "90ace810f686eb813ae7962f78d6915c9da245b6fb80ba4d3ba6a56c599d5931"
+    },
+    {
+      "path": "out/main/actions/action-confirmation.js",
+      "bytes": 13791,
+      "sha256": "be056c7b1cf30be5395f9822c73b09d4e9bbea310dbe9d9d5fc7de591ca49252"
+    },
+    {
+      "path": "out/main/actions/action-effect-writer.js",
+      "bytes": 4820,
+      "sha256": "48e9cd2ca591124d3d51928abf28fd01007b54bae9cecfea23d2e75dba7662d7"
+    },
+    {
+      "path": "out/main/actions/action-engine.js",
+      "bytes": 22051,
+      "sha256": "5341092c442efe5384056182a355babfc3407a40f6b542293aed36ac72e4f348"
+    },
+    {
+      "path": "out/main/actions/action-prompt-builder.js",
+      "bytes": 7696,
+      "sha256": "70b350271a3bafc9dbdadc4d885eff2d58d07438f9162eb85ba1c6753c3ea206"
+    },
+    {
+      "path": "out/main/actions/action-prompt-compatibility-overlay.js",
+      "bytes": 13464,
+      "sha256": "6b282719af627fd4a02bbbafbbc87661afa9155cc6062e0695f1fbd9c6efe0a5"
+    },
+    {
+      "path": "out/main/actions/action-registry.js",
+      "bytes": 9459,
+      "sha256": "179a13c44be4e1f63eb67675a154147929802cc1b67877b6a6bed2ba35e6e239"
+    },
+    {
+      "path": "out/main/actions/action-sandbox.js",
+      "bytes": 1682,
+      "sha256": "d178ba593d4cdf68d47e29787714d9eff6fb278df7738890abec9f83c5f1fe25"
+    },
+    {
+      "path": "out/main/actions/critical-action-recall-diagnostics.js",
+      "bytes": 7712,
+      "sha256": "f0f89b8271b8ed1199e952e49773f328420c64febded21cd3d4d4754dff69c0f"
+    },
+    {
+      "path": "out/main/actions/i18n-utils.js",
+      "bytes": 386,
+      "sha256": "f589ab038c13d11f97e764a3fa95848f675f73a623b375c943b9f519ca97dc4a"
+    },
+    {
+      "path": "out/main/actions/index.js",
+      "bytes": 966,
+      "sha256": "4e48eb0af6d0cd91f3de18d1111220ceedd4c0add061f47575c81c95f2f731f2"
+    },
+    {
+      "path": "out/main/actions/response-healing.js",
+      "bytes": 2956,
+      "sha256": "0ca390f2d13f4f74b0de95247a1511e989e4f51baf3dc5fc8cba8bc2b2988717"
+    },
+    {
+      "path": "out/main/actions/run-command-recovery.js",
+      "bytes": 2300,
+      "sha256": "8283468985990cf4aa932f11bc4b1f6d61e894dbc031b177b2da41a1b211685b"
+    },
+    {
+      "path": "out/main/actions/run-file-manager.js",
+      "bytes": 43508,
+      "sha256": "640498d15722a2ab8d2b15d439e1143052043ac52f4726cae459c8157c75b1ce"
+    },
+    {
+      "path": "out/main/actions/schema.js",
+      "bytes": 11391,
+      "sha256": "b6d9903541aac29711b905a895ec664e0849eb0a83f949e61e0558012e781007"
+    },
+    {
+      "path": "out/main/actions/types.js",
+      "bytes": 2663,
+      "sha256": "1f459b3efada8956242ccbcf7afdc5a1d62900df5f275d219fd1a843303ef4ae"
+    },
+    {
+      "path": "out/main/analytics/cache-usage-reconciliation.js",
+      "bytes": 25692,
+      "sha256": "3c49399462f83ff16d0854bc1dbf46e840047cea4b095f1fdb540237dbea3e58"
+    },
+    {
+      "path": "out/main/analytics/provider-diagnostics.js",
+      "bytes": 27193,
+      "sha256": "f45d0c6e1e1de9cf5a8cca79c9dcd83b2bc63187602aed40ae0ffec8ee0eedfe"
+    },
+    {
+      "path": "out/main/analytics/real-request-diff.js",
+      "bytes": 30892,
+      "sha256": "cb3507e02c9a4d00a333a4c7516b4db77447e0119710b4d447dd3ed398f5858f"
+    },
+    {
+      "path": "out/main/analytics/usage-analytics.js",
+      "bytes": 50344,
+      "sha256": "2d73bdfea87ba8ab639b9521849aa5ceef98008b5a6b2297d14010c8a07e062b"
+    },
+    {
+      "path": "out/main/app/app-updater.js",
+      "bytes": 6402,
+      "sha256": "790d98b47684d52466b5a675faf1b6315fbecdaace1f9c05505f1f1a7710a108"
+    },
+    {
+      "path": "out/main/app/focus-monitor.js",
+      "bytes": 3175,
+      "sha256": "607519429e3e799d55790da5c9a9243d28b22a4a4a49988483717267db438861"
+    },
+    {
+      "path": "out/main/application/service-ports.js",
+      "bytes": 2240,
+      "sha256": "317984da5cdb52e414f54a8d1f0b54e8a2292a90ed402adf283e6c3fc62ef92e"
+    },
+    {
+      "path": "out/main/bridge/bridge-business-evidence.js",
+      "bytes": 2241,
+      "sha256": "a916ad3f831a8ae0104628569af54347bf91eabc688b50d6e1be417f329cce7d"
+    },
+    {
+      "path": "out/main/bridge/bridge-compatibility-service.js",
+      "bytes": 27938,
+      "sha256": "b88c0cf50fa1fca007a1ade1256f2ec1c1378f81f86751ffdc441c622bd15833"
+    },
+    {
+      "path": "out/main/bridge/bridge-hello-parser.js",
+      "bytes": 4952,
+      "sha256": "d111e07774cbbeb6dd08d71e24110b073960946c962fb694d68126b4e13ef7c0"
+    },
+    {
+      "path": "out/main/bridge/runtime-manifest.json",
+      "bytes": 1612,
+      "sha256": "f61d5e516247583cc56d6a995d86a56957f287ac46e378ecf61f6e3d69691ccc"
+    },
+    {
+      "path": "out/main/chunks/icon-BljXrxwL.ico",
+      "bytes": 46292,
+      "sha256": "19f891af71bc453177e972009db60d56549c45fecd4e9aefebf59cb756455ea8"
+    },
+    {
+      "path": "out/main/config/paths.js",
+      "bytes": 1191,
+      "sha256": "dec46746816ba067e6a23ff7b156bcbb6df8c71d42d5d6e7787092a169079894"
+    },
+    {
+      "path": "out/main/config/settings-repository.js",
+      "bytes": 30354,
+      "sha256": "9e6a3e29a9bdee0fedbba75ce8f93fb7d62b42442faeb1b3191aaeb3a43a581f"
+    },
+    {
+      "path": "out/main/conversation/character-disclosure-context.js",
+      "bytes": 5358,
+      "sha256": "26060625288cf765b024212043976a0f640772e6b4d665eb1426b65485cc1841"
+    },
+    {
+      "path": "out/main/conversation/character-disclosure-extraction.js",
+      "bytes": 34752,
+      "sha256": "7174aee264af03d2774f3d47e4bf573556bdf95a750ee73d8514ce765a6d8cbb"
+    },
+    {
+      "path": "out/main/conversation/character-disclosure-store.js",
+      "bytes": 20643,
+      "sha256": "bf7ba9c8fed69cc522b0c43bbfa01161222f7aaf77df14513c65d1f3d543dca9"
+    },
+    {
+      "path": "out/main/conversation/conversation-manager.js",
+      "bytes": 15872,
+      "sha256": "0bd9e4df032380d2d90698329da985321ec20d473d57d8965db3770485f7cce9"
+    },
+    {
+      "path": "out/main/conversation/conversation-runtime.js",
+      "bytes": 652,
+      "sha256": "65685df8645da00d622e9a2cb25b3547407743af20fc1ca9ee260aa22fdd8777"
+    },
+    {
+      "path": "out/main/conversation/conversation-turn-manager.js",
+      "bytes": 4681,
+      "sha256": "2566ae8725bf60f6f95999d63840432f3a1470afe2b0878f77e41785d52fe219"
+    },
+    {
+      "path": "out/main/conversation/conversation.js",
+      "bytes": 171136,
+      "sha256": "5b75e1ddfd6ebfa1dc0ffd7e6337c9c9d6c8334e70746c7b1242d131b0eff9c8"
+    },
+    {
+      "path": "out/main/conversation/generation-manager.js",
+      "bytes": 3963,
+      "sha256": "42e50ac62d06aea1b1ce42b66526016abf50c06333d3c9bf86dec2ebc43c3564"
+    },
+    {
+      "path": "out/main/conversation/participant-lifecycle.js",
+      "bytes": 890,
+      "sha256": "9c4d1c61edf0146af905b23302b5eda70304ba80af44fc629f52170cc070d87e"
+    },
+    {
+      "path": "out/main/conversation/reference-context.js",
+      "bytes": 5601,
+      "sha256": "df226644f10e5400c48ccac26629d97fb4f3bcf2cd070d25ca62958310bd0c46"
+    },
+    {
+      "path": "out/main/game-data/character.js",
+      "bytes": 5608,
+      "sha256": "653cc8d5d94cdc300927994b9f459edbb9d9afe11ba24acd1cb1c6e43103aaba"
+    },
+    {
+      "path": "out/main/game-data/game-data.js",
+      "bytes": 52718,
+      "sha256": "cad35de21e848b47705a625f8dbf0e1636fe1292dc63a60508c42f48b4a0fa71"
+    },
+    {
+      "path": "out/main/game-data/legacy-historical-reference.js",
+      "bytes": 247,
+      "sha256": "311633f43b80987d7eafc0eca7a29b5250678cd0040f61affac856a3a371e20f"
+    },
+    {
+      "path": "out/main/game-data/log-parser.js",
+      "bytes": 48837,
+      "sha256": "70c5006b229f2cedc7fc42c2866f3c2795816f4c30cd5f8fb05c43f171707272"
+    },
+    {
+      "path": "out/main/game-data/relationship-resolver.js",
+      "bytes": 23661,
+      "sha256": "b83de648318dfbb92749f870d4f81b8c4585c14431818baf0b37b8ab4691dc35"
+    },
+    {
+      "path": "out/main/historical-system/README.md",
+      "bytes": 2222,
+      "sha256": "34af721d306f25a66825e7becbde9e2afc5f3a66720c8db3cba7ad9e62b1d446"
+    },
+    {
+      "path": "out/main/historical-system/campaign-identity.js",
+      "bytes": 1094,
+      "sha256": "c0597ef3cc4a8b185fda25f5375ac9ec5729932db435c0e1fb100cd4f4a66953"
+    },
+    {
+      "path": "out/main/historical-system/compatibility-adapter.js",
+      "bytes": 1531,
+      "sha256": "006061f546803c231a01d211710b39ba26bce8fd0480cfcc60f6bede35e71a7d"
+    },
+    {
+      "path": "out/main/historical-system/dynamic-history-service.js",
+      "bytes": 3021,
+      "sha256": "0ebcfd280a0acd9da7adf6fb3a14fa74d8cdad3b0d1f2e9a784361600a4d252a"
+    },
+    {
+      "path": "out/main/historical-system/historical-baseline.js",
+      "bytes": 1812,
+      "sha256": "317198663748f4410df80cd0b8a9cad9866513993884acf0bd86d5208b50e602"
+    },
+    {
+      "path": "out/main/historical-system/historical-data/events.js",
+      "bytes": 3219,
+      "sha256": "a4756066b46ef7023738f5a80abcde476b1e9aae981522545b64cd126692a6ff"
+    },
+    {
+      "path": "out/main/historical-system/historical-data/facts.js",
+      "bytes": 220,
+      "sha256": "46bce31959bae9d8af1111f9b8b47b05c288ffca631c7fc39b8500c106e32db4"
+    },
+    {
+      "path": "out/main/historical-system/historical-data/figure-matching.js",
+      "bytes": 2307,
+      "sha256": "b4daeacbd248b91ae5bddd2e9d64c6d84bf712296aeb3b1d9c9a595721c35fbc"
+    },
+    {
+      "path": "out/main/historical-system/historical-data/figures.js",
+      "bytes": 2037,
+      "sha256": "016365f74912e63dc762b61c2c917b76a27f7a65b857c287622cbf6bc028ae92"
+    },
+    {
+      "path": "out/main/historical-system/historical-data/periods.js",
+      "bytes": 7333,
+      "sha256": "abd2edeb50c278d7df3e16f4d113de3346915bbdc69f9c8bbf032f002cdc9649"
+    },
+    {
+      "path": "out/main/historical-system/historical-data/rulers.js",
+      "bytes": 206,
+      "sha256": "5b16b47a64eec355f542ffb3ce44a36cb561d954eded0d6b65fb63d4abe9e95d"
+    },
+    {
+      "path": "out/main/historical-system/schema.js",
+      "bytes": 15053,
+      "sha256": "c035a364f3112fffc1e3b8c51dec5496263757a2c5726e2613cbf32b766b126f"
+    },
+    {
+      "path": "out/main/historical-system/temporal-knowledge-gate.js",
+      "bytes": 4969,
+      "sha256": "e6a5443eaa450cca03fee925ca42fed6a2db7e2f42dcbcfbaff7f38b0e607ad2"
+    },
+    {
+      "path": "out/main/historical-system/worldline-store.js",
+      "bytes": 5572,
+      "sha256": "27163324b88965580fe61eb15f077398030582cc0e96d2811f5c4fd2752bc7af"
+    },
+    {
+      "path": "out/main/ipc/register-ipc.js",
+      "bytes": 58768,
+      "sha256": "4258bb237a77fc70d65c89538daa3db6135dde001ba2fc4df2dff2d712424cb9"
+    },
+    {
+      "path": "out/main/letters/letter-date-session-scanner.js",
+      "bytes": 13427,
+      "sha256": "d2b12d071bd28705a5726342e97dc87dd0a3b8897f71b859e485883ce016d545"
+    },
+    {
+      "path": "out/main/letters/letter-effect-transport.js",
+      "bytes": 9114,
+      "sha256": "1a56558450246a74d9f3579400c67e891f0605be0cfa9b88b57dbed9af6bd6cf"
+    },
+    {
+      "path": "out/main/letters/letter-log-reader.js",
+      "bytes": 5283,
+      "sha256": "a03f082b5f1739f9772ec97ef5be75b96549faf81d6feeae7ac59ded17c8c9d1"
+    },
+    {
+      "path": "out/main/letters/letter-manager.js",
+      "bytes": 139326,
+      "sha256": "a5b11f4f7d55d1112d28f7360e166d18438fc8839102b79cff3eebb94d2ebd6a"
+    },
+    {
+      "path": "out/main/letters/letter-receipt-recovery.js",
+      "bytes": 5186,
+      "sha256": "7d00fa292eee4ce293eb248395e3532657c361596aefb74b01761e8e047cf39a"
+    },
+    {
+      "path": "out/main/main.js",
+      "bytes": 49415,
+      "sha256": "108623065fc2e843958fd15a8f2516532d5492bc9dee132e308e4c628d6e2e12"
+    },
+    {
+      "path": "out/main/memory-system/character-identity.js",
+      "bytes": 4524,
+      "sha256": "ccdef713632e96a3cebcb824a6e48f47f5aeef296bea35fda75ea37db65338b2"
+    },
+    {
+      "path": "out/main/memory-system/ck3-memory-text-renderer.js",
+      "bytes": 2859,
+      "sha256": "6142df386098c742799bb4e29703e82c2a81f49bd5fee60911dd06b7f9d2cd47"
+    },
+    {
+      "path": "out/main/memory-system/ck3-official-memory-reader.js",
+      "bytes": 3365,
+      "sha256": "e008f464b3caedcd8af5257145af324d0cd2c4e644d826cd7809ba41c380f4c3"
+    },
+    {
+      "path": "out/main/memory-system/dynamic-summary-freeze.js",
+      "bytes": 4920,
+      "sha256": "1f3741caba30e757ec4e3437e1ffbd720c79d5b63bbe1edae0c96ee2e14e92e0"
+    },
+    {
+      "path": "out/main/memory-system/entity-context.js",
+      "bytes": 17872,
+      "sha256": "c6f788ec24ffa137e0d51300f756a00e6fbe9ecf2cf8dc95b0fd57138226fe0a"
+    },
+    {
+      "path": "out/main/memory-system/finalization-coordinator.js",
+      "bytes": 1938,
+      "sha256": "a9a01fa7a88a38d384454c9f2a277362da9af72f9f81c7904487332017c7ffc5"
+    },
+    {
+      "path": "out/main/memory-system/finalization-visibility.js",
+      "bytes": 14626,
+      "sha256": "3d4c56b68290129e06f06fcb871e56e5c5c52b20ce59026dfc8f27c3b3f32d9c"
+    },
+    {
+      "path": "out/main/memory-system/fuzzy-temporal-resolver.js",
+      "bytes": 13735,
+      "sha256": "abf5d73f99366a4b4bd4a396ad0798db855ba2f76b890f41c40c38a5a3394435"
+    },
+    {
+      "path": "out/main/memory-system/incident-diagnostics.js",
+      "bytes": 2112,
+      "sha256": "8d85c2502bb10065dfe2b95a21c7d1bfeebf90e0d054cc181d83653bde25ee89"
+    },
+    {
+      "path": "out/main/memory-system/index.js",
+      "bytes": 1426,
+      "sha256": "5727b52da170a292a6e080b231eca7f7c308a1340ffe9c555352fcd345dc38fa"
+    },
+    {
+      "path": "out/main/memory-system/knowledge-service.js",
+      "bytes": 4024,
+      "sha256": "bc0cd2521bcf4139614715e87f2ace9a93396ecd421ee3bcf67dbaedd3cdc269"
+    },
+    {
+      "path": "out/main/memory-system/legacy-source-lineage.js",
+      "bytes": 6393,
+      "sha256": "1f419e380f30696609d6740dc29aa0ae0b45a39e66256b2f09b7c624289c539c"
+    },
+    {
+      "path": "out/main/memory-system/letter-summary-finalization.js",
+      "bytes": 37524,
+      "sha256": "83a22bd343ff876bc7e7ca5ffad8f7528a381bcdaf29621d718c7b701b3df7b7"
+    },
+    {
+      "path": "out/main/memory-system/memory-budget-policy.js",
+      "bytes": 3392,
+      "sha256": "6638dd1907ed016ceb3a655e3e9854b3cf09382d25110a327f5a9a76cc21960f"
+    },
+    {
+      "path": "out/main/memory-system/memory-consolidator.js",
+      "bytes": 1527,
+      "sha256": "4d566832d7017724daa5572cd3f3b78a8344f977a1a06118c065c9ec1adf5850"
+    },
+    {
+      "path": "out/main/memory-system/memory-engine.js",
+      "bytes": 175136,
+      "sha256": "a94c880b7c3e18d921490e464c5eaf311030ddce10c502befca96d71e2223f90"
+    },
+    {
+      "path": "out/main/memory-system/memory-extractor.js",
+      "bytes": 12094,
+      "sha256": "1bb169b178b4addee6a4c9c35d53b989297bd6ef50ff05363b1efb6707efd505"
+    },
+    {
+      "path": "out/main/memory-system/memory-ranker.js",
+      "bytes": 6575,
+      "sha256": "22a5e5f541844170293b2dd31ca94620f03f8b71eb1efc24aed0f7dc021f0684"
+    },
+    {
+      "path": "out/main/memory-system/memory-schema.js",
+      "bytes": 1564,
+      "sha256": "d33c89e9c3e74d20d82c0a15744bb511582c05803f322b3296c2accae8426eae"
+    },
+    {
+      "path": "out/main/memory-system/memory-store.js",
+      "bytes": 75049,
+      "sha256": "7d76f6e144315b35508c03445cc5dfdce56d880fe94ddea4374e65b7cf5ce9d7"
+    },
+    {
+      "path": "out/main/memory-system/memory-trace.js",
+      "bytes": 11533,
+      "sha256": "ebc936c714fa60058732cf442e2202a341fa8cd23ca5d338196bbe91dea4b56b"
+    },
+    {
+      "path": "out/main/memory-system/memory-types.js",
+      "bytes": 7322,
+      "sha256": "18fd7388c2cfe4b07386e0c2c5219c1c3e0465839ed55cce2bf3145f8fe9c521"
+    },
+    {
+      "path": "out/main/memory-system/mention-tracker.js",
+      "bytes": 9601,
+      "sha256": "5212dcc5ad9608b4f53dd293138223e9ad0fe8e085bbc321792a8a9467a0bcb8"
+    },
+    {
+      "path": "out/main/memory-system/official-recollection-provider.js",
+      "bytes": 3899,
+      "sha256": "1c6057d5ce91a35b6427814675a24437001a6f500c4d0cc46fb50151ed12959c"
+    },
+    {
+      "path": "out/main/memory-system/owner-target-candidate-directory.js",
+      "bytes": 8000,
+      "sha256": "964af134e69e1c5244138190978cd50cc3098e097889c5387493182864d73256"
+    },
+    {
+      "path": "out/main/memory-system/pair-long-term-ledger.js",
+      "bytes": 38485,
+      "sha256": "c4133543f61de78de1d083387cfc091333884914a51f0b586ada7af1ff8bd9a6"
+    },
+    {
+      "path": "out/main/memory-system/pair-memory-routing.js",
+      "bytes": 21831,
+      "sha256": "8f2c1e2d8fc1dd5dc7443883f954378898c673f152b3139961ce12d20cdb9a1a"
+    },
+    {
+      "path": "out/main/memory-system/pair-memory-service.js",
+      "bytes": 7328,
+      "sha256": "973f309157935710e99d898fc957591e6d19728ae59cf10039606b805b55e964"
+    },
+    {
+      "path": "out/main/memory-system/pair-memory-source-retrieval.js",
+      "bytes": 52164,
+      "sha256": "dbed29360aa9316230a172e7c4c0aa447379b9c7a30df07cdcc1dbe5712927fb"
+    },
+    {
+      "path": "out/main/memory-system/perspective-projector.js",
+      "bytes": 15866,
+      "sha256": "acf48157e6af11c0271921998e6fec0b87c08d7ec138af2d4b823013e3e3a802"
+    },
+    {
+      "path": "out/main/memory-system/player-centered-memory.js",
+      "bytes": 50019,
+      "sha256": "bb175e1977bc8248a9bb0d63ed46cc64243beb70deebcd874647684869e08535"
+    },
+    {
+      "path": "out/main/memory-system/player-memory-diagnostics.js",
+      "bytes": 18411,
+      "sha256": "6dc4949a749f6903e5a31cc69809b332578d00b9602f5d5c2f5222ac58052e6d"
+    },
+    {
+      "path": "out/main/memory-system/rolling-summary-manager.js",
+      "bytes": 4802,
+      "sha256": "d161445708b81c991fc18b9a613595318f99e04cb2de9e5b5f5f52462befe28c"
+    },
+    {
+      "path": "out/main/memory-system/scoped-path.js",
+      "bytes": 2066,
+      "sha256": "57fb1a5495b7fdf29a533c14da681c4c096a211d8f4be66d8eb06697926ef447"
+    },
+    {
+      "path": "out/main/memory-system/summary-budget-planner.js",
+      "bytes": 1811,
+      "sha256": "ca088b9b4adb8159d41b979f71a70ba6a4c002a17ed99a9b2a6087160e63a60f"
+    },
+    {
+      "path": "out/main/memory-system/summary-catalog.js",
+      "bytes": 4753,
+      "sha256": "30ed195d0dfd519c1457cbc9901becb71dfa591fce44ea1e720ccbfb883f0207"
+    },
+    {
+      "path": "out/main/memory-system/summary-date-index.js",
+      "bytes": 11380,
+      "sha256": "f4ddfcf238045d11d9d17a805dfc150c56988fce644a2a4b48c888d9775c3dc6"
+    },
+    {
+      "path": "out/main/memory-system/summary-folder-merge.js",
+      "bytes": 21986,
+      "sha256": "08202dffd1d4d524c3e5c97f75bceb7966520ad12b85e65a46688bad9965881a"
+    },
+    {
+      "path": "out/main/memory-system/summary-folder-verifier.js",
+      "bytes": 1458,
+      "sha256": "36600fa48ac7f5b9f549fb07d1e1bf9289e31f940540ba8ab52d28053183d9a9"
+    },
+    {
+      "path": "out/main/memory-system/temporal-anchor-extractor.js",
+      "bytes": 12893,
+      "sha256": "d49322da51bdbf71741c161d22428e9f389ed9c7941192bf82ad07603940bacc"
+    },
+    {
+      "path": "out/main/memory-system/third-party-evidence.js",
+      "bytes": 10325,
+      "sha256": "b088af637074c66a935d42782870bf99af5a1ac3b8e43d89c3fcdd6e8195644c"
+    },
+    {
+      "path": "out/main/memory-system/turn-recall.js",
+      "bytes": 3244,
+      "sha256": "2affb6f8690c75b33e4f4e7613c0a1cd38b622ae7a003b1ff179633a4affede2"
+    },
+    {
+      "path": "out/main/prompts/character-profile-split.js",
+      "bytes": 1957,
+      "sha256": "ce2e65eccc050b1f1a512fdbb032684d912e4f5a2d09e11a642b1f9ca224108f"
+    },
+    {
+      "path": "out/main/prompts/character-profile-v2.js",
+      "bytes": 9269,
+      "sha256": "3bc26c62a560884de6600a98ce7fc9d99927ba15ffb89f6c7ce090ce551d0062"
+    },
+    {
+      "path": "out/main/prompts/letter-prompt-builder.js",
+      "bytes": 11769,
+      "sha256": "fc0f16178f2f20a81e431622cd26673ae651edbaa0105bad821e395dbdf0369f"
+    },
+    {
+      "path": "out/main/prompts/prompt-builder.js",
+      "bytes": 106371,
+      "sha256": "6d761fd35427fce170418d5966fac213427a127617af7c017db0153a62965ce8"
+    },
+    {
+      "path": "out/main/prompts/prompt-config-manager.js",
+      "bytes": 14925,
+      "sha256": "d65d147af0b69939f32d4499e2dd613ad79ebf7b36e8db63a35601e344577aef"
+    },
+    {
+      "path": "out/main/prompts/prompt-plan-builder.js",
+      "bytes": 12115,
+      "sha256": "9029d3d6214708dd910b2235d822d7fca071aca442afacedb0f623f53c7e4f8c"
+    },
+    {
+      "path": "out/main/prompts/prompt-plan-compat.js",
+      "bytes": 7720,
+      "sha256": "0f5b9774d8a58852b24eba6e8dfad4b1bcb10aed28ab469cb6e42b6535fe62d1"
+    },
+    {
+      "path": "out/main/prompts/prompt-plan-contract.js",
+      "bytes": 6250,
+      "sha256": "d282d5c481a7728bf7e57eb4c7fb66b735bc5842a7c6938a9dc27cac5a86bc12"
+    },
+    {
+      "path": "out/main/prompts/prompt-plan-errors.js",
+      "bytes": 301,
+      "sha256": "12d06f201af2e4ca88fd502a0d53c23b0b2f2e491cc2595b498819c33438eb9a"
+    },
+    {
+      "path": "out/main/prompts/prompt-plan-layouts.js",
+      "bytes": 1052,
+      "sha256": "8f0c09c3429aa3474fad022987d4fd596580511f5f3606e56432006dcac7a00c"
+    },
+    {
+      "path": "out/main/prompts/prompt-plan-prefix.js",
+      "bytes": 1166,
+      "sha256": "401bcbb1071e2fa2cdb784bdf6f94cca68a489e3221168babb26b0aaee7a7f37"
+    },
+    {
+      "path": "out/main/prompts/prompt-plan-serializer.js",
+      "bytes": 3452,
+      "sha256": "13ddf317bc2fafc183715b87778c69ac857748ccded5ea9d0b30225dadae50c1"
+    },
+    {
+      "path": "out/main/prompts/prompt-script-loader.js",
+      "bytes": 937,
+      "sha256": "c20d69d6896e7d8c8ee98e907c6648a96a31563dac26ce24931f4cef5f615b6e"
+    },
+    {
+      "path": "out/main/prompts/prompt-script-sandbox.js",
+      "bytes": 7496,
+      "sha256": "a2c4dd71ebffc44f6969055b04b2c8e028bf963ea295b6ded93e42955c7c0480"
+    },
+    {
+      "path": "out/main/prompts/provider-prompt-adapter.js",
+      "bytes": 1436,
+      "sha256": "6458dbcaac10d887c19add997069ad97b82540857ff1952d6141dea2965c0246"
+    },
+    {
+      "path": "out/main/prompts/template-engine.js",
+      "bytes": 5111,
+      "sha256": "2d26835df522d72318d83d9af7aa284349fb442bcd88f17f61f0bc9e96d5a3ea"
+    },
+    {
+      "path": "out/main/prompts/trait-profile-selector.js",
+      "bytes": 23711,
+      "sha256": "b91df48ae0823450953482358359aa7edd2fa22f933dcb5b36d06ef6e12a8071"
+    },
+    {
+      "path": "out/main/prompts/trait-visibility-policy.js",
+      "bytes": 14288,
+      "sha256": "5a9ac6f763a60415f6f9537ffd6c1010702adea8cc4473788283abbed60c5f00"
+    },
+    {
+      "path": "out/main/provider-service.js",
+      "bytes": 51868,
+      "sha256": "a8a5a81ddd57a0fea2420980a671d766f80b3b9aa444a61719cfa1aa58911642"
+    },
+    {
+      "path": "out/main/providers/effective-request.js",
+      "bytes": 9381,
+      "sha256": "b65eaa4fb3f23c2fcad62c2450c6aa7bfbee0b339a9fb5e73970c020dce68532"
+    },
+    {
+      "path": "out/main/providers/generation-outcome.js",
+      "bytes": 1713,
+      "sha256": "48305ef6153d4d7ab91ba7d6cc916075ea7f65272ed491f02f6ee90274c16ab2"
+    },
+    {
+      "path": "out/main/providers/index.js",
+      "bytes": 92988,
+      "sha256": "fe04eaf57138bd7412799781da2f1b2162c6939953a945b0881d3928bd4a33e4"
+    },
+    {
+      "path": "out/main/providers/provider-cancellation.js",
+      "bytes": 6678,
+      "sha256": "cc443ac1c0e729f478d98767fb33a2cf68473c8c07fca2892414665f2a392299"
+    },
+    {
+      "path": "out/main/providers/provider-capabilities.js",
+      "bytes": 10830,
+      "sha256": "b8c0efc310ee9ac9304ec5b58967c00e50598ea52f0920b0b3346f1f1ec5f6f2"
+    },
+    {
+      "path": "out/main/providers/provider-errors.js",
+      "bytes": 3840,
+      "sha256": "c704a28bbd61477ab101a9f7d3f763f42cc0abeb941243d3e6e9979a74ee2c4c"
+    },
+    {
+      "path": "out/main/providers/provider-platform.js",
+      "bytes": 6815,
+      "sha256": "486a765171c35dc620350a1a774b0d6a94f33eed21f93b2ebc58c7c6cce74e81"
+    },
+    {
+      "path": "out/main/providers/provider-result.js",
+      "bytes": 8026,
+      "sha256": "dbad42d2e7cbaee83356825d69e6cd869bbb523f4b50fe55deadfab5c52b6288"
+    },
+    {
+      "path": "out/main/providers/provider-retry-policy.js",
+      "bytes": 1277,
+      "sha256": "9fc2aff84a4e7756e802bd23fca64ce807a39e1c2726ee914aa63c5686d3184b"
+    },
+    {
+      "path": "out/main/providers/request-budget.js",
+      "bytes": 6679,
+      "sha256": "5b70ec8110daeda79bf8f95a5c2f64456f293a8ce6268b4fd633c0577f79606f"
+    },
+    {
+      "path": "out/main/providers/usage-normalization.js",
+      "bytes": 12621,
+      "sha256": "4ac652aa15e8793c0f74e14ae3a8968662d2cab7de88418f797049837b77e3f2"
+    },
+    {
+      "path": "out/main/runtime/startup-performance-trace.js",
+      "bytes": 14045,
+      "sha256": "1c0f4bb9ec38e3fdd773739d02e613831eff877c4a5c6677e5fb71cb067645cb"
+    },
+    {
+      "path": "out/main/script-sandbox.js",
+      "bytes": 1431,
+      "sha256": "3b6f48de645e270906b4e96a50bd21a2500761dd1024a45cfe5a7642759e5a72"
+    },
+    {
+      "path": "out/main/secure-provider-secrets.js",
+      "bytes": 2725,
+      "sha256": "5a18797d1bff2c3645106024a88591392f5651ccc857495535af32a6733d6a18"
+    },
+    {
+      "path": "out/main/summaries/summaries-manager.js",
+      "bytes": 33255,
+      "sha256": "8d635a73d552c94c1519e6f9e9b5586222beef8172cfb6fe1084d265eccb7210"
+    },
+    {
+      "path": "out/main/token-estimator.js",
+      "bytes": 404,
+      "sha256": "508d7622563b8303e280d7c589156795ecea3d915dc9a7556350a67484b98a07"
+    },
+    {
+      "path": "out/main/usage-analytics-retention.js",
+      "bytes": 1100,
+      "sha256": "8839bd9f5f838bc87f6f314e0d8c75e4a6d53d386f68eb2bf84bfcc08236900a"
+    },
+    {
+      "path": "out/main/version.js",
+      "bytes": 474,
+      "sha256": "3456c4289f0ee5c6e65640daf0f54089dc3d1531588a471da089c909d8ffc328"
+    },
+    {
+      "path": "out/main/window-manager.js",
+      "bytes": 1148,
+      "sha256": "8a711c71358c1394d3254dee88b70f7c5a6627e0d9ea8b15907b113491755ae9"
+    },
+    {
+      "path": "out/main/worldline/age-diagnostics.js",
+      "bytes": 3087,
+      "sha256": "4e6c1a055a79e7e900afea38bca1d1506f3363c7d284a7798f34be374d30c09c"
+    },
+    {
+      "path": "out/main/worldline/anchored-relation-resolver.js",
+      "bytes": 16900,
+      "sha256": "07260b5f88190032c893daca9d34e3d0f516fb0f5cb65c67d631f8184ffa0762"
+    },
+    {
+      "path": "out/main/worldline/branch-registry.js",
+      "bytes": 13771,
+      "sha256": "fb8ca5a5bdc0f24d2feb371a9d65244f787b2fa8f9ccc588c4ce2db373e867a5"
+    },
+    {
+      "path": "out/main/worldline/canon-contract.js",
+      "bytes": 5307,
+      "sha256": "d4053b43f350b6635189fc9d659b4406f8a5571c44b2577724557ff632caf42c"
+    },
+    {
+      "path": "out/main/worldline/canon-service.js",
+      "bytes": 24812,
+      "sha256": "e60b849e3046a45a59a99255dc6a93936ab76a1e2309389f574403178f0110cc"
+    },
+    {
+      "path": "out/main/worldline/canonical-spouse-record.js",
+      "bytes": 16286,
+      "sha256": "3edbdf566b428e99c2e0b974e69476a6c5c2509f9cb7e80160433c5d555e0957"
+    },
+    {
+      "path": "out/main/worldline/character-age-service.js",
+      "bytes": 12084,
+      "sha256": "4d39d76a65eef2eb8731627bca96554b991dae22a3b58f51eb9069c726245725"
+    },
+    {
+      "path": "out/main/worldline/character-demographic-normalizer.js",
+      "bytes": 1984,
+      "sha256": "168d1f92b809cf8c2911f70f0f2f1d37d61d0bdd06e316477b3e2e542e13c2de"
+    },
+    {
+      "path": "out/main/worldline/character-family-facts.js",
+      "bytes": 37077,
+      "sha256": "86221759d31e3ca773329e48e90061f65e113dd56caa466b9aff80637b602a2a"
+    },
+    {
+      "path": "out/main/worldline/character-kinship-graph.js",
+      "bytes": 44782,
+      "sha256": "bb2d40dd7d754dcfd916c8170c90e8d12ada3b173934d004372aeb75145ce517"
+    },
+    {
+      "path": "out/main/worldline/character-knowledge-policy.js",
+      "bytes": 7268,
+      "sha256": "828b13ad837fce27e4b2fe553fc8eeda1f46cb7a5318fb780ef6a82bc4b47eda"
+    },
+    {
+      "path": "out/main/worldline/character-knowledge-service.js",
+      "bytes": 22517,
+      "sha256": "41c8b9ec8ebe9166915156755675f9b641b54ac782786d3910765e7b87cce5de"
+    },
+    {
+      "path": "out/main/worldline/character-temporal-facts.js",
+      "bytes": 9393,
+      "sha256": "464a782b213f5feeadfae23f5297be0f2398ad6bcd87b63de9ac75ffbeaea55f"
+    },
+    {
+      "path": "out/main/worldline/checkpoint-freshness.js",
+      "bytes": 1680,
+      "sha256": "5dfa34382cc1745c843f14172cdbd9ab9a61d96905abb01c6f1148721b196cfc"
+    },
+    {
+      "path": "out/main/worldline/current-truth-adapter.js",
+      "bytes": 3304,
+      "sha256": "dacd09044e8d7d527faef885113c0093c049f693763e92dce300c2a11ddcfe9e"
+    },
+    {
+      "path": "out/main/worldline/direct-observation-producer.js",
+      "bytes": 1235,
+      "sha256": "67ccf30204146989dbe33e5a2b65a27fd543057e6b627952973a768c0882f850"
+    },
+    {
+      "path": "out/main/worldline/family-entity-fact-bundle.js",
+      "bytes": 2339,
+      "sha256": "0c8832bd6d10726ed52f2251b5960dce183847783c607dc3d236c635d63ecc82"
+    },
+    {
+      "path": "out/main/worldline/family-visibility.js",
+      "bytes": 6885,
+      "sha256": "b3683bbfe8f5ee2af6940b2f39f7c34689ede43b36acf0e6f2ed9a702d328d7c"
+    },
+    {
+      "path": "out/main/worldline/frozen-coverage-manifest.js",
+      "bytes": 6040,
+      "sha256": "98e09d4deeeafb4f3d7dd2df941b6e28f96b54207ae04d0cd6c046abcaf84dec"
+    },
+    {
+      "path": "out/main/worldline/game-state-adapter.js",
+      "bytes": 24570,
+      "sha256": "6459f5f2dd5c9d2d821e0516c8137a9aea69733d1113ee1c8c296238ca6f3069"
+    },
+    {
+      "path": "out/main/worldline/historical-alias-catalog.js",
+      "bytes": 1638,
+      "sha256": "0e8ec4467b84ac82b3f5e2d211c1cbb1f57fd3c6a43ce0a5195c5e5ea3f04e62"
+    },
+    {
+      "path": "out/main/worldline/historical-checkpoint-index.js",
+      "bytes": 5541,
+      "sha256": "b3d85de926decde60805de33ad2b6b50112b7d1c3d41a02463e5945d33df1ac5"
+    },
+    {
+      "path": "out/main/worldline/historical-definition-index.js",
+      "bytes": 26488,
+      "sha256": "425f2cf34fc03f56ddb3436c712d8f1c7cad042c7d7d6a826b42451552614b54"
+    },
+    {
+      "path": "out/main/worldline/historical-entity-binding.js",
+      "bytes": 5105,
+      "sha256": "c2f731f0064b631461a884b1d791a56ef57d2ec00fd49f728fcbb2ce658b056d"
+    },
+    {
+      "path": "out/main/worldline/historical-identity-resolver.js",
+      "bytes": 8970,
+      "sha256": "23f6fcc1af84f06c569933a2768b61ca74f1b90dc44d0af2e0915965dff09684"
+    },
+    {
+      "path": "out/main/worldline/historical-name-scanner.js",
+      "bytes": 1837,
+      "sha256": "b225f90ff881468997366a1530b07acc7a6683b56c4840a20de28207ed5460af"
+    },
+    {
+      "path": "out/main/worldline/historical-prompt-context.js",
+      "bytes": 7985,
+      "sha256": "97355152d91c63e413a67fb77d40a64b3fbf30188e7eb09b32fe5da61f39d082"
+    },
+    {
+      "path": "out/main/worldline/historical-query-projection.js",
+      "bytes": 6795,
+      "sha256": "193c7bd4e3a8449377d986450d6c5c8c5019e07d00bff6a1649992b3b0b1743e"
+    },
+    {
+      "path": "out/main/worldline/historical-retrieval-worker.js",
+      "bytes": 596,
+      "sha256": "a6213d843650c6ff1e80b1d71124c35f2ff88f61253ec0442ab8829b58ad61d2"
+    },
+    {
+      "path": "out/main/worldline/historical-retriever.js",
+      "bytes": 39788,
+      "sha256": "1ff948b1c318969bcd0ebedb7b4936f5e8c21897cfde28081c0001d457cf8945"
+    },
+    {
+      "path": "out/main/worldline/historical-scope-resolver.js",
+      "bytes": 5958,
+      "sha256": "cc776a714dc73c8a7c66b7817c7be2b4980a20bc1e2023fed0d5b121759d4803"
+    },
+    {
+      "path": "out/main/worldline/historical-source-probe.js",
+      "bytes": 7187,
+      "sha256": "a7d309c1e6b6adf454734dd1d59174837fb9c08480909d8fb4438c1811a4138e"
+    },
+    {
+      "path": "out/main/worldline/kinship-graph-cache.js",
+      "bytes": 17992,
+      "sha256": "b9c4a1bf3f31692e806c5989836c543028bc9ac043e4d5cbcdcbce612467f91c"
+    },
+    {
+      "path": "out/main/worldline/kinship-integrity-scan.js",
+      "bytes": 2588,
+      "sha256": "3fef0356d2c49e0cdc24d2d5d4773b727cca96482c7bd5236f67e5396673cbc6"
+    },
+    {
+      "path": "out/main/worldline/kinship-label-resolver.js",
+      "bytes": 2319,
+      "sha256": "712c228dd7395c1c00c4cc51cb370a127f8e3b430dfad030546fdcae29112765"
+    },
+    {
+      "path": "out/main/worldline/knowledge-scope-resolver.js",
+      "bytes": 5077,
+      "sha256": "355698f3c22dabebad2aecaa721e23bfe5070db0b072627ac104b46a66c9b5bb"
+    },
+    {
+      "path": "out/main/worldline/legacy-family-presentation.js",
+      "bytes": 4525,
+      "sha256": "535b50355fbc63b659e7a1aadd3133bb354b50240241f8e42e0ed313c74e0358"
+    },
+    {
+      "path": "out/main/worldline/localization-resolver.js",
+      "bytes": 14935,
+      "sha256": "a9cb05efc4304e50fed6426d3db9871742abd11ca24c6b068d26d149e95d5287"
+    },
+    {
+      "path": "out/main/worldline/localization-worker-client.js",
+      "bytes": 5080,
+      "sha256": "3c822c9c7e881571e583f5b9fb18e8de9ab475e1867b3e81f72b102b91686822"
+    },
+    {
+      "path": "out/main/worldline/parser-worker.js",
+      "bytes": 2622,
+      "sha256": "5c8c033db969b0d847ede0bb1b719eed1d76cbf41ad8f9c109589b5aa7aecd9f"
+    },
+    {
+      "path": "out/main/worldline/personal-memory-policy-adapter.js",
+      "bytes": 1156,
+      "sha256": "1bd410244d61f21122753529df855a7ca30e3a70bba3c65580fddb44ae76d57f"
+    },
+    {
+      "path": "out/main/worldline/political-context.js",
+      "bytes": 6993,
+      "sha256": "b86d76025a1ddc389b6c59df370e8b1a6a32dad28addf8cbb615b14dc0c15919"
+    },
+    {
+      "path": "out/main/worldline/relation-anchor-resolver.js",
+      "bytes": 3163,
+      "sha256": "89a682ffe26133e511f3060068e2c958034ba6cd433ae6b4279498ef73b2cacf"
+    },
+    {
+      "path": "out/main/worldline/relation-intent-parser.js",
+      "bytes": 13597,
+      "sha256": "d63fd4bee466d54ec946518da86f8e62d7821f59b4402e54cd648299358e35f5"
+    },
+    {
+      "path": "out/main/worldline/relation-mention-resolver.js",
+      "bytes": 712,
+      "sha256": "232b979884e79ca1cd6db20f39b9329ded2d6eb7a9fa4b9cbdab7fd7779e1632"
+    },
+    {
+      "path": "out/main/worldline/relationship-current-truth.js",
+      "bytes": 6430,
+      "sha256": "3ffc12fbdfe6897941946b3d1ef48aba14a7a73224188a5f31efa2f4f6842fba"
+    },
+    {
+      "path": "out/main/worldline/runtime-definition-index.js",
+      "bytes": 1569,
+      "sha256": "e9e78bc049caa798e321c90ee7526afcc89fd9898836a8320317b77218d4e66e"
+    },
+    {
+      "path": "out/main/worldline/runtime-name-index.js",
+      "bytes": 2872,
+      "sha256": "d10aeb595b08dd08a36509a8459366bbaa8e555b43bd9651e807f2263f64083b"
+    },
+    {
+      "path": "out/main/worldline/save-container.js",
+      "bytes": 7402,
+      "sha256": "5f85881b82dda1914885f245d5b33e0752e6baf39ff2e540d7faec74adfa4b22"
+    },
+    {
+      "path": "out/main/worldline/self-social-truth.js",
+      "bytes": 3014,
+      "sha256": "01806f3858dd558db20269e14c0a6806c9908ec08e7043800b92f895b6f6517b"
+    },
+    {
+      "path": "out/main/worldline/shared-candidate-pool.js",
+      "bytes": 2054,
+      "sha256": "cbe3a75786850246185284d739eece95f2592fd2f0ebd49ce4133c6607ee3248"
+    },
+    {
+      "path": "out/main/worldline/shared-query-analyzer.js",
+      "bytes": 39534,
+      "sha256": "34175d2100ad6f65b1fe32da25c039e779e46f2a8222b7f09bfe1046d72093a6"
+    },
+    {
+      "path": "out/main/worldline/step-family-facts.js",
+      "bytes": 25722,
+      "sha256": "73027b4f81c97977a94f7fa5e17cb0a96de02709115cebb6b098b73104ce6cf4"
+    },
+    {
+      "path": "out/main/worldline/subjective-prompt-context.js",
+      "bytes": 9924,
+      "sha256": "bb8afd09600a91331b44ba3a901dcc88dab85a5d5c9adce31fe79bde215c019e"
+    },
+    {
+      "path": "out/main/worldline/subjective-world-builder.js",
+      "bytes": 7029,
+      "sha256": "e759b64aa15bcfea0863ffd095e3e613994a7902bfffb171bfa1d67f33eedaec"
+    },
+    {
+      "path": "out/main/worldline/supplemental-retriever.js",
+      "bytes": 8764,
+      "sha256": "53055bbe2ae03145c9cd16f9f7b2f694f958d30888973425237486df4259b7ba"
+    },
+    {
+      "path": "out/main/worldline/supplemental-store.js",
+      "bytes": 16799,
+      "sha256": "bce4a317762ae066920004e75be30de02a62db2687b279b8710ded87fd675490"
+    },
+    {
+      "path": "out/main/worldline/supplemental-worker.js",
+      "bytes": 1284,
+      "sha256": "5b1e081e4445679af67909fd7267aeda2b52d2972d6311e662a8d773646945e8"
+    },
+    {
+      "path": "out/main/worldline/temporal-archive-diagnostics.js",
+      "bytes": 878,
+      "sha256": "ed658f5c06979e281bbf181b996132b1940776b980f7f30249b6b4074b4d2907"
+    },
+    {
+      "path": "out/main/worldline/temporal-archive-store.js",
+      "bytes": 7048,
+      "sha256": "3d87641e2abf6f9eaf0deb440b9fa69267f19631b4d2f82d698dc34c89081b79"
+    },
+    {
+      "path": "out/main/worldline/temporal-archive-worker.js",
+      "bytes": 701,
+      "sha256": "31efc555db44f7b668c57167165cc4701c4a7c62cc5db509a17624d423a2776e"
+    },
+    {
+      "path": "out/main/worldline/war-facts.js",
+      "bytes": 4056,
+      "sha256": "7cc719814c46a32f8b205ec80e24a2b2d876b4b7d62263a8ef76158005a283ca"
+    },
+    {
+      "path": "out/main/worldline/world-knowledge-classifier.js",
+      "bytes": 10223,
+      "sha256": "b3fb3d507be459a2fa0a8768e029afa1cddac371e6a655ef1ac4a5d7a1cc0441"
+    },
+    {
+      "path": "out/main/worldline/world-presentation.js",
+      "bytes": 5685,
+      "sha256": "f75c40ebbcd7a66c0e41b68a12005d8e5cca77a7c44c17a03c3cd69687455c5b"
+    },
+    {
+      "path": "out/main/worldline/world-query-planner.js",
+      "bytes": 9694,
+      "sha256": "1f9203d2cd21dcb5b8d8941bb4d8204a0b8af1017d2ab71f016c7055195e675f"
+    },
+    {
+      "path": "out/main/worldline/world-ranker.js",
+      "bytes": 8088,
+      "sha256": "5df423dec79af01ffa5e10cd81688acd0de53711ffd1f758a5d10f38c0ce563a"
+    },
+    {
+      "path": "out/main/worldline/world-retriever.js",
+      "bytes": 4297,
+      "sha256": "c6c94bd890a43edd4ac47422b8647b1a3cdecec59b62c23eeffa1a4b2c93eb7e"
+    },
+    {
+      "path": "out/main/worldline/world-summary.js",
+      "bytes": 2673,
+      "sha256": "02b87a0abbedf95f5951a0188133816aa806257a907e2dbeb4c48fd2bb353dba"
+    },
+    {
+      "path": "out/main/worldline/worldline-context-budget.js",
+      "bytes": 1314,
+      "sha256": "db86f2211c6f5d37505c431a25dd099c54acbd2b21b205f62ea24d9acba0ab76"
+    },
+    {
+      "path": "out/main/worldline/worldline-service.js",
+      "bytes": 152946,
+      "sha256": "d0702ce3ba031a99f87fe3b7b89fcb694556a19562ccdbc64b164d00b05bfe34"
+    },
+    {
+      "path": "out/preload/preload.js",
+      "bytes": 21333,
+      "sha256": "c18adfb7a1c742265f11e057b7a742fd08cc9556fd26456391f6eaee2e77fa8d"
+    },
+    {
+      "path": "out/renderer/assets/Alert-FVm_0HKZ.png",
+      "bytes": 15000,
+      "sha256": "66ef497f744f8a7aadf58351f476b878a5104ff5eeda2f59249539ddda1c4f83"
+    },
+    {
+      "path": "out/renderer/assets/GitanLatin-Regular-C_7d6E69.otf",
+      "bytes": 202856,
+      "sha256": "1d15e752eb1548fb90925aef1e3a0294470d6c52e8fb362a3ac81b1d6d625f27"
+    },
+    {
+      "path": "out/renderer/assets/background-ink-v1.png",
+      "bytes": 2546278,
+      "sha256": "d0d0bb973d0ed4be082053c197058478df9d1cb80a99030b348fa1b50c03b90c"
+    },
+    {
+      "path": "out/renderer/assets/background-knight-v1.png",
+      "bytes": 2819312,
+      "sha256": "aff375345fe850fe1483c2d72861f4a26d791c7e7ef4b6f172fc8804c8578a72"
+    },
+    {
+      "path": "out/renderer/assets/background-parchment-v1.png",
+      "bytes": 2458490,
+      "sha256": "40fdf7a4dafa84942de4d9b4d4b64907b565100e03e222b6969f05f4ce1a6139"
+    },
+    {
+      "path": "out/renderer/assets/background_area_light-Bpu6TAku.png",
+      "bytes": 33262,
+      "sha256": "6556859b73a9b35831a2f11113dc4a7ee71f52b3b8bed3b11f0bb9aed88ba708"
+    },
+    {
+      "path": "out/renderer/assets/button-BbNez-YQ.png",
+      "bytes": 7566,
+      "sha256": "8a4db9a3c9e6777a2926f07474690d20b8c1963df83b933721aaa74c5d3cd498"
+    },
+    {
+      "path": "out/renderer/assets/cursor-DOS5RQ7t.png",
+      "bytes": 5494,
+      "sha256": "05fe0161090d5c79ba1dcdf0fb0a3fc0f8ca438f342a3d1c634c29f767aa7ec9"
+    },
+    {
+      "path": "out/renderer/assets/index-Dn3qWlAB.js",
+      "bytes": 1394293,
+      "sha256": "ed82c36844bcee317fec05a4f83295ebbaaa981869b1f16a38d7e8b29c89e05f"
+    },
+    {
+      "path": "out/renderer/assets/index-WtJH_nua.css",
+      "bytes": 219861,
+      "sha256": "f33319b568fdf584a4d810ccd4624f38e834a99350195e9c89de87e291bcb56e"
+    },
+    {
+      "path": "out/renderer/assets/theme-ink-v1.png",
+      "bytes": 2022245,
+      "sha256": "16cc1549cbb365f0d74c9067e447a2455444db698a6ecd1e3671f825d178f8d3"
+    },
+    {
+      "path": "out/renderer/assets/theme-knight-v1.png",
+      "bytes": 2114074,
+      "sha256": "270f34047b201e7c19956794d1daaf0a7d8b50797b1b1efd646f14f3d825419e"
+    },
+    {
+      "path": "out/renderer/assets/theme-parchment-v1.png",
+      "bytes": 1376239,
+      "sha256": "5466e255c91eebe882f02d31b6d926c2802b63f86d0e1bd0158f43f8cd64c5bb"
+    },
+    {
+      "path": "out/renderer/assets/tooltip2-RduFwM5h.png",
+      "bytes": 4279,
+      "sha256": "9fa1c1be9ee5eef036ae2914e869ef57ae1c820a4495b973d7caa0268e7f65d8"
+    },
+    {
+      "path": "out/renderer/bridge-diagnostics.css",
+      "bytes": 3210,
+      "sha256": "12f04a4762143300153081b2e910bf434b2a62593f31fb15fa72aabe003c71ca"
+    },
+    {
+      "path": "out/renderer/bridge-diagnostics.js",
+      "bytes": 41306,
+      "sha256": "c2f58102680df7e59e995def6e084fb6726ba805a76ab72608423fff4e831173"
+    },
+    {
+      "path": "out/renderer/character-knowledge-ui.css",
+      "bytes": 2794,
+      "sha256": "0ea80cf648015de494c645493fabbb125ac63054eb66ee94419c2bccc0533154"
+    },
+    {
+      "path": "out/renderer/character-knowledge-ui.js",
+      "bytes": 30103,
+      "sha256": "0002fa05da07d3cad193c41d03b6a4b54f62ba70f9c5f072be0b01b454d74e22"
+    },
+    {
+      "path": "out/renderer/index.html",
+      "bytes": 1054,
+      "sha256": "5c15498770c519114f4b9afd913b7a6adb58cb1f3cc44e43e8ec5345c4189634"
+    },
+    {
+      "path": "out/renderer/pair-long-term-ui.css",
+      "bytes": 6543,
+      "sha256": "d78877be15de20a6feadb972b593502c12da9d09166cfd30cc6ea6c8da555cbe"
+    },
+    {
+      "path": "out/renderer/pair-long-term-ui.js",
+      "bytes": 62434,
+      "sha256": "6a5ea7eecf032bee17e3cb35446a0169d829ed2163ae87b4a4c0ff547706498a"
+    },
+    {
+      "path": "out/renderer/startup-performance-observer.js",
+      "bytes": 3501,
+      "sha256": "0139bc192e8f5a215f9c96a422663bcba4bbbb423c218e4d70e5a0adca1c4c35"
+    },
+    {
+      "path": "out/renderer/summary-date-order.js",
+      "bytes": 2760,
+      "sha256": "3db63dfca1c9d63b70de3b8a5684be870788782fb473e18b6321d46ef3d092a5"
+    },
+    {
+      "path": "out/renderer/ui-comfort.css",
+      "bytes": 13454,
+      "sha256": "14092bfe5484d478761e9bbf8a3a28715438a1c7ee729dae15a86b7861413bc1"
+    },
+    {
+      "path": "out/renderer/v95/adapters/domain-adapters.js",
+      "bytes": 12534,
+      "sha256": "6daf653df62d082031e414014d087f78fb3545be9ce5343f653672ca5a22e1c8"
+    },
+    {
+      "path": "out/renderer/v95/containers/domain-container.js",
+      "bytes": 17157,
+      "sha256": "5db476a6a40e4efec6cb822f62544c3953ed71f8cac2c5d8180eab28067808a7"
+    },
+    {
+      "path": "out/renderer/v95/containers/renderer-runtime.js",
+      "bytes": 13015,
+      "sha256": "c3995e8e647030a65d04af53546456ee34a14d5ddc7542b4393cc7e41780937f"
+    },
+    {
+      "path": "out/renderer/v95/contracts/async-states.v1.js",
+      "bytes": 632,
+      "sha256": "555fb1fc7fcdbef1bf0c1201a18810036bd79b3d4be9fc4491e31cb22f9f246f"
+    },
+    {
+      "path": "out/renderer/v95/contracts/errors.v1.js",
+      "bytes": 2053,
+      "sha256": "52488b9a306c5e324e7ae3cedcd603dd6a932f8db6ccd6e49e9064d66dfc07cc"
+    },
+    {
+      "path": "out/renderer/v95/contracts/view-contract.v1.js",
+      "bytes": 6507,
+      "sha256": "b764827b5a3c2f744baf8fc65d710580c412be97c52f3aeaf3fafb21fb7cb549"
+    },
+    {
+      "path": "out/renderer/v95/contracts/view-fixtures.v1.js",
+      "bytes": 2880,
+      "sha256": "bcf60c4c9169f8cb5a47f1c54e2128d46bcbba810afd4356da522fc011c03e0c"
+    },
+    {
+      "path": "out/renderer/v95/i18n/index.js",
+      "bytes": 1200,
+      "sha256": "7135353a428201fee5f2d6380e059bb7a3cd8db4f7414e8d48fb48ed67c98ea2"
+    },
+    {
+      "path": "out/renderer/v95/i18n/locales/en-US.js",
+      "bytes": 43235,
+      "sha256": "8d80afc6eeecb791757c2d6f8e4b6e487bc42f3932f37f3fe9c5aca88253c8dc"
+    },
+    {
+      "path": "out/renderer/v95/i18n/locales/v9-5-1-legacy-ui.js",
+      "bytes": 28156,
+      "sha256": "2c2e4f0a0aa8514a3cf773f0495d67d20d8f6196cb3717c2b1e26c26155d859b"
+    },
+    {
+      "path": "out/renderer/v95/i18n/locales/zh-CN.js",
+      "bytes": 39941,
+      "sha256": "93ec8548480b82b82a8391605ca3fa35b84544e5d6ee40df21ed40b50e650b9b"
+    },
+    {
+      "path": "out/renderer/v95/icons/icon-registry.js",
+      "bytes": 13767,
+      "sha256": "f48794feacff3891fe5a1e580dd65e69c026319c77a12382dd0e827b0779f095"
+    },
+    {
+      "path": "out/renderer/v95/integration.css",
+      "bytes": 10670,
+      "sha256": "12062db9c294dcf2518a235062d769ec3bcdc710d505f2a6dffdba75b553ed2d"
+    },
+    {
+      "path": "out/renderer/v95/integration/react-visuals.js",
+      "bytes": 3227,
+      "sha256": "a450a64f38b4c39a8df8f370457b304e42039ac06a52518b76e289ecdb831a28"
+    },
+    {
+      "path": "out/renderer/v95/ipc/event-subscriptions.js",
+      "bytes": 2118,
+      "sha256": "488d86340e74cdf673f56828965d291a8d790fa846806f81bc8366d8ec15b075"
+    },
+    {
+      "path": "out/renderer/v95/ipc/renderer-ipc-client.js",
+      "bytes": 7331,
+      "sha256": "14f80617e7e7f5d49a8462e151ac734a5cec97e2980177ed28cabe40b57a0dbb"
+    },
+    {
+      "path": "out/renderer/v95/package.json",
+      "bytes": 42,
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8"
+    },
+    {
+      "path": "out/renderer/v95/state/context-epoch.js",
+      "bytes": 1907,
+      "sha256": "7d4293504e9ea0ee59e8c8b1eaea424bb91dc73819f36d57df2263380ae6995f"
+    },
+    {
+      "path": "out/renderer/v95/state/official-recollection-reader.js",
+      "bytes": 8321,
+      "sha256": "c8d80ff9ac07a1ab883e275647a41e31b18e5e49d844067ddfd6b5d2444400a2"
+    },
+    {
+      "path": "out/renderer/v95/state/read-boundary.js",
+      "bytes": 2349,
+      "sha256": "8d13059e29dbdce7fcaf2eb18ab0773b61b0ae0ac6f4e254634c16cb8d3f13ac"
+    },
+    {
+      "path": "out/renderer/v95/state/request-controller.js",
+      "bytes": 3406,
+      "sha256": "0a7f0ef9b0b57b0c320e49f48cf3af40dbea99c4a89634329ede90428d23cc5b"
+    },
+    {
+      "path": "out/renderer/v95/state/scoped-resource-store.js",
+      "bytes": 3556,
+      "sha256": "84cbeec7d97bdc65fe14196794ab5dc32610f0f431580edb483ddecc125c5cdd"
+    },
+    {
+      "path": "out/renderer/v95/visual/action-visual.js",
+      "bytes": 311,
+      "sha256": "651674c16fba0efba894c919187b7ab0bc0295ab246e0bccdf35b34163a917a4"
+    },
+    {
+      "path": "out/renderer/v95/visual/conversation-visual.js",
+      "bytes": 322,
+      "sha256": "4ff6446662c23480637aabc7794f22778c0d150f9026ccf5e44791faa09f50d5"
+    },
+    {
+      "path": "out/renderer/v95/visual/design-tokens.css",
+      "bytes": 5850,
+      "sha256": "c12ac3c41c123eac73bcba217cca07d1cf048ba1226c22bf4857b176bf23809a"
+    },
+    {
+      "path": "out/renderer/v95/visual/dialog-shell.js",
+      "bytes": 10993,
+      "sha256": "516663bc6378f91c4e921f08011c5d28639d56170470af8ce8a503d7a447eb8a"
+    },
+    {
+      "path": "out/renderer/v95/visual/dom.js",
+      "bytes": 5191,
+      "sha256": "baa5328f392a40d4ca645da318253df28a97bbc65005835c72dc4a5b479a840b"
+    },
+    {
+      "path": "out/renderer/v95/visual/icon-button.js",
+      "bytes": 3818,
+      "sha256": "8ed06c9907e4931344a0760321aa71ce3807ff0ca50f17b82cc221147a795190"
+    },
+    {
+      "path": "out/renderer/v95/visual/index.js",
+      "bytes": 2430,
+      "sha256": "9f30e4c3d62dcb106caa08e7a22063f04bba9c05a31a3c72e1cfa03b2f21ee6e"
+    },
+    {
+      "path": "out/renderer/v95/visual/knowledge-visual.js",
+      "bytes": 307,
+      "sha256": "a0d38713dce6826a65f0f37292d652b65c10810e9e5a05c4ea5de6d7055f1048"
+    },
+    {
+      "path": "out/renderer/v95/visual/letter-visual.js",
+      "bytes": 311,
+      "sha256": "fa34ece3e243e0e033a4daf77f90c71dad89d3c4c5d651197bc4a249eef806e9"
+    },
+    {
+      "path": "out/renderer/v95/visual/list-shell.js",
+      "bytes": 11623,
+      "sha256": "996105825deed3d9fc88964a48fe882e47f8e473426d87f2c6e5ea634bd68722"
+    },
+    {
+      "path": "out/renderer/v95/visual/memory-visual.js",
+      "bytes": 281,
+      "sha256": "476dbd039cb29f3b85b5d91549581b3641749160db9a38bcb3fed37bf33c5c11"
+    },
+    {
+      "path": "out/renderer/v95/visual/provider-visual.js",
+      "bytes": 324,
+      "sha256": "4b2e1672d50358a0d4f26e2ff5f747539dc8a472bd713bb53ecd4aaca605cb7a"
+    },
+    {
+      "path": "out/renderer/v95/visual/row-components.js",
+      "bytes": 17589,
+      "sha256": "d6ca3d3bc4a1c5394e2b131302a26336eef2fe9781e9d30fa9bc56b89ce8594a"
+    },
+    {
+      "path": "out/renderer/v95/visual/settings-visual.js",
+      "bytes": 308,
+      "sha256": "7a42cf4893c90f6f65b4699f4e78bfda26226d8e06b1c0c6ddcde417a3cae2ff"
+    },
+    {
+      "path": "out/renderer/v95/visual/status-indicator.js",
+      "bytes": 7819,
+      "sha256": "cb5586a88a3322d530528c5f83f48f241008a8aa649506ce8ff6cc99235572f6"
+    },
+    {
+      "path": "out/renderer/v95/visual/v95-ui.css",
+      "bytes": 38875,
+      "sha256": "13022f85afc77c4e959412b96f48f6e8e4cb3b1e43ae9838c51c3bf195a25f4e"
+    },
+    {
+      "path": "out/renderer/v95/visual/view-transition.js",
+      "bytes": 1797,
+      "sha256": "c58232886f53b62149ebaf014ecac5d14d8ad5fad97ca57e49f5cfaa5ad9014b"
+    },
+    {
+      "path": "out/renderer/v95/visual/worldline-visual.js",
+      "bytes": 302,
+      "sha256": "ac256ac076733a288a3393fd266b77589c9f9a28d81d66a32126575832fd31af"
+    },
+    {
+      "path": "out/renderer/world-memory-editor.js",
+      "bytes": 74218,
+      "sha256": "8739c810147d6fbc3302cb396d99ac94051821c142e7afd90a15e8ad2de79e72"
+    },
+    {
+      "path": "out/renderer/worldline-player-presentation.js",
+      "bytes": 34761,
+      "sha256": "4952372e7dfcc479f5967cd5529014b18703b8560cb99a0fc3acae0a0e63887a"
+    },
+    {
+      "path": "out/shared/pair-important-matters.js",
+      "bytes": 5165,
+      "sha256": "14c67e60cb5d2290b321b09b4a977ce26a62c5464d6ba97697505fb411cad6db"
+    },
+    {
+      "path": "package.json",
+      "bytes": 910,
+      "sha256": "d601f89726ee6c98eccbe1fb893578271fb5e9571eb21cafc79878268cd445d1"
+    }
+  ],
+  "payloadSha256": "02c9cbf97be6ffb0a2d4d3e5313ad51132d877daf046f33a96e5309be3e7869a"
+}

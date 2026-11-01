@@ -105,7 +105,10 @@ function auditReferences() {
   const renderer = sources.filter(file => file.includes(`${path.sep}renderer${path.sep}`))
     .map(file => ({ file: path.relative(root, file).replaceAll("\\", "/"), source: fs.readFileSync(file, "utf8") }));
   for (const row of ipc.routes) {
-    row.rendererConsumers = renderer.filter(item => item.source.includes(row.exposure)).map(item => item.file);
+    row.rendererConsumers = renderer.filter(item => item.source.replaceAll("?.", ".").includes(row.exposure)).map(item => item.file);
+    const [surface, method] = row.exposure.split(".");
+    row.possibleAliasConsumers = renderer.filter(item => !row.rendererConsumers.includes(item.file)
+      && item.source.includes(surface) && item.source.includes(method)).map(item => item.file);
   }
   return { sourceFiles: sources.length, relativeImports, dynamicSites, ipc };
 }

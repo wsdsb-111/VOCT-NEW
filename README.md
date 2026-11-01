@@ -1,3 +1,5 @@
+**2026-11-01 当前源码候选：V9.7.0 Legacy Decommission。** 历史兼容路径逐项审计，仅退役已证明不可达的 Provider finish 分支；保留旧配置、Prompt 回退、Legacy/Forget、五代亲属、4096 Token Canon、Action/Letter/Bridge。旧 V9.7 Workshop 一体化分发已取消，下一阶段是 V9.8 RC／Soak。Runtime 与 Workshop 继续分开维护。[实施与边界](docs/current/v9/V9_7_IMPLEMENTATION_REPORT.md) · [验证](docs/current/v9/V9_7_VERIFICATION.md) · [台账](docs/current/v9/V9_7_DECOMMISSION_LEDGER.md)。本机安装保留 V9.6.1，V9.7 仅隔离构建/验收；以下是历史版本证据。
+
 # Voices of the Court（VOTC）
 
 VOTC 是面向《Crusader Kings III》（CK3）的 Windows Electron 宫廷对话工具。它读取游戏日志、人物资料及可选存档，将当前事实、角色知情范围、历史背景和合法记忆整理为 Prompt，通过模型服务生成角色回复，并通过官方动作及信件管线与游戏交互。

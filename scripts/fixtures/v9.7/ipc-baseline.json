@@ -14,7 +14,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "actionsAPI.getAll",
@@ -32,7 +33,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "actionsAPI.getDetails",
@@ -52,7 +54,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "actionsAPI.getSettings",
@@ -63,7 +66,10 @@
         "console.error",
         "settingsRepository.getActionSettings"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "actionsAPI.openFile",
@@ -74,7 +80,10 @@
         "console.error",
         "shell.openPath"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "actionsAPI.openFolder",
@@ -85,7 +94,10 @@
         "console.error",
         "shell.openPath"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "actionsAPI.reload",
@@ -96,7 +108,10 @@
         "actionRegistry.reloadActions",
         "console.error"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "actionsAPI.setDestructiveOverride",
@@ -109,7 +124,10 @@
         "console.error",
         "settingsRepository.saveActionSettings"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "actionsAPI.setDisabled",
@@ -122,7 +140,10 @@
         "console.error",
         "settingsRepository.saveActionSettings"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "bridgeAPI.getState",
@@ -132,7 +153,10 @@
       "serviceCalls": [
         "bridgeService.getState"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/bridge-diagnostics.js"
+      ]
     },
     {
       "exposure": "bridgeAPI.redetect",
@@ -142,7 +166,10 @@
       "serviceCalls": [
         "bridgeService.redetect"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/bridge-diagnostics.js"
+      ]
     },
     {
       "exposure": "characterKnowledgeAPI.getConversationView",
@@ -150,7 +177,10 @@
       "channel": "characterKnowledge:getConversationView",
       "handlerOwner": "main/ipc/register-ipc.js",
       "serviceCalls": [],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/character-knowledge-ui.js"
+      ]
     },
     {
       "exposure": "characterKnowledgeAPI.getOwnerView",
@@ -162,7 +192,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/character-knowledge-ui.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "characterKnowledgeAPI.getTargetView",
@@ -174,7 +205,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/character-knowledge-ui.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "characterKnowledgeAPI.setManualStatus",
@@ -186,7 +218,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/character-knowledge-ui.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.applyPairMemoryBackfill",
@@ -198,7 +231,10 @@
         "Object.keys",
         "allowed.has"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/pair-long-term-ui.js"
+      ]
     },
     {
       "exposure": "conversationAPI.approveActions",
@@ -211,7 +247,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.bindLegacyConversationCampaign",
@@ -224,7 +261,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.bindLegacyOwnerCampaign",
@@ -237,7 +275,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.bindLegacySummaryCampaign",
@@ -252,7 +291,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.cancelStream",
@@ -264,7 +304,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.clearSummaries",
@@ -279,7 +320,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.declineActions",
@@ -292,7 +334,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.deleteCharacterSummaries",
@@ -305,7 +348,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.deleteSummary",
@@ -318,7 +362,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.editUserMessage",
@@ -333,7 +378,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.getActiveConversationData",
@@ -345,7 +391,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.getContextUsage",
@@ -355,7 +402,8 @@
       "serviceCalls": [],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.getConversationEntries",
@@ -367,7 +415,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.getConversationState",
@@ -377,7 +426,8 @@
       "serviceCalls": [],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.getPairMemoryIndex",
@@ -389,7 +439,10 @@
         "Object.keys",
         "allowed.has"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/pair-long-term-ui.js"
+      ]
     },
     {
       "exposure": "conversationAPI.getPromptPreview",
@@ -401,7 +454,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.getSummariesDashboardData",
@@ -417,7 +471,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.getUiContext",
@@ -427,7 +482,10 @@
       "serviceCalls": [
         "conversationManager.getUiContext"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/v95/containers/renderer-runtime.js"
+      ]
     },
     {
       "exposure": "conversationAPI.joinWaitingCharacter",
@@ -437,7 +495,8 @@
       "serviceCalls": [],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.leavePresentCharacter",
@@ -447,7 +506,8 @@
       "serviceCalls": [],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.listAllSummaries",
@@ -460,7 +520,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.onContextUsageUpdate",
@@ -470,6 +531,9 @@
       "serviceCalls": [],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ],
+      "possibleAliasConsumers": [
+        "src/app/renderer/v95/containers/renderer-runtime.js"
       ]
     },
     {
@@ -481,6 +545,9 @@
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js",
         "src/app/renderer/character-knowledge-ui.js"
+      ],
+      "possibleAliasConsumers": [
+        "src/app/renderer/v95/containers/renderer-runtime.js"
       ]
     },
     {
@@ -493,7 +560,10 @@
         "Object.keys",
         "allowed.has"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/pair-long-term-ui.js"
+      ]
     },
     {
       "exposure": "conversationAPI.openSummariesFolder",
@@ -506,7 +576,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.pauseConversation",
@@ -518,7 +589,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.previewLegacyConversationBinding",
@@ -531,7 +603,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.previewLegacyOwnerBinding",
@@ -544,7 +617,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.previewPairMemoryBackfill",
@@ -556,7 +630,10 @@
         "Object.keys",
         "allowed.has"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/pair-long-term-ui.js"
+      ]
     },
     {
       "exposure": "conversationAPI.regenerateError",
@@ -571,7 +648,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.regenerateMessage",
@@ -586,7 +664,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.regenerateSummary",
@@ -599,7 +678,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.reset",
@@ -611,6 +691,9 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ],
+      "possibleAliasConsumers": [
+        "src/app/renderer/v95/containers/renderer-runtime.js"
       ]
     },
     {
@@ -623,7 +706,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.retryFailedSummaries",
@@ -636,7 +720,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.returnTemporaryCharacter",
@@ -646,7 +731,8 @@
       "serviceCalls": [],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.sendMessage",
@@ -660,7 +746,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.temporarilyLeaveCharacter",
@@ -670,7 +757,8 @@
       "serviceCalls": [],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "conversationAPI.updateSummary",
@@ -683,7 +771,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "electronAPI.collectAndOpenLogs",
@@ -708,7 +797,10 @@
         "settingsRepository.getCK3UserFolderPath",
         "shell.openPath"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "electronAPI.getAppVersion",
@@ -720,7 +812,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "electronAPI.hideWindow",
@@ -730,7 +823,8 @@
       "serviceCalls": [],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "electronAPI.onChatReset",
@@ -740,7 +834,8 @@
       "serviceCalls": [],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "electronAPI.onHideChat",
@@ -750,7 +845,8 @@
       "serviceCalls": [],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "electronAPI.onOverlayVisibilityChange",
@@ -758,7 +854,10 @@
       "channel": "overlay-visibility-change",
       "handlerOwner": "Main event -> Preload listener",
       "serviceCalls": [],
-      "rendererConsumers": []
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "electronAPI.onToggleMinimize",
@@ -768,7 +867,8 @@
       "serviceCalls": [],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "electronAPI.onToggleSettings",
@@ -778,7 +878,8 @@
       "serviceCalls": [],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "electronAPI.openExternal",
@@ -789,7 +890,10 @@
         "console.error",
         "shell.openExternal"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "electronAPI.openPlayer2",
@@ -802,7 +906,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "electronAPI.setIgnoreMouseEvents",
@@ -810,7 +915,10 @@
       "channel": "set-ignore-mouse-events",
       "handlerOwner": "main/main.js + main/window-manager.js",
       "serviceCalls": [],
-      "rendererConsumers": []
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "electronAPI.toggleConfigPanel",
@@ -820,7 +928,8 @@
       "serviceCalls": [
         "webContents.send"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "lettersAPI.cancelBlockedRunCommand",
@@ -832,7 +941,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "lettersAPI.cancelStalledRunCommand",
@@ -844,7 +954,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "lettersAPI.clearOldStatuses",
@@ -855,7 +966,8 @@
         "console.error",
         "letterManager.clearOldStatuses"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "lettersAPI.clearPending",
@@ -868,7 +980,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "lettersAPI.confirmEffectDiagnostic",
@@ -881,7 +994,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "lettersAPI.getLetterDetails",
@@ -892,7 +1006,8 @@
         "console.error",
         "letterManager.getLetterStatus"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "lettersAPI.getPromptPreview",
@@ -903,7 +1018,10 @@
         "console.error",
         "letterManager.buildPromptPreview"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "lettersAPI.getStatuses",
@@ -916,7 +1034,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "lettersAPI.resyncGameDate",
@@ -929,7 +1048,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "lettersAPI.retryBlockedRunCommand",
@@ -941,7 +1061,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "lettersAPI.retryFailed",
@@ -954,7 +1075,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "lettersAPI.retryPayload",
@@ -967,7 +1089,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "lettersAPI.retryStalledRunCommand",
@@ -979,7 +1102,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "lettersAPI.runEffectDiagnostic",
@@ -992,7 +1116,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.checkPlayer2Health",
@@ -1007,7 +1132,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.clearCustomContextLength",
@@ -1018,7 +1144,8 @@
         "console.error",
         "llmManager.clearCustomContextLength"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.deletePreset",
@@ -1030,7 +1157,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.getActionApprovalSettings",
@@ -1042,7 +1170,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.getActionsProviderId",
@@ -1054,7 +1183,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.getAllowPrerelease",
@@ -1064,7 +1194,8 @@
       "serviceCalls": [
         "settingsRepository.getAllowPrerelease"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.getAppSettings",
@@ -1076,7 +1207,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.getContextDiagnostics",
@@ -1086,7 +1218,8 @@
       "serviceCalls": [
         "llmManager.getContextDiagnostics"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.getCurrentContextLength",
@@ -1097,7 +1230,8 @@
         "console.error",
         "llmManager.getCurrentContextLength"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.getLanguage",
@@ -1107,7 +1241,11 @@
       "serviceCalls": [
         "settingsRepository.getLanguage"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js",
+        "src/app/renderer/v95/containers/renderer-runtime.js"
+      ]
     },
     {
       "exposure": "llmConfigAPI.getLanguagePreferences",
@@ -1117,7 +1255,10 @@
       "serviceCalls": [
         "settingsRepository.getLanguagePreferences"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/v95/containers/renderer-runtime.js"
+      ]
     },
     {
       "exposure": "llmConfigAPI.getMaxContextLength",
@@ -1128,7 +1269,8 @@
         "console.error",
         "llmManager.getMaxContextLength"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.getSummaryPromptSettings",
@@ -1140,7 +1282,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.getSummaryProviderId",
@@ -1152,7 +1295,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.getUiLanguage",
@@ -1162,7 +1306,10 @@
       "serviceCalls": [
         "settingsRepository.getUiLanguage"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/v95/containers/renderer-runtime.js"
+      ]
     },
     {
       "exposure": "llmConfigAPI.getUiPresentationEnabled",
@@ -1172,7 +1319,10 @@
       "serviceCalls": [
         "settingsRepository.getUiPresentationEnabled"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/v95/containers/renderer-runtime.js"
+      ]
     },
     {
       "exposure": "llmConfigAPI.listModels",
@@ -1185,7 +1335,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.saveActionApprovalSettings",
@@ -1197,7 +1348,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.saveAllowPrerelease",
@@ -1209,7 +1361,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.saveGenerateFollowingMessagesSetting",
@@ -1221,7 +1374,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.saveGlobalStreamSetting",
@@ -1233,7 +1387,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.saveLanguage",
@@ -1243,7 +1398,8 @@
       "serviceCalls": [
         "settingsRepository.saveLanguage"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.saveMessageFontSize",
@@ -1255,7 +1411,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.savePauseOnRegenerationSetting",
@@ -1267,7 +1424,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.saveProviderConfig",
@@ -1279,7 +1437,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.saveShowSettingsOnStartupSetting",
@@ -1291,7 +1450,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.saveSummaryPromptSettings",
@@ -1304,7 +1464,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.saveUiLanguage",
@@ -1314,7 +1475,10 @@
       "serviceCalls": [
         "settingsRepository.saveUiLanguage"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/v95/containers/renderer-runtime.js"
+      ]
     },
     {
       "exposure": "llmConfigAPI.saveUiPresentationEnabled",
@@ -1324,7 +1488,10 @@
       "serviceCalls": [
         "settingsRepository.saveUiPresentationEnabled"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/v95/containers/renderer-runtime.js"
+      ]
     },
     {
       "exposure": "llmConfigAPI.selectFolder",
@@ -1336,7 +1503,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.setActionsProviderId",
@@ -1348,7 +1516,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.setActiveProvider",
@@ -1360,7 +1529,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.setCK3Folder",
@@ -1378,7 +1548,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.setCustomContextLength",
@@ -1389,7 +1560,8 @@
         "console.error",
         "llmManager.setCustomContextLength"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.setModLocationPath",
@@ -1401,7 +1573,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.setSummaryProviderId",
@@ -1413,7 +1586,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "llmConfigAPI.testConnection",
@@ -1425,7 +1599,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "performanceDiagnosticsAPI.exportReport",
@@ -1438,7 +1613,10 @@
         "performanceTrace.exportReport",
         "promises.writeFile"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/startup-performance-observer.js"
+      ]
     },
     {
       "exposure": "performanceDiagnosticsAPI.getState",
@@ -1446,7 +1624,10 @@
       "channel": "performance:get-state",
       "handlerOwner": "main/ipc/register-ipc.js",
       "serviceCalls": [],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/startup-performance-observer.js"
+      ]
     },
     {
       "exposure": "performanceDiagnosticsAPI.recordRendererMetrics",
@@ -1463,7 +1644,10 @@
         "results.has",
         "steps.has"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/startup-performance-observer.js"
+      ]
     },
     {
       "exposure": "performanceDiagnosticsAPI.snapshot",
@@ -1473,7 +1657,8 @@
       "serviceCalls": [
         "performanceTrace.snapshot"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "promptsAPI.deletePreset",
@@ -1485,7 +1670,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "promptsAPI.exportZip",
@@ -1501,7 +1687,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "promptsAPI.getDefaultLetterMain",
@@ -1513,7 +1700,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "promptsAPI.getDefaultMain",
@@ -1525,7 +1713,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "promptsAPI.getLetterSettings",
@@ -1537,7 +1726,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "promptsAPI.getSettings",
@@ -1549,7 +1739,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "promptsAPI.listFiles",
@@ -1562,7 +1753,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "promptsAPI.listPresets",
@@ -1574,7 +1766,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "promptsAPI.openPromptFile",
@@ -1587,7 +1780,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "promptsAPI.openPromptsFolder",
@@ -1599,7 +1793,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "promptsAPI.readFile",
@@ -1612,7 +1807,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "promptsAPI.saveFile",
@@ -1625,7 +1821,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "promptsAPI.saveLetterSettings",
@@ -1637,7 +1834,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "promptsAPI.savePreset",
@@ -1651,7 +1849,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "promptsAPI.saveSettings",
@@ -1663,7 +1862,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "promptsAPI.validateTemplate",
@@ -1675,7 +1875,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "providerDiagnosticsAPI.exportCacheDiagnosticsV2",
@@ -1687,7 +1888,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "providerDiagnosticsAPI.exportRealRequestDiff",
@@ -1699,7 +1901,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "providerDiagnosticsAPI.exportRecent",
@@ -1709,7 +1912,8 @@
       "serviceCalls": [
         "providerDiagnostics.exportRecent"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "providerDiagnosticsAPI.getRealRequestDiff",
@@ -1719,7 +1923,10 @@
       "serviceCalls": [
         "providerDiagnostics.getRealRequestDiffStatus"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "providerDiagnosticsAPI.getRecent",
@@ -1729,7 +1936,8 @@
       "serviceCalls": [
         "providerDiagnostics.getRecent"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "providerDiagnosticsAPI.getStatus",
@@ -1739,7 +1947,10 @@
       "serviceCalls": [
         "providerDiagnostics.getStatus"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "providerDiagnosticsAPI.getV89Settings",
@@ -1749,7 +1960,10 @@
       "serviceCalls": [
         "settingsRepository.getChatPromptV89Settings"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "providerDiagnosticsAPI.saveV89Settings",
@@ -1761,7 +1975,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "usageAPI.clear",
@@ -1773,7 +1988,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "usageAPI.getReport",
@@ -1785,7 +2001,8 @@
       ],
       "rendererConsumers": [
         "src/app/renderer/assets/index-Dn3qWlAB.js"
-      ]
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "worldlineAPI.confirmCanonBranch",
@@ -1795,7 +2012,10 @@
       "serviceCalls": [
         "worldlineService.confirmCanonBranch"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/world-memory-editor.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.createSupplemental",
@@ -1803,7 +2023,10 @@
       "channel": "worldline:createSupplemental",
       "handlerOwner": "main/ipc/register-ipc.js",
       "serviceCalls": [],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.deleteSupplemental",
@@ -1811,7 +2034,10 @@
       "channel": "worldline:deleteSupplemental",
       "handlerOwner": "main/ipc/register-ipc.js",
       "serviceCalls": [],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.forkCanonBranch",
@@ -1821,7 +2047,10 @@
       "serviceCalls": [
         "worldlineService.forkCanonBranch"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/world-memory-editor.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.getAnnualDelta",
@@ -1831,7 +2060,10 @@
       "serviceCalls": [
         "worldlineService.getAnnualDelta"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.getCanonCurrentTruth",
@@ -1841,7 +2073,10 @@
       "serviceCalls": [
         "worldlineService.getCanonCurrentTruth"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/world-memory-editor.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.getCanonHistory",
@@ -1851,7 +2086,10 @@
       "serviceCalls": [
         "worldlineService.getCanonHistory"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/world-memory-editor.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.getCheckpointStatus",
@@ -1859,7 +2097,10 @@
       "channel": "worldline:getCheckpointStatus",
       "handlerOwner": "main/ipc/register-ipc.js",
       "serviceCalls": [],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.getDiagnostics",
@@ -1869,7 +2110,10 @@
       "serviceCalls": [
         "worldlineService.getDiagnostics"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.getEntityKinshipInspector",
@@ -1881,7 +2125,10 @@
         "worldlineService.getEntityKinshipInspector",
         "worldlineService.getEntityKinshipInspectorAsync"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.getHistoricalBindings",
@@ -1892,7 +2139,10 @@
         "worldlineService.getHistoricalBindings",
         "worldlineService.getHistoricalBindingsAsync"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.getKinshipIntegrityReport",
@@ -1902,7 +2152,8 @@
       "serviceCalls": [
         "worldlineService.getKinshipIntegrityReport"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "worldlineAPI.getLegacySupplementalMigration",
@@ -1912,7 +2163,10 @@
       "serviceCalls": [
         "worldlineService.getLegacySupplementalMigration"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/world-memory-editor.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.getOfficialRecollection",
@@ -1922,7 +2176,10 @@
       "serviceCalls": [
         "worldlineService.getOfficialRecollectionForResponder"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ],
+      "possibleAliasConsumers": []
     },
     {
       "exposure": "worldlineAPI.getOverview",
@@ -1932,7 +2189,10 @@
       "serviceCalls": [
         "worldlineService.getOverview"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.getPromptDiagnostics",
@@ -1942,7 +2202,10 @@
       "serviceCalls": [
         "worldlineService.getPromptDiagnosticsAsync"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.getSettings",
@@ -1952,7 +2215,10 @@
       "serviceCalls": [
         "worldlineService.getSettings"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.getSubjectiveResponderOptions",
@@ -1962,7 +2228,10 @@
       "serviceCalls": [
         "worldlineService.getSubjectiveResponderOptions"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.getSubjectiveWorldView",
@@ -1973,7 +2242,10 @@
         "Number.isSafeInteger",
         "worldlineService.getSubjectiveWorldView"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.getWorldKnowledge",
@@ -1983,7 +2255,10 @@
       "serviceCalls": [
         "worldlineService.getWorldKnowledge"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.listCanon",
@@ -1993,7 +2268,10 @@
       "serviceCalls": [
         "worldlineService.listCanon"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/world-memory-editor.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.listCanonCharacterOptions",
@@ -2003,7 +2281,10 @@
       "serviceCalls": [
         "worldlineService.listCanonCharacterOptions"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/world-memory-editor.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.listSupplemental",
@@ -2013,7 +2294,10 @@
       "serviceCalls": [
         "worldlineService.listSupplemental"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/world-memory-editor.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.migrateLegacySupplemental",
@@ -2023,7 +2307,10 @@
       "serviceCalls": [
         "worldlineService.migrateLegacySupplemental"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/world-memory-editor.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.mutateCanon",
@@ -2033,7 +2320,10 @@
       "serviceCalls": [
         "worldlineService.mutateCanon"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/world-memory-editor.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.onUpdated",
@@ -2041,7 +2331,11 @@
       "channel": "worldline:updated",
       "handlerOwner": "Main event -> Preload listener",
       "serviceCalls": [],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js",
+        "src/app/renderer/world-memory-editor.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.rebuildCheckpoint",
@@ -2051,7 +2345,10 @@
       "serviceCalls": [
         "worldlineService.rebuildCheckpoint"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.renameCanonBranch",
@@ -2061,7 +2358,10 @@
       "serviceCalls": [
         "worldlineService.renameCanonBranch"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/world-memory-editor.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.resumeCanonBranch",
@@ -2071,7 +2371,10 @@
       "serviceCalls": [
         "worldlineService.resumeCanonBranch"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/world-memory-editor.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.selectAutosaveFile",
@@ -2081,7 +2384,10 @@
       "serviceCalls": [
         "worldlineService.selectAutosaveFile"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.setAutosavePath",
@@ -2091,7 +2397,10 @@
       "serviceCalls": [
         "worldlineService.setAutosavePath"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.setRecallSettings",
@@ -2101,7 +2410,11 @@
       "serviceCalls": [
         "worldlineService.setRecallSettings"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js",
+        "src/app/renderer/world-memory-editor.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.temporalArchive",
@@ -2111,7 +2424,10 @@
       "serviceCalls": [
         "worldlineService.runTemporalArchive"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.testCanonRecall",
@@ -2121,7 +2437,10 @@
       "serviceCalls": [
         "worldlineService.testCanonRecall"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/world-memory-editor.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.updateSupplemental",
@@ -2129,7 +2448,10 @@
       "channel": "worldline:updateSupplemental",
       "handlerOwner": "main/ipc/register-ipc.js",
       "serviceCalls": [],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     },
     {
       "exposure": "worldlineAPI.validateAutosavePath",
@@ -2139,7 +2461,10 @@
       "serviceCalls": [
         "worldlineService.validateAutosavePath"
       ],
-      "rendererConsumers": []
+      "rendererConsumers": [],
+      "possibleAliasConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
     }
   ],
   "handlers": [
