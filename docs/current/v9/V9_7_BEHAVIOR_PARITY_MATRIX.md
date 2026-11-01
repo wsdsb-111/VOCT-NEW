@@ -13,6 +13,6 @@
 | Action/RunFile/Letter/恢复 | v7.10-official-action-system、rc6-rev3-run-command-recovery、v8.15.2-letter-receipt-startup-recovery、v8.14.2-letter-memory-finalization、v7.6.1-recovery-race | 原有确定性门禁、exactly-once/ACK/未知效果不重发；复用完整发布组，不复制故障框架 |
 | Bridge / 独立 Mod / 安装包 | verify-ck3-mod-source、build-ck3-mod-source、既有 Bridge tests；CI materialize/verify --deployed、v9.4-windows-packaged-smoke | 隔离源码/产物/EXE；Workshop 与第三方兼容 Mod 无源码改动 |
 
-新增 4 个 release checks；原 519 发布组和 127 归档项均不移除/降级，最终 523 发布组。651 个 test 文件分类由清单实际输出核对，不把上述摘要替代完整门禁。
+新增 5 个 release checks；原 519 发布组和 127 归档项均不移除/降级，最终 524 发布组。652 个 test 文件分类由清单实际输出核对，不把上述摘要替代完整门禁。
 
 Phase 3 不进行其它迁移：外部消费者未知的 strict:false、temporal 导出及 family/Legacy helper 全部保留。数据迁移不是本版行为差异。仅允许版本文案 9.6.1→9.7.0、路线当前覆盖说明和 D01 的无结果差异分支删除。

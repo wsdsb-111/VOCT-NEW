@@ -4,7 +4,7 @@
 
 源构建 `node --max-old-space-size=384 scripts/build-runtime.js` 与 `verify-runtime-build.js` 通过 **353 映射**，payload `a8d9305b3941c80f3155893ec97a71e0f5bed69c23fd73f8285dff26c5bd7567`。第一次 sandbox rename EPERM 使旧 artifact 留在原位，未通过验证；批准后重试构建/验证成功，不掩盖该失败。没有本机 deploy。
 
-以下 17 项用单个 Node 进程逐项执行、堆上限 384MB，全通过：
+以下 18 项用单个 Node 进程逐项执行、堆上限 384MB，全通过：
 
 - V9.7 production-reference-audit / provider-compat / prompt-plan-parity / legacy-data-readonly 四项。
 - V9.4 legacy-layout-golden / plan-schema / provider-effective-request / conversation-plan-main-chain 四项。
@@ -12,7 +12,7 @@
 - V9.3.4 legacy-forget、V9.3.5 pair-ledger。
 - V9.6.1 world-memory-restart-budget、relationship-recognition-regression。
 - V7.10 rc6-rev3-run-command-recovery、V8.15.2 letter-receipt-startup-recovery。
-- test-test-manifest：651 test 文件、523 release groups、127 archived checks。
+- test-test-manifest：652 test 文件、524 release groups、127 archived checks。
 
 adapter-conformance 在源码版本升级后第一次失败：夹具读旧安装 package 导致 User-Agent VOTC/9.6.1 与源码候选9.7.0不符。改为读取被测源码 package 后通过；没有更新 Golden 或放宽断言。
 
@@ -33,3 +33,5 @@ V9.7 准确 SHA 的完整 Windows CI、隔离部署/完整 EXE 和最终独立�
 | 2h / 100+ 回合 Soak | 留给 V9.8 RC，不宣称 Full Freeze |
 
 本机完整 release 不执行，遵守资源约束；完整门禁在隔离 Windows CI 执行。后续文档合并另做源文完整性、链接/锚点和版本归属验证，并登记实际数量。
+
+首次 V9.7 CI：`b7459369163c3fd4214fdf3cdd44601ffa43b984` / [41283699861](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/41283699861) **FAILED**，构建与源产物哈希已通过，初始部署因旧资源与新 stage 不同且没有 receipt 被 `build_deploy_initial_target_unknown` 拒绝；release/EXE 未执行。新增仅限 GITHUB_ACTIONS 且 GITHUB_WORKSPACE 等于受测根的基线收据引导，严格比对冻结的353项旧资源，才由原部署事务升级。普通用户部署保护未改。新增 ci-baseline 正反例已通过，发布清单524组。

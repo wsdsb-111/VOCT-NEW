@@ -52,6 +52,8 @@ jobs:
           node scripts/verify-ck3-mod-source.js --mod-dir .build/ck3-mod-build
       - name: Build runtime from source
         run: node scripts/build-runtime.js
+      - name: Verify pinned installation baseline before isolated upgrade
+        run: node scripts/seed-ci-runtime-baseline.js
       - name: Verify and materialize generated runtime
         id: materialize
         run: |
