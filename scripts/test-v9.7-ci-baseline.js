@@ -10,12 +10,21 @@ const fixture = { payloadSha256: "a".repeat(64), files: [{ path: "out/main/main.
 const fixturePath = require.resolve("./fixtures/v9.7/runtime-v961.json");
 const previous = require.cache[fixturePath];
 require.cache[fixturePath] = { id: fixturePath, filename: fixturePath, loaded: true, exports: fixture };
-const { seedCiRuntimeBaseline } = require("./seed-ci-runtime-baseline");
+const { seedCiRuntimeBaseline, loadPinnedNormalizedHashes } = require("./seed-ci-runtime-baseline");
 if (previous) require.cache[fixturePath] = previous;
 else delete require.cache[fixturePath];
 const { statePaths } = require("./deploy-runtime-build");
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "votc-v97-ci-baseline-"));
 try {
+  const pinned = JSON.parse(fs.readFileSync(fixturePath, "utf8"));
+  const normalized = loadPinnedNormalizedHashes(path.resolve(__dirname, ".."), pinned);
+  assert.equal(normalized.size, pinned.files.length, "all original Git source blobs match pinned raw hashes before normalization");
+  const crlfSource = "default_userdata/prompts/character_description/standard/pListMccTest2.js";
+  assert.notEqual(normalized.get(crlfSource), pinned.files.find(item => item.path === crlfSource).sha256,
+    "the baseline contains CRLF source, not only LF source paired with CRLF checkout");
+  const invalidPin = structuredClone(pinned);
+  invalidPin.files[0].sha256 = "0".repeat(64);
+  assert.throws(() => loadPinnedNormalizedHashes(path.resolve(__dirname, ".."), invalidPin), /ci_baseline_source_hash_mismatch/);
   const target = path.join(root, "resources/app/out/main/main.js");
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, "synthetic baseline\n");
@@ -26,7 +35,8 @@ try {
   }
   const environment = { GITHUB_ACTIONS: "true", GITHUB_WORKSPACE: root };
   fs.writeFileSync(target, "unrecognized user modification");
-  assert.throws(() => seedCiRuntimeBaseline({ rootDir: root, environment }), /build_deploy_target_mismatch/);
+  // This synthetic root deliberately has no Git source proof: unknown bytes cannot be adopted.
+  assert.throws(() => seedCiRuntimeBaseline({ rootDir: root, environment }), { code: "ENOENT" });
   assert(!fs.existsSync(statePaths(root).receiptPath));
   fs.writeFileSync(target, "synthetic baseline\r\n");
   const foreign = path.join(path.dirname(target), "foreign.js");
