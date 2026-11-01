@@ -2,7 +2,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { rejectLinks } = require("./build-runtime");
+const { rejectLinks, sha256 } = require("./build-runtime");
 const { statePaths, validateReceipt, verifyReceiptTargets } = require("./deploy-runtime-build");
 const baseline = require("./fixtures/v9.7/runtime-v961.json");
 
@@ -15,9 +15,23 @@ function seedCiRuntimeBaseline({ rootDir = path.resolve(__dirname, ".."), enviro
   const receiptPath = statePaths(rootDir).receiptPath;
   rejectLinks(receiptPath);
   if (fs.existsSync(receiptPath)) throw new Error("ci_baseline_existing_receipt_rejected");
-  const receipt = validateReceipt({ schemaVersion: 1, status: "COMPLETED", payloadSha256: baseline.payloadSha256,
-    files: baseline.files.map(item => ({ path: item.path, sha256: item.sha256 })) });
-  verifyReceiptTargets(path.join(rootDir, "resources/app"), receipt);
+  const appDir = path.join(rootDir, "resources/app");
+  const files = baseline.files.map(item => {
+    const file = path.join(appDir, item.path);
+    rejectLinks(file);
+    const bytes = fs.readFileSync(file), actualHash = sha256(bytes);
+    if (actualHash !== item.sha256) {
+      // Match the existing deploy bootstrap's CRLF allowance for Git text files.
+      // The receipt records actual bytes; neither old files nor pinned hashes change.
+      const text = bytes.toString("utf8");
+      if (!Buffer.from(text).equals(bytes) || sha256(Buffer.from(text.replace(/\r\n/g, "\n"))) !== item.sha256) {
+        throw new Error(`build_deploy_target_mismatch:${item.path}`);
+      }
+    }
+    return { path: item.path, sha256: actualHash };
+  });
+  const receipt = validateReceipt({ schemaVersion: 1, status: "COMPLETED", payloadSha256: baseline.payloadSha256, files });
+  verifyReceiptTargets(appDir, receipt);
   fs.mkdirSync(path.dirname(receiptPath), { recursive: true });
   fs.writeFileSync(receiptPath, JSON.stringify(receipt, null, 2) + "\n", { flag: "wx" });
   return { files: receipt.files.length, payloadSha256: receipt.payloadSha256 };
