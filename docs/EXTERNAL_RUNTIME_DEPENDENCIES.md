@@ -4,11 +4,11 @@
 
 ## V9.1 当前发行版本（2026-10-11）
 
-项目／UI V9.1，App 包 9.1.0，本机 VOTC Workshop item `3346777360` 的内容 descriptor 与启动器 descriptor 保持 2.0.5。`name="Voices of the Court 2.0"` 保留用于 Mod 身份与依赖兼容。Memory Engine 4.0／协议 3.0／摘要存储 2.5、Official Action 2.0.3 和独立 Three-Mod 1.0.6 保持；版本号不能代替配套桥文件指纹或 Steam 发布证据。[V9.1 构建](current/v9/V9_1_SOURCE_BUILD.md)为当前源码／依赖入口，下方 V8 表格和检查脚本保留历史快照。本次未修改游戏或 Workshop 文件。
+项目／UI V9.1，App 包 9.1.0，本机 VOTC Workshop item `3346777360` 的内容 descriptor 与启动器 descriptor 保持 2.0.5。`name="Voices of the Court 2.0"` 保留用于 Mod 身份与依赖兼容。Memory Engine 4.0／协议 3.0／摘要存储 2.5、Official Action 2.0.3 和独立 Three-Mod 1.0.6 保持；版本号不能代替配套桥文件指纹或 Steam 发布证据。[V9.1 构建](versions/v9/V9.1.md#source-6765aa1852c9)为当前源码／依赖入口，下方 V8 表格和检查脚本保留历史快照。本次未修改游戏或 Workshop 文件。
 
 ## V8.15.2 独立日期桥与信件运行依赖（2026-10-10）
 
-本机 Mod `3346777360` 的最新配套文件如下，App 与 Mod 仍按方案 B 独立发布。配套原样快照与部署说明见 [信件执行器补丁](../compatibility-patches/v8.15.2-letter-runner/README.md)，最新主动运行合同见 [首次写出后消费缺口审查](v8.15.2-outbound-bridge-followup-report.md)。此前日期／信件／归档及退役后卡顿改善保留用户验收；本次苏轼旧信的消费延迟与新增门禁修复单独待实测。
+本机 Mod `3346777360` 的最新配套文件如下，App 与 Mod 仍按方案 B 独立发布。配套原样快照与部署说明见 [信件执行器补丁](../compatibility-patches/v8.15.2-letter-runner/README.md)，最新主动运行合同见 [首次写出后消费缺口审查](versions/v8/V8.15.md#source-77f182135b2f)。此前日期／信件／归档及退役后卡顿改善保留用户验收；本次苏轼旧信的消费延迟与新增门禁修复单独待实测。
 
 | 最新必需 Mod 文件 | SHA-256 |
 |---|---|
@@ -22,13 +22,13 @@
 
 主日期入口为原生 registry 的全局透明桥，每两秒直接读取 rich DATE，并在玩家有效时持续执行正式 `votc.txt`，不再以 `talk_scene` 停止后台消费；既有对话 consumer 保留，沿用同 command ID 游戏侧去重。旧 `letters.txt` 轮询、runner 计时器与 blur 设置、App stale/close ACK 的日期 rearm 均停用；旧事件窗口只保留无行为兼容目标，A1 禁用、A2 起步。after-lobby 仅保留一次 DATE，LOAD_SESSION/epoch 与增量 reader 会话隔离不变。既有未知队列与载体证据保留，不重放。必须完全重启 App/CK3 以加载新循环；下方 V8.14.2 合同、哈希和 Gate 为历史快照，不作为最新主动运行合同。
 
-中国流官／称谓规则属于可选独立工程 [CK3-Three-Mod-Compatibility](https://github.com/wsdsb-111/CK3-Three-Mod-Compatibility)，不是VOTC核心的必需依赖。安装目录及历史1.0.6证据保留于[同级官职报告](v8.15.2-celestial-same-tier-office-report.md)，本轮分离见[V9迁移](current/v9/V9_COMPATIBILITY_MOD_SEPARATION.md)；VOTC自身Workshop七文件Bridge快照继续保留并独立管理。
+中国流官／称谓规则属于可选独立工程 [CK3-Three-Mod-Compatibility](https://github.com/wsdsb-111/CK3-Three-Mod-Compatibility)，不是VOTC核心的必需依赖。安装目录及历史1.0.6证据保留于[同级官职报告](versions/v8/V8.15.md#source-eaae57dc4b7a)，本轮分离见[V9迁移](versions/v9/CONTRACTS.md#source-12085bd37d6d)；VOTC自身Workshop七文件Bridge快照继续保留并独立管理。
 
 ## V8.15.2 Canonical Trait 输出补充（2026-10-07）
 
 App 与 Workshop item `3346777360` 仍独立发布。V8.15.2 App 可读旧特质行，但稳定 canonical ID 需要 Mod 的 `common/scripted_effects/log_character_v2_effect.txt` 配套更新：角色、子女、兄弟姐妹三条 `VOTC:IN` 特质流在 category 字段前输出 `[THIS.Trait.GetKey]`。新解析保留 traitId、localizedName、category、name、desc，不改变其他字段。
 
-本机该文件 SHA-256 为 `B567FFBEF3B7FF720630D9D9C60ACDB3FFF3AFAE4E883D38639FCC890CE10DE2`。这表示本次核查内容，不证明 Steam 已发布；仅更新 App 或对照 descriptor 版本不能保证补丁存在。独立打包 Mod 时须携带该文件并保留下方 Date Runner 链，Steam 覆盖后须重新复核。未修改 Three-Mod 兼容补丁。真实 trait key 输出与 L10-L15 验收见 [V8.15.2 报告](v8.15.2-implementation-report.md)，下方哈希表为前置日期补丁快照。
+本机该文件 SHA-256 为 `B567FFBEF3B7FF720630D9D9C60ACDB3FFF3AFAE4E883D38639FCC890CE10DE2`。这表示本次核查内容，不证明 Steam 已发布；仅更新 App 或对照 descriptor 版本不能保证补丁存在。独立打包 Mod 时须携带该文件并保留下方 Date Runner 链，Steam 覆盖后须重新复核。未修改 Three-Mod 兼容补丁。真实 trait key 输出与 L10-L15 验收见 [V8.15.2 报告](versions/v8/V8.15.md#source-5db66c1da43a)，下方哈希表为前置日期补丁快照。
 
 ## 发布关系与依赖范围
 
@@ -45,7 +45,7 @@ V8.14.2 已核对的版本元数据如下。相同的 `2.0.4` 字符串来自两
 
 因此，本合同不把 `2.0.4` 推导成未来兼容版本范围，也不写 `>=2.0.4`。当前可复核的依赖基线是 Workshop item ID、descriptor 字段及下表文件内容指纹的组合。其他 descriptor 版本或指纹都须重新核对；仅版本号较高不自动代表包含兼容的 Date Runner。
 
-本机 VOTC.exe 加载当前打包资源的隔离窗口验收见[收口修复报告](v8.14.2-closeout-fix-implementation-report.md)，不据 EXE 旧元数据判定资源缺失；其他独立分发物仍须逐一核对实际资源与配套 Mod。
+本机 VOTC.exe 加载当前打包资源的隔离窗口验收见[收口修复报告](versions/v8/V8.14.md#source-0a754c11f63b)，不据 EXE 旧元数据判定资源缺失；其他独立分发物仍须逐一核对实际资源与配套 Mod。
 
 ## Date Runner 合同
 
@@ -56,7 +56,7 @@ App 的运行时从 CK3 `debug.log` 读取日期/producer 标记，Worldline 服
 3. `gui/event_windows/votc_invisible_event.gui` 在窗口结束时清理并重建固定名 `letters_runner`。
 4. `gui/custom_gui/letters_runner.gui` 轮流运行 `letters.txt` 与 `votc.txt`；`talk_scene` 存在时按既有逻辑清理 runner。
 
-加载入口是本轮 Mod 修复点；后三项是它依赖的既有运行链。完整静态调用关系与代码结果见[信件调度与记忆重试热修报告](v8.14.2-letter-memory-retry-hotfix-report.md)。
+加载入口是本轮 Mod 修复点；后三项是它依赖的既有运行链。完整静态调用关系与代码结果见[信件调度与记忆重试热修报告](versions/v8/V8.14.md#source-321423efddc5)。
 
 ## 已检查的 Mod 内容基线
 

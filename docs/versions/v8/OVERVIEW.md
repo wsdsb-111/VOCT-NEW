@@ -1,0 +1,1907 @@
+# OVERVIEW 版本册
+
+原文按来源合并，保留设计、实施、修复、失败与待验结论；历史文字中的“当前”只属于其原版本。源码快照：`9449b0a4bc6b0616452b31fb8c79eafeae829bf5`。旧页仅保留链接兼容索引。
+
+- [V8阶段开发记录.md](#source-bd3947cca735)
+
+<!-- chapter:source-bd3947cca735:start -->
+<a id="source-bd3947cca735"></a>
+## 来源：docs/V8阶段开发记录.md
+
+原文规范化 SHA-256：`aa13d3a07d7ee23f4c79563cdf90ff4f550e0eb2a645fe70619730cecd1f315c`。
+
+<a id="source-bd3947cca735--votc-v8-阶段开发记录"></a>
+# VOTC V8 阶段开发记录
+
+本文件连续记录 V8 Dynamic Historical Worldline System 的已实现内容、验证结果和明确边界。V8 在 V7 已稳定的 Memory、Conversation、Action、Letter、Prompt Cache 与 Relationship 系统旁新增独立历史能力层，不借版本升级重构既有合同。
+
+<a id="source-bd3947cca735--第一阶段v80-historical-baseline-20"></a>
+## 第一阶段：v8.0 Historical Baseline 2.0
+
+<a id="source-bd3947cca735--实现"></a>
+### 实现
+
+- 将 `game-data/legacy-historical-reference.js` 的 18 个年份分支迁移到 `historical-system/historical-data/`，以结构化 period、event 和 figure key 保存。
+- 新增 schema version 1，校验时期范围、重复 ID、引用完整性、事件日期、敏感度和事实/人物/统治者数据合同。
+- 新增 Historical Baseline、Legacy Compatibility Adapter 和严格日期 Temporal Knowledge Gate。
+- 原 `getHistoricalReferenceByYear(year)` 路径、函数名和四字段返回结构保留为薄 wrapper。
+- `VOTC_CORE_VERSION` 更新为 `8.0.0`。
+
+<a id="source-bd3947cca735--行为与冻结边界"></a>
+### 行为与冻结边界
+
+- V8.0 处于 shadow foundation 阶段，不改变 `default.hbs`、world context、Prompt block 顺序、cache anchor 或 stable prefix。
+- 不修改 Memory、Conversation、Action、Letter、Run Command Queue、Character 或 Relationship Resolver。
+- 不引入 campaign identity、worldline persistence、historical figure binding、divergence 或 projector；这些按路线留给 v8.1 以后。
+- Temporal Gate 对无效当前日期、缺失来源时间和不完整同年边界 fail-safe，只有明确不晚于游戏日期的事实或事件才返回 allow；V8.0 不把结果注入 Prompt。
+
+<a id="source-bd3947cca735--验证"></a>
+### 验证
+
+- 800–1400 共 601 个年份与冻结 v7.10.1 函数逐年 `deepStrictEqual`，并显式覆盖全部区间边界和数组顺序。
+- 六个时代 fixture 的 `world_context` 字节级等价。
+- schema、Temporal Gate、Prompt/cache hash 和 historical-system 静态依赖边界专项测试通过。
+- 测试清单更新为 136 个 `test-*.js`：67 个 release groups、68 个历史归档、1 个统一入口。
+- 完整发布回归结果见 [v8.0 实施报告](V8.0.md#source-190f408aeec1)。
+
+<a id="source-bd3947cca735--实机边界"></a>
+### 实机边界
+
+用户于 2026-08-31 确认 v7.10.1 基线此前待验收的真实 CK3、Provider、连续重启和效果链路均已通过并正常工作。V8.0 保持输出行为等价；新版本仍需完成一次 900、1010、1105、1130、1265、1280 节点的行为等价 smoke 后，才能把 V8.0 本身记为实机通过。
+
+<a id="source-bd3947cca735--第二阶段v81-campaign-identity--worldline-store-foundation"></a>
+## 第二阶段：v8.1 Campaign Identity + Worldline Store Foundation
+
+<a id="source-bd3947cca735--v80-审计收口"></a>
+### V8.0 审计收口
+
+- P0：0。
+- P1：修复严格日历日期、Fact/Figure 双向归属、Period 全时间轴连续覆盖，以及校验后 dataset 可变四类数据完整性问题。
+- 修复后 800–1400 parity、六年代 Prompt 字节等价和完整发布回归保持通过。
+
+<a id="source-bd3947cca735--实现-1"></a>
+### 实现
+
+- `VOTC_CORE_VERSION` 更新为 `8.1.0`。
+- 新增 `campaign-identity.js`：只接受 Workshop `votc8c-[0-9]{12}` token，以 SHA-256 派生稳定 ID；无可靠 token 时仅使用不可持久化 session identity。
+- 新增 `worldline-store.js`：在独立 `votc_data/dynamic_history/<campaignId>/worldline.json` 中保存 schema version 1 Shadow state，采用 temp、fsync、close、rename 原子写入。
+- 新增 `dynamic-history-service.js` 作为唯一入口；持久化异常进入 diagnostics，不阻断既有对话或信件日志解析。
+- LogParser 读取 `VOTC:CAMPAIGN`；`default.hbs`、PromptBuilder、Memory、Action、Letter 和 Relationship 不读取新 metadata。
+- Workshop 升级为 2.0.5，以 12 个存档全局数字变量建立稳定 token；三条 GameData 日志路径均输出同一协议。
+
+<a id="source-bd3947cca735--验证与边界"></a>
+### 验证与边界
+
+- 同 token 跨 resolver 重启模拟保持 ID，不同 token 目录隔离；缺失和畸形 token 零持久化。
+- WorldlineStore 覆盖首次创建、重载、原子替换、临时文件清理、损坏 JSON、未知 schema、campaign/fingerprint mismatch 和时间倒序。
+- 测试清单为 139 个文件、70 个发布组、68 个历史归档和 1 个统一入口；完整发布回归通过。
+- V8.1 仍为 Shadow Mode，不实现 V8.2+ GameStateSnapshot、统治者解析、人物绑定、分叉、事实有效性和 Projector。
+- 真实 CK3 的首次生成、跨重启、不同新存档、读档/继承及旧模组降级仍需人工验收。详见 [设计文档](V8.1.md#source-513d26a35fa0)与 [实施报告](V8.1.md#source-e599f16a0da8)。
+
+<a id="source-bd3947cca735--v83-前置修复-gate-ac"></a>
+## V8.3 前置修复 Gate A–C
+
+<a id="source-bd3947cca735--已完成"></a>
+### 已完成
+
+- P1-01：V7.10 Action Config 静态测试对读取的源码统一做 CRLF→LF 归一化，消除 Windows Git checkout EOL 导致的 CI 假失败；正式 Action、Prompt、Provider 参数未修改。
+- P1-03：移除 `DynamicHistoryService` 的全局 last-writer `worldlineState`；Campaign Identity、Worldline State 和持久化状态绑定到各自 GameData 的 `dynamicHistory`。
+- P2-01：`dynamicHistory` 与兼容入口 `historicalCampaignIdentity` 均为 non-enumerable，不进入对象展开、`Object.keys()` 或 JSON 序列化。
+- P2-02：同一 GameData 重复调用 `updateFromGameData()` 更新既有隐藏容器，不再重定义不可配置属性。
+- 新回归连续处理 Campaign A/B 并再次读取 A，确认实例状态不串线；测试清单仍为 139 个文件、70 个发布组、68 个历史归档和 1 个统一入口。
+
+<a id="source-bd3947cca735--保留-gate"></a>
+### 保留 Gate
+
+- P1-02 的 Save A 重启/读档、Save B 隔离及 token 入档必须在真实 CK3 中验收，本轮不宣称通过。
+- P1-04 Branch Identity、P1-05 per-campaign mutation serializing 和 P1-06 Temporal-safe projection 按清单分别留到 V8.4、V8.4 和 V8.5/V8.6；本轮不提前扩展。
+- 详细证据见 [V8.3 前置修复实施报告](V8.3.md#source-ab5c8c576230)。
+
+<a id="source-bd3947cca735--第三阶段v83-historical-figure-resolver"></a>
+## 第三阶段：v8.3 Historical Figure Resolver
+
+<a id="source-bd3947cca735--实现-2"></a>
+### 实现
+
+- `VOTC_CORE_VERSION` 更新为 `8.3.0`。
+- P1-07 允许已退休 Action System 目录不存在或为空，并继续阻止业务文件回流；正式 Action runtime 未修改。
+- 为 Historical Baseline 的 48 个人物建立显式 resolver readiness；首批 14 人具有人工复核的出生年、性别、正向文化提示和来源。
+- 新增 Canonical Figure Input、精确名称/别名索引和纯函数评分解析器。一个 GameData 只构建一次 Canonical Relationship Profile，候选证据快照深冻结且不包含完整 Character 对象。
+- identity evidence 与 world-state evidence 分离；现任头衔、职位、领地或位置变化不会成为身份冲突，历史死亡也不会排除沙盒存活人物。
+- 结果限定为六种状态并写入不可枚举的 `GameData.dynamicHistory.figureResolution`。解析及构造异常均 fail-open，不影响既有日志解析、对话、信件、动作或世界线加载。
+
+<a id="source-bd3947cca735--冻结边界"></a>
+### 冻结边界
+
+- 不修改 `default.hbs`、Prompt block 顺序、cache anchor、stable/dynamic 分类、Memory、Conversation、Action、Letter、Run Command Queue 或 Relationship Resolver 语义。
+- 不持久化 figure binding，不升级 Worldline schema，不写 CK3 文件，不建立全局候选缓存。
+- `RESOLVED` 当前只用于 Shadow diagnostic；不会改写 `historicalReferenceInfo` 或进入最终 Prompt。
+
+<a id="source-bd3947cca735--验证与未完成-gate"></a>
+### 验证与未完成 Gate
+
+- 新增五组 V8.3 发布门禁，覆盖 48 人 readiness、14 人校准、单次关系构建、名称门禁、歧义/硬冲突/时间边界、GameData 隔离、隐藏 metadata、fail-open、零持久化和 Prompt/cache 冻结。
+- 测试清单更新为 144 个文件、75 个发布组、68 个历史归档和 1 个统一入口。
+- 本地完整发布回归 75 个 release groups 全部通过，V8.0/V8.1 与冻结的 V7 主链路保持通过。
+- 20–30 条人工 Ground Truth、真实 CK3 Save A/B、跨重启/读档和同名改名场景仍待人工验收；本地未推送远端，因此不宣称 GitHub CI 全绿。
+- 详细证据见 [V8.3 Historical Figure Resolver 实施报告](V8.3.md#source-48c363bcc8ed)。
+
+<a id="source-bd3947cca735--第三阶段收口v831-实机校准-dashboard"></a>
+## 第三阶段收口：v8.3.1 实机校准 Dashboard
+
+<a id="source-bd3947cca735--实现-3"></a>
+### 实现
+
+- `VOTC_CORE_VERSION` 更新为 `8.3.1`。
+- 修复 `consort` 未生成 spouse evidence 的 Schema/Runtime 不一致；Relationship Resolver 本体保持冻结。
+- 强年龄与性别组成的核心身份分数达到 0.85，culture 降为 0.03 的辅助项；同名候选不能仅因 culture 差异被强制解析。
+- 新增纯 JSON Diagnostics Projector、一次 parse 的 IPC Controller、30 分钟/最多 5 个 capture 的可信 Snapshot Cache，以及 diagnostics 目录下的 append-only Ground Truth Store。
+- 现有 Overlay“系统优化与用量”增加历史人物 Tab，提供 Ready-only、状态筛选、搜索、下一个待核验、史实/当前对照、raw culture、阈值条、分层证据、冲突、候选和六类人工裁定。
+
+<a id="source-bd3947cca735--冻结边界与验证"></a>
+### 冻结边界与验证
+
+- Ground Truth 不写 `dynamic_history`，生产 Resolver 不读取裁定；刷新不调用 Prompt、Action、Letter、Memory 或 active conversation。
+- 不增加 BrowserWindow、自动轮询或 CK3 UI 控制，不修改 Worldline schema、Prompt/cache 顺序或 V7 运行合同。
+- 新增五组 V8.3.1 发布门禁；测试清单更新为 149 个文件、80 个发布组、68 个历史归档和 1 个统一入口。
+- 本地统一发布回归 80/80 通过；默认深色主题 Overlay 可视化冒烟已确认历史人物入口、卡片、状态、分数、证据、候选和裁定控件正常显示。三主题逐项视觉验收仍需人工完成。
+- 至少 20 条真实 Ground Truth、Auto `RESOLVED` Precision ≥ 98%、Save A/B 与岳飞早死/长寿等场景仍需人工实机完成；本地未推送远端，不宣称 GitHub CI 通过。
+- 详细证据见 [V8.3.1 实施报告](V8.3.md#source-5c47d9c34043)。
+
+<a id="source-bd3947cca735--第四阶段v84-ck3-savegamestate-前置勘探未施工"></a>
+## 第四阶段：v8.4 CK3 Save/GameState 前置勘探（未施工）
+
+<a id="source-bd3947cca735--勘探范围"></a>
+### 勘探范围
+
+- 按计划书只完整解析用户指定的 `autosave_1.ck3`；同一 save games 目录其余 20 个 `.ck3` 仅读取头部和 metadata 快照。
+- 选定样本为 `SAV0100`、`TEXT_UNCOMPRESSED`、约 218.82 MiB，metadata/body 日期均为 `1154.1.1`，`ironman=no`。
+- 只读检查 74 个唯一顶层 key、144,287 条 character record、20,504 条 landed title 和 107 个 active war object；未向仓库写入存档、日志、解析 JSON 或用户数据。
+
+<a id="source-bd3947cca735--已交付"></a>
+### 已交付
+
+- `scripts/explore-v8.4-gamestate.js`：一次性容器检测、Gamestate 临时提取、顶层扫描、Jomini targeted Query、索引原型、目录快照和 debug.log 证据采集工具。
+- `scripts/fixtures/v8.4/`：character、同名人物、title history、active war 和 save metadata 五个最小脱敏 fixture。
+- [V8.4 能力报告](V8.4.md#source-0bbd2ba70024)、[容器报告](V8.4.md#source-262867f190b3)、[性能基准](V8.4.md#source-37a9d55197aa)、[Schema 笔记](V8.4.md#source-e95ae757cb2b)、[Adapter/Index 提案](V8.4.md#source-01fa3e01a287) 和 [Live Probe/Delta Hook 可行性报告](V8.4.md#source-c46080e49bc6)。
+
+<a id="source-bd3947cca735--关键边界"></a>
+### 关键边界
+
+- 存档内可读 `playthrough_id`，但单一样本不能证明 branch identity；未发现直接 `historical_id`，同名 `Yuefei_name` 共 4 条，必须保留候选数组。
+- Title holder/history 在局部样本可读；`wars` 只确认 active store，未发现统一 ended war/history store。
+- targeted Query 约 5.19 秒，index checkpoint RSS 约 2.15 GiB；worker/child 隔离是建议，不是已实现能力。
+- Workshop 现有 `log_gamedata_v3*`/`log_character_v2` 能通过交互输出局部 probe；未发现可依赖的全局年度/月度 delta hook，debug.log 也未提供可验证的 live CK3 游戏日期。
+
+<a id="source-bd3947cca735--停止条件"></a>
+### 停止条件
+
+本阶段停在前置勘探报告，不实现正式 V8.4 adapter、worker、live polling、delta merger、Worldline 投影或 Prompt/Memory 接入。正式施工前仍需人工提供/验收第二个同 campaign 或 branch 样本、S0/S1 live probe、Save A/B checkpoint reconciliation，以及 ZIP/binary/split/Ironman 边界样本。
+
+<a id="source-bd3947cca735--第四阶段续historical-definition-id-前置勘探-2未施工"></a>
+## 第四阶段续：Historical Definition ID 前置勘探 2（未施工）
+
+<a id="source-bd3947cca735--勘探范围-1"></a>
+### 勘探范围
+
+- 读取 `C:\Users\97330\Downloads\探测2.md` 的执行要求，扫描基础游戏 `game/history/characters`、当前 launcher playset 的 Workshop Mod 历史人物目录，并以同一 `autosave_1.ck3` 做 Definition ID、Runtime ID、`character_lookup` 和 UI/Debug 交叉核验。
+- 本轮只做只读目录/文本/存档分析和一次性原型扫描；未修改 CK3 存档、游戏文件、Workshop Mod、V8.4 生产运行时代码、Prompt、Memory、Relationship Resolver 或 UI 生产代码。
+
+<a id="source-bd3947cca735--已交付-1"></a>
+### 已交付
+
+- `scripts/explore-v8.4-definition-mapping.js`：只读扫描历史人物外层 Definition、当前 active Mod 来源、重复定义、目标人物候选、存档 `character_lookup` 与 Runtime Character 记录，并输出临时目录 JSON。
+- [Historical Definition ID 报告](V8.4.md#source-6981b66e9596)、[Definition/Runtime 映射报告](V8.4.md#source-d3b7efafad2c)、[Mod 历史人物来源报告](V8.4.md#source-a2942a9d35b7)、[Historical ID UI/Debug 来源报告](V8.4.md#source-6f2f6e5e775e) 和 [Definition Catalog 提案](V8.4.md#source-d124c0c365c5)。
+
+<a id="source-bd3947cca735--关键结论"></a>
+### 关键结论
+
+- 本次样本扫描到 500,130 个 Definition block、369,689 个唯一 Definition ID 和 66,844 个重复 Definition ID；历史定义本身不是当前 Runtime Character 的直接内嵌字段。
+- `character_lookup` 提供了可复核的 Definition ID → Runtime ID 入口：`tangyin_yue_014 → 96895`、`nansong_yue_085 → 96896`；`han_12371` 与 `licheng_xin_006` 在本存档 lookup 中未出现，不能用同名或静态定义强行绑定。
+- `GetHistoryId`、`GetScriptedCharacterByHistoryID` 及 CK3 `debug.log` 的 Historical ID 输出路径已确认；VOTC 当前日志脚本尚未形成经实机确认的 Historical ID probe，仍为待验收项。
+- 活跃 playset 为 54 个 Mod；与目标人物直接相关的来源包括 Oriental Empires、溥天之下更多剧本与兵种及 VOTC，Eastern Ritual and Governance 本轮历史人物目录未命中目标关键词。多个 Mod 存在重复 `han_12371`，需在正式 Catalog/解析器中保留来源与冲突状态。
+
+<a id="source-bd3947cca735--停止条件-1"></a>
+### 停止条件
+
+本轮停在前置勘探报告，不实现正式 Historical Definition Catalog、Definition/Runtime adapter、live probe、delta merger、Worldline 投影或 Prompt/Memory 接入。正式施工前仍需人工验收 Mod 最终覆盖规则、第二个同 campaign/branch 或 checkpoint 样本、VOTC Historical ID probe，以及随机 NPC、玩家子女和事件角色的跨存档映射稳定性。
+
+<a id="source-bd3947cca735--第四阶段续v84-luna-实机与-s0s1-对账部分完成未冻结"></a>
+## 第四阶段续：V8.4 Luna 实机与 S0/S1 对账（部分完成，未冻结）
+
+<a id="source-bd3947cca735--实机验证"></a>
+### 实机验证
+
+- 使用用户已启动的 VOTC 与 CK3，临时 debug-only Probe 成功读取 CK3 运行时日期：`1155年10月31日/421879` 与 `1155年11月8日/421887`，均与画面一致。
+- 岳飞存活实例闭环通过：`nansong_yue_085 -> 96896`，CK3 debug tooltip 显示 `ID: 96896，历史ID: nansong_yue_085`，VOTC 日志同时输出 `runtime=96896/history=nansong_yue_085`。
+- 玩家 `121091` 与玩家子女 `33614168` 的 `GetHistoryId` 为空且日志正常返回，作为普通角色安全对照通过。
+- `tangyin_yue_014 -> 96895` 的静态映射已确认，但 S0/S1 均显示该人物已于 `1151.5.18` 死亡，当前会话无法从 UI 发起 live 对话，故记为 `NOT_RUN`。
+- 证据采集完成后已清理 Workshop Mod 中 4 个临时 Probe 行，未保留到正式运行路径。
+
+<a id="source-bd3947cca735--checkpoint-与年度-delta"></a>
+### Checkpoint 与年度 Delta
+
+- 只读比较 `autosave_1.ck3`（S0 `1154.1.1`）与 `autosave.ck3`（S1 `1155.1.1`）：同一 `playthrough_id`、同一玩家 `121091`；死亡转移 1,799 条，S1 新人物 3,004 条，其中玩家新子女 4 条。
+- 岳飞 `96896` 跨 checkpoint 存活且字段变化可读；岳飞 `96895` 跨 checkpoint 保持死亡；辛弃疾观察样本 `140239` 跨 checkpoint 存活。
+- Title holder 与 War started/ended 尚未按清单进入 Luna，明确留给 Terra；本轮不把数量差异当作完整事件对账。
+
+<a id="source-bd3947cca735--冻结边界-1"></a>
+### 冻结边界
+
+- 本阶段只交付验证工具和报告，不新增正式 adapter、live polling、Delta Merger、Worldline 投影或 Prompt/Memory 接入。
+- 详细证据见 [Live Date/History ID 报告](V8.4.md#source-10c073606a41)、[S0/S1 差分报告](V8.4.md#source-342ad510a62b)和[年度 Delta 对账矩阵](V8.4.md#source-559744d91a89)。
+- `V8.4 DESIGN FREEZE READY = NO`：早死实例和部分 live 样本仍未完成，Title/War 以及最终跨阶段 Gate 尚待 Terra/Sol。
+
+<a id="source-bd3947cca735--第四阶段续v84-terra-titlewar-与-mod-override-对账部分完成未冻结"></a>
+## 第四阶段续：V8.4 Terra Title/War 与 Mod Override 对账（部分完成，未冻结）
+
+<a id="source-bd3947cca735--s0s1-title-与-war"></a>
+### S0/S1 Title 与 War
+
+- 扩展只读 checkpoint 工具，读取 `landed_titles/landed_titles` 的 current holder/history 和 `wars/active_wars` 的对象化战争；未接入正式 adapter 或运行时。
+- S0→S1 发现 1,186 条 Title holder 变化：286 条在 S1 有窗口内 history 可重建，900 条只有 current holder。玩家的 `d_huixun` 从 `121091` 变为 `96798`，S1 history 明确记录 `1154.12.29 appointment`；这证明路径可用，但全量只能标 `PARTIAL`。
+- 对象化 active war 为 S0 107、S1 87：40 条保持活跃，47 条只在 S1 活跃，其中 46 条 `start_date` 位于窗口内；67 条 S0 活跃战争不再有 S1 active object，其中 11 条仅保留 raw event reference、56 条没有精确引用。不存在已验证的 `end_date`/result store，因此 `WAR_ENDED` 必须提升为 Supplemental，而非由缺失自动重建。
+
+<a id="source-bd3947cca735--duplicate-definition-id--mod-override"></a>
+### Duplicate Definition ID / Mod Override
+
+- 只读读取当前 Launcher 的 54 Mod active playset，其中 6 个 Mod 提供 `history/characters` 源目录。position 作为排序证据保存，不假定为已验证的 CK3 覆盖语义。
+- 选取 `han_12371` 及四个 base/Oriental Empires 重复 ID：S0 lookup/Runtime 只能证明部分 Definition 已实例化，不能区分字段不同的 religion 源行；五个样本均为 `CONFLICT`，没有 `LOAD_ORDER_CONFIRMED` winner。
+- V8.4 V1 必须保留全部 source rows、Mod ID、Launcher position 和差异字段，并保持 `CONFLICT`；在有受控新局或 CK3 resolver 输出前，不替 CK3 猜覆盖结果。
+
+<a id="source-bd3947cca735--冻结边界-2"></a>
+### 冻结边界
+
+- 本阶段交付 [S0/S1 差分报告](V8.4.md#source-342ad510a62b)、[年度 Delta 对账矩阵](V8.4.md#source-559744d91a89)和[Definition Override 验证](V8.4.md#source-00f31acec715)，以及两项只读勘探脚本。
+- 未执行 ZIP Parser、Worker Isolation、Branch Save A/B 或 Sol 最终审查；未修改 CK3/VOTC 生产代码、Prompt、Memory、Action、Letter 或任何存档。
+- `V8.4 DESIGN FREEZE READY = NO`：Title 与 War 分别为 `PARTIAL`/`PROMOTED_TO_SUPPLEMENTAL`，Mod Override 为 `CONFLICT`，仍需 Sol 做最终 Gate 与架构冻结判断。
+
+<a id="source-bd3947cca735--第四阶段续v84-sol-最终冻结审查pass"></a>
+## 第四阶段续：V8.4 Sol 最终冻结审查（PASS）
+
+<a id="source-bd3947cca735--最终-gate"></a>
+### 最终 Gate
+
+- `Live Game Date = PASS`；`S0/S1 Checkpoint Diff = PASS`。
+- `Live GetHistoryId = PASS`、`Definition Runtime Closed Loop = PASS`：用户在新测试存档中完成两个岳飞、李清照、随机 NPC 的 VOTC `TEST_CHAR` 实机验收，并确认非空/空 History ID 均正常输出；玩家子女 `33614168` 继续以原存档空值样本作安全对照。新存档 Runtime ID 为 `82049`、`82048`、`78086`、`87063`，与旧存档不同属于正常的存档内 Runtime 对齐差异。
+- Title、Death、War、Historical Figure Across Checkpoint 和 Mod Override 均为 `PARTIAL`。其中 War End 已明确提升为 Supplemental，Mod Override 保持 conflict-preserving，不再以猜测 winner 作为实现前提。
+
+<a id="source-bd3947cca735--可冻结结论与停止条件"></a>
+### 可冻结结论与停止条件
+
+- Historical ID 空值合法，禁止姓名回填；Title current-only 和 War End 必须保留 Supplemental；重复 Definition ID 保存全部来源、顺序元数据、字段差异与 `CONFLICT`。
+- ZIP Parser、Worker Isolation 和 Branch Save A/B 按清单留到相应正式实现阶段，不作为本次 Test 1–6 审查的新增阻断项。
+- 本轮只形成审查与文档结论，未修改 CK3 存档、Workshop Mod、Prompt、Memory、Action、Letter 或 V8.4 生产运行时。
+- 最终判定：`V8.4 DESIGN FREEZE READY = YES`，状态为 `PASS`。P0 Test 2/3 已由新测试存档手动验收完成；Title current-only、War End 和 Mod Override winner 仍按已冻结的 Supplemental/conflict-preserving 边界进入正式施工。
+- 详细判定表、P0 阻断项和最小补证路径见 [Sol 最终冻结审查](V8.4.md#source-5cad4353eba1)。
+
+<a id="source-bd3947cca735--第五阶段v84-luna-世界线前端terra-ipc-已接入"></a>
+## 第五阶段：V8.4 Luna 世界线前端（Terra IPC 已接入）
+
+<a id="source-bd3947cca735--页面施工"></a>
+### 页面施工
+
+- 在现有打包 Renderer 的配置面板增加“世界线”入口，交付年度存档来源、检查点状态、世界概览、年度 Delta、世界知识、Historical Identity 和诊断页签。
+- 增加 Game Truth/ Supplemental / Player Canon 的来源区分；没有 Terra 数据时保持空状态，不伪造人物、头衔、战争、日期或历史绑定。
+- 增加当前会话/当前检查点范围的 Supplemental 编辑器，支持标题、正文、日期、实体、可见性和重要性，以及添加、更新、隐藏和删除；前端 payload 固定携带 `source=PLAYER_SUPPLEMENTAL`、`scope=SESSION` 与 `checkpointScope=CURRENT_CHECKPOINT`。
+
+<a id="source-bd3947cca735--分层边界"></a>
+### 分层边界
+
+- Luna 只调用可选 `window.worldlineAPI`，不直接读取文件、不访问 `ipcRenderer`、不承担 Save Reader 或 Parser。Terra API 尚未存在时页面显式显示等待状态；API 调用失败时不把本地状态当作已持久化结果。
+- 本轮没有修改 Preload、Main IPC、World Services、CK3 存档、Workshop Mod、Prompt、Memory、Action、Letter 或既有 WorldlineStore。
+- 因仓库只有打包 Renderer 产物，没有可复现的前端源码/构建链，本轮只对 `index-Dn3qWlAB.js`、`index-WtJH_nua.css` 做最小发布产物补丁。
+
+<a id="source-bd3947cca735--验证与停止条件"></a>
+### 验证与停止条件
+
+- 新增 `scripts/test-v8.4-luna-worldline-ui.js` 并纳入统一 `test-manifest.js`；入口、页面区块、Terra 方法名、scope 标记和资源加载关系检查通过。
+- `node --check resources/app/out/renderer/assets/index-Dn3qWlAB.js` 与 `git diff --check` 通过。
+- 详细内容见 [V8.4 Luna 世界线前端实施报告](V8.4.md#source-069052179c93)。Terra 已接入真实 IPC、存档读取与 Supplemental 持久化；三主题 Electron 视觉验收仍需人工完成。
+
+<a id="source-bd3947cca735--第六阶段v84-terra-世界线运行时实现完成默认-prompt-保持关闭"></a>
+## 第六阶段：V8.4 Terra 世界线运行时（实现完成，默认 Prompt 保持关闭）
+
+<a id="source-bd3947cca735--已交付-2"></a>
+### 已交付
+
+- 新增受限 Save Reader、ZIP/plain container 检测、Worker 解析与 bounded GameState Snapshot；主进程只持有 Checkpoint，不持有完整 AST。
+- 接入 `worldline:*` IPC/Preload、`autosave.ck3` 稳定监听、原子 Checkpoint、Live `TEST_CHAR` probe、年度 Delta 与 Checkpoint-scoped Supplemental 持久化。
+- Delta 仅在有 GameState 证据时标为事实；War End 和无法以 title history 证明的 holder 变更转入 Supplemental。
+- 世界知识的 Conversation/PromptBuilder 基础存在但默认关闭；异常时回退到既有 Personal Memory，对话默认行为不变。
+
+<a id="source-bd3947cca735--保留-gate-1"></a>
+### 保留 Gate
+
+- Definition Catalog 的全量 base/mod provenance、重复 Definition conflict 与覆盖 winner 尚未进入运行时；save `character_lookup` 是唯一 direct identity evidence。
+- split/binary/Ironman、跨 Branch Save A/B、真实 Electron 文件选择器、真实 CK3 监听和启用世界知识后的 Provider/Cache 回归仍待 Sol 审查。
+- 详细实现和验证边界见 [V8.4 Terra 世界线运行时实施报告](V8.4.md#source-7c71c37e23d1)。
+
+<a id="source-bd3947cca735--第七阶段v84-sol-实现冻结审查与-ui-数据管线"></a>
+## 第七阶段：V8.4 Sol 实现冻结审查与 UI 数据管线
+
+<a id="source-bd3947cca735--p0p1-收口"></a>
+### P0/P1 收口
+
+- 路径校验改为 bounded preamble；未知/binary/split/Ironman 容器 fail-closed，Worker 增加超时、资源、索引数量和解析前后文件一致性边界。
+- Checkpoint、Delta 与 Supplemental 改为持久化成功后才替换内存态；Delta 按 campaign 隔离且不再固定截断历史，Snapshot 使用完整 Gamestate 指纹。
+- 多 Definition → 单 Runtime 标记 provenance 歧义；hidden Supplemental 真正落盘、失效缓存且不召回；手工诊断/STALE/错来源 Checkpoint 不进入 Prompt。
+- World Prompt 分离 stable/topic/supplemental/current authority 层，同时保持 V7 当前用户消息与 Turn Recall 的冻结顺序。
+
+<a id="source-bd3947cca735--ui-管线与真实-gate"></a>
+### UI 管线与真实 Gate
+
+- 既有 CK3 用户目录可自动推导 `save games\autosave.ck3`；手工来源保持优先，CK3 目录切换只跟随旧默认来源。
+- Main → Preload → Renderer 新增状态更新事件；校验成功立即构建，Watcher/Checkpoint/Supplemental 变化触发页面刷新，状态徽章显示真实管线状态。
+- 首次构建记录 autosave 指纹，避免首次轮询重复解析；Live log 变化只推送 `live_updated`，并按日志位置选取最新日期。
+- 真实 231,761,397-byte plain autosave 只读 Gate 通过：`1155.1.1`、145,210 人物、20,532 头衔、87 场战争、92,306 条历史绑定，Worker parse 2,863 ms；完整 Service 为 `VALID / ACTIVE`，Live Probe connected。
+- 新增 Sol 发布门禁并纳入统一 manifest。当前 `IMPLEMENTATION FREEZE CANDIDATE = PASS`；Definition Catalog active playset、Save A/B、Shared Query Analyzer、默认开启后的 Provider/Cache 和重启后 Electron 人工验收未完成，因此 `FULL FREEZE / DEFAULT ON = NO`。
+- 详细审查见 [V8.4 Sol 实现冻结审查](V8.4.md#source-b6f63f932d94)。
+
+<a id="source-bd3947cca735--第八阶段v841-terra-phase-a--source-race-与-political-context"></a>
+## 第八阶段：V8.4.1 Terra Phase A — Source Race 与 Political Context
+
+- `WorldlineService` 为每次来源变更递增 `sourceRevision`；构建在 Worker 返回、失败处理和写入前均复核 revision/source。旧 Worker 只返回 `worldline_build_superseded`，不能激活或覆盖新来源 Checkpoint。
+- 新增 `Political Context Resolver`，只依据玩家 `domainTitles` 和 `de_facto_liege` 链解析玩家主要头衔、直属领主、顶层 Realm 与 holder；多个根、缺失 parent 和循环明确保持 `UNKNOWN`，不再使用 titles 的第一个匹配项。
+- `getOverview()` 和 `getWorldKnowledge()` 已改用 Resolver。真实 autosave 中玩家 `#121091` 被证据化为 `h_china` 顶层 Realm、独立、统治者 `思昭`。
+- 新增 source race 与政治上下文两组确定性发布 Gate。按 V8.4.1 顺序，下一步必须切换 Sol 执行 Sol-1 P0 Correctness Review；本阶段未开始 Localization、UI 扩展或 Prompt Default On。
+- 详细记录见 [V8.4.1 Terra Phase A 实施报告](V8.4.md#source-61428dc69f25)。
+
+<a id="source-bd3947cca735--第九阶段v841-sol-1--phase-a-p0-correctness-gate"></a>
+## 第九阶段：V8.4.1 Sol-1 — Phase A P0 Correctness Gate
+
+- 独立覆盖 source A→B 后旧 Worker 先成功，以及 B 已激活后旧 Worker 再失败的顺序；旧结果不能持久化、激活、降级状态或发出当前来源失败通知。
+- 修复 Political Context 初版静默过滤缺失 domain title、holder 不一致 title 的证据缺口；两者现在明确返回 `UNKNOWN`。
+- ruler 只有在 title hierarchy、holder 与 character record 可对应时才输出；缺失 character record 时保留 holder ID 证据但 ruler 为未知、置信度为 `PARTIAL`。
+- 真实 autosave 严格复验仍确认玩家 `#121091` 的 `h_china` 顶层独立 Realm 与统治者 `思昭`；全量发布门禁 85 组通过。
+- `V8.4.1 PHASE A P0 CORRECTNESS = PASS`。Localization 尚未实施，identity/display 子 Gate 不提前宣称通过；下一步按计划切换 Terra 执行 Terra-3。
+- 详细审查见 [V8.4.1 Sol-1 P0 Correctness Review](V8.4.md#source-f32c9c305678)。
+
+<a id="source-bd3947cca735--第十阶段v841-terra-3--ck3-localization-resolver"></a>
+## 第十阶段：V8.4.1 Terra-3 — CK3 Localization Resolver
+
+- 新增 `CK3LocalizationResolver`，从 `dlc_load.json`、启用 Mod descriptor 和 Steam Workshop 路径发现基础游戏与 active Mod 本地化来源；未发现或扫描不完整时保持 raw key。
+- 支持 title、character first-name key、dynasty、culture、faith 和 war；每个结果保留 `localizedValue/rawKey/language/sourceFile/sourceMod/confidence`，政治上下文额外提供 `displayName`，但 runtime ID 与 raw key 不变。
+- 按实体类型按需扫描并缓存，不在 Main 构建全量语言文件常驻索引。当前真实 54 Mod 环境有 3,584 个简中语言文件，title 查询只扫描 119 个候选文件。
+- 真实 `h_china` 同时得到基础游戏“中华”和 active Mod `2506311074` 的“华夏”，返回 `CONFLICT` 并保留 raw key；无可证明 key 的玩家名“思昭”返回 `NOT_FOUND`，保持原文本。
+- 新增确定性 Localization 回归并纳入 release manifest。下一步切换 Luna，实现后端 display/raw/source/confidence 的 UI 接入与世界概览语义化。
+- 详细记录见 [V8.4.1 Terra-3 CK3 Localization Resolver 实施报告](V8.4.md#source-aa93cca44988)。
+
+<a id="source-bd3947cca735--第十一阶段v841-luna--localization-ui-与语义化世界概览实现完成待人工视觉-gate"></a>
+## 第十一阶段：V8.4.1 Luna — Localization UI 与语义化世界概览（实现完成，待人工视觉 Gate）
+
+- 完成 Luna-1 长字段与枚举可读性：状态标签不拆行，长 key/ID 在容器内安全换行，并为 `figureKey`、`definitionId` 与本地化 raw key 增加 tooltip/复制入口。
+- 完成 Luna-2：WorldlineView 默认显示 Terra Resolver 的 `displayName` / `localizedValue`，诊断辅助信息保留 `rawKey`、`confidence`、来源和冲突来源数量；前端不猜测 key 对应名称。
+- 完成 Luna-3：世界概览改为玩家主要头衔、直属领主、顶层 Realm、顶层 Realm 统治者，以及 Checkpoint/Live 日期和新鲜度；无证据时显示“未知 / 未确认”，独立状态显式显示“独立”。
+- `node --check`、Luna UI 静态契约、本地化 Resolver 和 Political Context 回归均通过。三套主题实际 Electron 画面和 1024px 人工视觉验收仍待完成。
+- 详细记录见 [V8.4.1 Luna UI 实施报告](V8.4.md#source-c3a0cf71a5ef)。
+
+<a id="source-bd3947cca735--第十二阶段v841-terra-45--中文-shared-query-与-checkpoint-freshness实现完成prompt-仍-opt-in"></a>
+## 第十二阶段：V8.4.1 Terra-4/5 — 中文 Shared Query 与 Checkpoint Freshness（实现完成，Prompt 仍 opt-in）
+
+- 新增 Shared Query Analyzer，中文 query 以 CJK 2–4 gram、runtime ID、Historical Definition ID、角色/title raw alias 和确认的本地化显示名检索实体；不再将整句作为唯一 `includes()` term。
+- Localized name 反查按 character/title 类型延迟构建 reverse index；未证实 override winner、动态 localization 或不完整扫描继续不生成别名。Memory 已确认的 out-of-scene 人物 ID 单向传递给 Worldline，并参与 cache key。
+- 新增 `pipelineState`、`checkpointAsOf`、`liveDate`、`ageDays`、`freshnessStatus` 与 reason；同日 FRESH、1–365 天 AGING、至少 366 天或任一日期/pipeline 不一致 STALE。没有 Live Probe 时不伪造实时日期。
+- STALE/wrong-source Checkpoint 永不进入 Prompt。当前世界 Prompt 明确区分 Checkpoint as-of 与 Live 日期，Live 变化会失效 topic cache；Game Truth/Supplemental/current 排序保持不变。
+- 新增中文 Query 与 Freshness 两组确定性 release Gate；下一步按顺序切换 Luna 实施 Luna-6 Prompt Diagnostics。
+- 详细记录见 [V8.4.1 Terra Query/Freshness 实施报告](V8.4.md#source-86bebe33f046)。
+
+<a id="source-bd3947cca735--第十三阶段v841-luna-6--prompt--world-recall-diagnostics实现完成待人工-gate"></a>
+## 第十三阶段：V8.4.1 Luna-6 — Prompt / World Recall Diagnostics（实现完成，待人工 Gate）
+
+- 新增只读 `getPromptDiagnostics` 查询入口；即使生产 `promptIntegrationEnabled` 仍为关闭，Luna 也可人工检查候选世界线 Prompt，但不会改变生产开关、存档或 Supplemental。
+- 诊断面板展示 Query、Shared Query Analyzer 解析实体、命中的 Game Truth、命中的 Supplemental、Checkpoint `asOf`、Live Date、Freshness、World Prompt Token、分块 Token、Cache Hit 与裁剪项。
+- 主进程通过 `worldline:getPromptDiagnostics` 接入 IPC，preload 只暴露受限方法；Renderer 保持不直接访问 `ipcRenderer`、Node 或文件系统。
+- Supplemental Top 3 与 Query Analyzer 人物/头衔上限产生的省略项会显式列为 `trimmedItems`，避免 UI 把候选和实际注入 Prompt 的条目混为一谈。
+- `node --check`、Prompt Diagnostics 定向测试、Luna UI 契约和 test manifest 均通过；完整发布回归在本阶段重跑，人工 Prompt Default On、Provider/Cache 与三套主题视觉 Gate 仍未完成。
+- 详细记录见 [V8.4.1 Luna Prompt Diagnostics 实施报告](V8.4.md#source-060265ce3376)。下一步按顺序切换 Terra，执行 Terra-6/7 或依据总纲安排的后续工作。
+
+<a id="source-bd3947cca735--第十四阶段v841-sol-3--prompt-source-boundary-review"></a>
+## 第十四阶段：V8.4.1 Sol-3 — Prompt Source Boundary Review
+
+- 修复 CK3 Live Probe 中文日期（如 `1155年11月8日`）被 Freshness 解析器判为无效的问题；`1155.1.1 → 1155年11月8日` 现在正确计算为 311 天并标记 `AGING`，诊断不再错误显示 `CHECKPOINT_STALE`。
+- Stable World Block 明确来源优先级：Live / 回应角色权威游戏资料 / 场景直接事实 > Checkpoint > Supplemental > Personal Memory > 模型推断。
+- Topic Game Truth 显式显示 Checkpoint `as-of` 日期，并在与本轮直接事实冲突时服从 Live/Responder/Scene；Live 日期不得把旧 Checkpoint 的可变事实伪装成当前状态。
+- 复核确认 hidden Supplemental、手工诊断存档、STALE/UNAVAILABLE 与 wrong-source Checkpoint 均不能进入生产 Prompt；只读诊断也不绕过这些安全边界。
+- Prompt Integration 继续默认关闭。Provider/KV Cache 与三套主题人工视觉 Gate 未在本阶段放行。
+- 详细记录见 [V8.4.1 Sol-3 Prompt Source Boundary Review](V8.4.md#source-8d651c29824f)。下一步按文档顺序切换 Luna，继续 Luna-4/5。
+
+<a id="source-bd3947cca735--第十五阶段v841-hotfix-luna-h1h2--prompt-diagnostics-ui"></a>
+## 第十五阶段：V8.4.1 Hotfix Luna-H1/H2 — Prompt Diagnostics UI
+
+- Token Breakdown 改用专用 `promptTokenBreakdownRows()`，直接展示每个 World Prompt Block 的 `label`、`id` 和 `tokens`；`worldline-stable` 与 `worldline-current` 不再被通用 Supplemental Renderer 显示为 `— / —`。
+- 诊断页新增 World Prompt 总数与分块合计校验，以及 Localization Reverse Lookup、Historical Alias Resolver、Runtime Identity Resolution 诊断区域，支持显示 sourceComplete、扫描文件数、缺失 descriptor、raw key、definition ID、runtime ID 和 match source。
+- Resolver 诊断数据缺失时保持“未提供”，不伪装成 Game Truth；实际 Resolver Trace 由后续 Terra-Hotfix 负责透传。Luna-H3 的真实 CK3 查询展示 Gate 尚待重启 VOTC 后人工确认。
+- 定向 UI、Prompt Diagnostics 和 Renderer 语法检查通过。下一步按 hotfix 文档顺序切换 Terra，执行 H1–H5。
+
+<a id="source-bd3947cca735--第十六阶段v841-hotfix-terra-h1h5--中文-identity-bridge"></a>
+## 第十六阶段：V8.4.1 Hotfix Terra-H1/H5 — 中文 Identity Bridge
+
+- Localization 反查保留 typed scan，并在未命中时 fallback 全语言目录；`nansong_l_simp_chinese.yml` 等非 `name/character` 命名文件可被人物查询命中。
+- 反查 API 改为显式 `MATCHED`/`NO_MATCH`/`CONFLICT`/`INCOMPLETE_SOURCE_SCAN` 诊断对象。来源不完整、descriptor 缺失或扫描超限不再返回普通空数组；同 display value 多 raw key 继续 fail-closed。
+- 新增冻结 Historical Alias Catalog。岳飞/岳武穆只允许经 `nansong_yue_085`、`tangyin_yue_014` 的 Checkpoint direct binding 到 Runtime；辛弃疾同理保留两个已勘探 Definition。没有名称猜测或 Localization 反向覆盖 Runtime ID。
+- Query Analyzer 透传 `resolverTrace`。历史别名已直接命中 Runtime 时，Localization 标记 `NOT_REQUIRED_HISTORICAL_MATCH`，避免在 55 Mod、3670 简中语言文件环境中进行无意义的重扫描；Prompt Default On 仍保持关闭。
+- 新增四个确定性 Hotfix Gate 并纳入 manifest。真实本机 Checkpoint 的 `岳飞现在在哪里` 命中 `#96896` 与 `#96895`，Trace 为 `AMBIGUOUS / MATCHED`；这是同一 Alias 多 Definition 的显式保留结果，未静默选取。
+- Terra-H1/H5 已完成，下一步按 hotfix 顺序切换 Sol 执行 H1–H4 审查与人工 UI Gate。详见 [Hotfix Terra 实施报告](V8.4.md#source-c2a102e9a113)。
+
+<a id="source-bd3947cca735--第十七阶段v841-hotfix-sol-h1h4--最终自动化审查"></a>
+## 第十七阶段：V8.4.1 Hotfix Sol-H1/H4 — 最终自动化审查
+
+- 真实 Checkpoint 六查询通过：`岳飞`/中文句命中 `#96896` 与 `#96895` 并保持 `AMBIGUOUS`；Definition、Runtime、`h_china` 直达；`涿郡`以唯一当前快照前缀候选命中 `c_nf_zhuojun_zhao`。
+- 修复 direct Runtime query 未写入 Runtime Trace 的问题；`#96896` 现在报告 `runtime=MATCHED`。
+- 修复多 Steam Library 首个候选没有 CK3 本体时停止搜索的问题；后续有效库可提供 base game source。无 Mod、本地 Mod、缺 descriptor、动态值和冲突继续 fail-closed。
+- Localization 采用 staged typed/fallback lookup；真实 `涿郡` 从初审超过 60 秒降为 208 ms。前缀 alias 只有当前快照唯一时成立，多候选明确 `CONFLICT`。
+- Token UI 独立消费 `label/id/tokens`，总和与后端 `worldPromptTokens` 比较，Resolver Trace 接通。新增三组 Sol Gate，manifest 更新为 165 个测试文件、96 个 release groups。
+- 完整发布回归 96/96 通过；语法、文档差异和测试清单检查无失败。
+- `SOL AUTOMATED GATE = PASS`；`Prompt Default On = NO`。重启后的 Electron 实际页面仍需人工确认两个岳飞 Runtime、涿郡 title、Resolver 状态和 Token 分块显示。详见 [Hotfix Sol 最终审查](V8.4.md#source-5328a2fdebf0)。
+
+<a id="source-bd3947cca735--第十八阶段v841-p0--世界线页主进程阻塞修复"></a>
+## 第十八阶段：V8.4.1 P0 — 世界线页主进程阻塞修复
+
+- 针对真实 Checkpoint 的 92,306 条 Definition→Runtime 绑定，修复世界线页初始化时全量排序后才截断 500 条的主进程阻塞。
+- `getHistoricalBindings()` 改为有界单次遍历：返回前 500 条、保留精确 `total` 与 `truncated`，不再创建或排序完整绑定数组。
+- 首轮修复后实机复测仍卡死；逐 IPC 隔离确认第二阻断项位于 `getOverview()` 的同步 Localization 扫描：`h_china` 为 125 ms，但中文显示名“思昭”被误当作 raw key 后超过 30 秒未返回。
+- 世界概览/世界知识改用专用快速显示解析：非 ASCII 或含空格文本直接采用，ASCII key 仅扫描 typed 文件且最多 250 个；完整 Resolver 继续保留给显式 Query/Prompt Diagnostics。
+- Terra 确定性回归保留 100,000 条绑定 fixture，Localization 回归新增中文显示文本零扫描和 250 文件硬上限；修复后需重启 VOTC，在真实 autosave 上点击世界线页做人工烟雾验收。
+
+<a id="source-bd3947cca735--第十九阶段v842-luna--身份歧义与世界线-ui-前置层完成等待-terrasol"></a>
+## 第十九阶段：V8.4.2 Luna — 身份歧义与世界线 UI 前置层（完成，等待 Terra/Sol）
+
+- 历史页签从“历史人物身份”改为“历史定义绑定 / Historical Definition Bindings”，明确只显示 Definition → Runtime，不把绑定关系表当作身份结论；保留 bounded `total/truncated`，增加 Definition/Runtime 搜索和状态筛选。
+- 新增 `identityResolution`/`candidates` 的独立候选卡，展示 Runtime、Definition、Raw、Score、Evidence、Conflict。候选不使用 `displayName` 或 alias 作为权威标题，并与 Game Truth 视觉隔离。
+- 年度 Delta 对 `WAR_NO_LONGER_ACTIVE` 显示中性“战争已不在活跃列表”，标记 `DERIVED_GAMESTATE`/待核实；actor 只展示可证明的 Runtime，过滤 `0` 和明显非人物数字，无法证明时显示“未解析”。
+- 检查点新鲜度加入 `LIVE_VERIFIED`、`CHECKPOINT_ONLY`、`STALE` 语义；缺失 Live 日期时显示“检查点有效”，不再使用容易误解的“新鲜”。Prompt 诊断在 `AMBIGUOUS` 时只展示候选，不把候选注入 Game Truth 区域。
+- `node --check resources\\app\\out\\renderer\\assets\\index-Dn3qWlAB.js`、Luna UI 结构回归和当时的 `node scripts\\test-release.js` 均通过；当时完整回归为 96/96 release groups。
+- 本阶段只完成 Luna 前置层，不提前宣称 Terra Identity Resolver、War Participant Parser、Prompt 生产 Gate 或 Sol 真实存档审查通过。详细记录见 [V8.4.2 Luna UI 前置层实施报告](V8.4.md#source-babcdbf37ee7)。
+
+<a id="source-bd3947cca735--第二十阶段v842-terra--identity--war-p0完成等待-sol"></a>
+## 第二十阶段：V8.4.2 Terra — Identity / War P0（完成，等待 Sol）
+
+- Historical Alias Catalog 改为候选 Definition 表，新的 Historical Identity Resolver 复用 V8.3 `IDENTITY_SCORING`、85% resolve 阈值、15% margin、强 secondary evidence 与 hard-conflict fail-closed 规则。
+- Shared Query Model 明确分离 `resolvedCharacters` / `candidateCharacters` 和 title 对应集合；兼容 `characters`/`titles` 只保留已解析事实。AMBIGUOUS 候选不注入 Prompt Topic Game Truth，不提供权威 display name。
+- War participant 只从 `character` / `participant` 显式字段采集已存在的 Runtime ID；`score`、`value`、`contribution` 等数字不再误收为 actor，并会进入拒绝诊断。未知显式 ID 同样拒绝并保留诊断。
+- active war 列表中消失的条目改为 `WAR_NO_LONGER_ACTIVE` / `DERIVED_GAMESTATE` / `UNKNOWN` / `RECONCILIATION_PENDING`；不会因缺少 end record 伪造 `WAR_ENDED`。玩家条目统一为 `PLAYER_SUPPLEMENTAL`。
+- 新增 CJK 泛问词分类和 entity anchor gate，防止“现在/哪里/怎么”等词召回无关 Supplemental；Checkpoint verificationMode 透传 `LIVE_VERIFIED`、`CHECKPOINT_ONLY`、`STALE`。
+- 新增三项 V8.4.2 定向 release tests；`node scripts\\test-release.js` 通过 99 个 release groups。Prompt Default On、真实 autosave UI/Provider/Cache Gate 与最终结论留给 Sol。详见 [V8.4.2 Terra P0 实施报告](V8.4.md#source-e30ed9dbc038)。
+
+<a id="source-bd3947cca735--第二十一阶段v842-sol--最终审查实现冻结-pass"></a>
+## 第二十一阶段：V8.4.2 Sol — 最终审查（实现冻结 PASS）
+
+- 独立复核 Shared Query、Historical Identity、Prompt Topic、War participant/Delta、Supplemental provenance、CJK recall、Candidate UI、Freshness 与 Token Breakdown 合同；补齐 AMBIGUOUS 生产 Prompt 隔离的专门 Gate。
+- 修复候选卡仍以 alias 作标题、Historical Binding 页未消费最近诊断结果，以及嵌套 participant 数字未进入拒绝诊断；Alias Catalog 的规范名改为直接来自 `figures.js`。
+- 只读解析真实 `autosave.ck3`（1157.1.1）和 `autosave_1.ck3`（1156.1.1）。岳飞三种自然语言查询均为 `AMBIGUOUS`、Game Truth 空、Topic Facts 无；Runtime/Definition 精确查询只命中 96896。
+- 真实年度差分得到 62 条 `WAR_STARTED`、69 条 `WAR_NO_LONGER_ACTIVE`；131 条 War Delta actor 全部能回查 Character Runtime，invalid actor 为 0，未伪造 `WAR_ENDED`。
+- `node scripts\\test-release.js` 通过 100 个 release groups。`V8.4.2 IMPLEMENTATION FREEZE = PASS`，`PROMPT DEFAULT ON = NO`。三主题 Electron 视觉烟雾测试和真实 Provider/KV Cache 对话仍未执行，不影响本次事实安全冻结结论。详见 [V8.4.2 Sol 最终审查](V8.4.md#source-bbf0edf4c71a)。
+
+<a id="source-bd3947cca735--第二十二阶段v842-p0--世界线首屏渲染热修"></a>
+## 第二十二阶段：V8.4.2 P0 — 世界线首屏渲染热修
+
+- 修复 `WorldlineView` 初次挂载时 `promptDiagnostics` 为空导致候选数组为 `undefined`、随后读取 `.length` 抛出 `TypeError` 的 P0 前端故障；主进程仍在运行但界面消失的现象由此产生。
+- 候选数组在无 Prompt 诊断结果时统一回退为空数组；新增离线首屏渲染回归，覆盖未运行 Prompt 诊断的默认状态。
+- Renderer/主进程语法检查、V8.4.2 Sol 定向测试和完整 `node scripts\\test-release.js` 均通过；需重启 VOTC 后人工点击“世界线”确认安装包加载最新 Renderer。
+
+<a id="source-bd3947cca735--第二十三阶段v842-p0--stale-conversation-close--run-command-queue-生命周期热修"></a>
+## 第二十三阶段：V8.4.2 P0 — Stale Conversation Close / Run Command Queue 生命周期热修
+
+- 按用户提供的修复方案，定位并修复旧 Conversation 的异步 Finalization 迟到发送 `conversation_close`、Close stalled 阻塞 FIFO 队列和启动后 `votc.txt` 隐式重放三条风险链路；版本号仍保持 V8.4.2。
+- Run Command Queue 升级为 v3：Close 携带 `scopeId`/`epoch`/`expiresAt`/破坏性策略，旧 v2 状态安全迁移；新 Conversation rollover 只做 Memory Finalization，不关闭新 Scene；旧世代、过期或 ACK 超时的 Close quarantine，匹配 carrier 才 neutralize，迟到 ACK 忽略。
+- 普通 Action 的写入历史仍进入 STALLED 并需要显式 retry/cancel，避免重复 Effect；`letters:getStatuses` 增加队列健康诊断，统一 `[RunCommand]` 日志保留 command 生命周期证据。
+- 新增 V8.4.2 lifecycle regression，覆盖 TTL、epoch supersede、startup quarantine、v2 migration、carrier mismatch、late ACK 和 rollover；确定性测试通过，CK3/VOTC 连续 Talk Scene smoke test 仍需人工完成。详细记录见 [V8.4.2 Run Command 生命周期热修实施报告](V8.4.md#source-03fa179cbcb4)。
+
+<a id="source-bd3947cca735--第二十四阶段v85-luna--player-semantic-presentation-layer完成等待-terra"></a>
+## 第二十四阶段：V8.5 Luna — Player Semantic Presentation Layer（完成，等待 Terra）
+
+- 新增纯 Renderer 展示 helper，将来源、freshness、identity、可见性、重要性、年度事件、历史人物映射和 Prompt 诊断摘要转换为玩家语义文案；本阶段不改变 Game Truth、Prompt、IPC、Ranker 或 Cache 权威。
+- 世界线顶部、世界概览、年度变化、世界知识和历史人物页签改为语义优先；完整路径、Checkpoint/Runtime/Definition/Raw 信息和 Resolver 细节集中到高级信息或开发诊断。
+- 本地化来源冲突保留多个可读候选，不猜测 winner；战争从 active 列表消失只显示“疑似结束/待核实”，不伪造结束时间或最终结果。
+- 诊断页改为“结果摘要 → 来源/Token → 高级 Resolver 追踪”结构，并保留 rawKey、definitionId、runtimeId、score、evidence、cacheHit 和 trimmedItems 供追溯。
+- 新增 V8.5 Luna UI 回归并纳入 `test-manifest.js`；Renderer/helper 语法、V8.4.2 Sol 安全 Gate、旧 Worldline UI 能力回归、离线五页签 mock 渲染和完整 `node scripts\test-release.js`（102/102 发布组）均通过。
+- 本阶段尚未完成 Terra 的 DTO/Query/Ranker/Cache/IPC 交接、Sol/Astra 审查、Electron 三主题视觉 smoke 或真实 CK3/Provider 端到端验收。详细记录见 [V8.5 Luna 玩家语义展示层实施报告](V8.5.md#source-9331012b9ff7)。
+
+<a id="source-bd3947cca735--第二十五阶段v85-terra--retrieval-20--dto--cache实现完成等待-sol"></a>
+## 第二十五阶段：V8.5 Terra — Retrieval 2.0 / DTO / Cache（实现完成，等待 Sol）
+
+- Shared Query Analyzer 的单次分析结果现在生成确定性的 `WorldQueryPlan`；显式日期/区间、人物位置/状态/身份、头衔、领地、战争、历史查询和广义世界查询各有独立 intent。
+- Retriever、Ranker 与 Summary 严格分开候选和事实。只有已解析实体可以进入 Game Truth；歧义实体只保留诊断。Supplemental 的 hidden/非 `PUBLIC_WORLD` 条目被硬过滤，查询无关的 Delta 不进入人物问题的 Prompt。
+- `WAR_NO_LONGER_ACTIVE` 只表示不再出现在活跃列表，确定性摘要不会伪造结束时间、胜负或和约。所有过滤/裁剪在诊断中保留可判定原因。
+- 后端以 additive `playerView` 提供玩家展示 DTO，保留既有 IPC 和 Domain DTO；Prompt cache key 改为使用当前 campaign Delta revision、相关 Supplemental revision 和 retrieval policy version，UI 文案不参与 key。
+- 简单/单实体/复杂查询 token 预算分别为 350/550/900，hard cap 为 1200；裁剪顺序为 Supplemental、Delta、Game Truth。
+- 新增 V8.5 Terra Retrieval 回归并纳入 manifest；语法、V8.4 世界线/安全定向 Gate、manifest 和 `node scripts\test-release.js`（103/103 发布组）均通过。
+- 本阶段不打开 Prompt Default On，也不宣称 V8.5 Full Freeze。Sol 仍须独立审查事实权威、时间、歧义、可见性、跨 campaign revision、缓存与旧 IPC 兼容性；Electron、CK3、Provider/KV cache 实机 Gate 尚未完成。详见 [V8.5 Terra Retrieval 2.0 实施报告](V8.5.md#source-060f8ca00d7c)。
+
+<a id="source-bd3947cca735--第二十六阶段v85-terra--历史映射与诊断阻塞前置修复完成等待-sol"></a>
+## 第二十六阶段：V8.5 Terra — 历史映射与诊断阻塞前置修复（完成，等待 Sol）
+
+- 历史人物映射改为完整 Definition→Runtime 索引上的后端查询；无筛选仍保持前 500 条 UI 上限，按“岳飞”可跨越该上限找到 `nansong_yue_085`、`tangyin_yue_014`，并显示可读历史名。
+- `getHistoricalBindings` 通过 additive IPC payload 接入查询/状态筛选，Renderer 加入防抖、请求序号和当前筛选条件刷新；历史页不再复用诊断页上一次的身份结论。
+- 当前人物精确命中后跳过 Localization reverse lookup；“赵思昭”在真实 autosave 上解析到玩家 Runtime `121091 / 思昭`，诊断摘要显示已确认对象，而不是 `NO_HISTORICAL_ALIAS` 的历史身份失败。
+- 定向 Terra、Luna、Sol Safety 回归和真实 autosave 静态链路复核通过；白屏/卡死需由 Sol 在重启后的 Electron 实机继续确认，Prompt Default On 保持关闭。
+
+<a id="source-bd3947cca735--第二十七阶段v85-sol--诊断白屏根因修复与内部正确性审查"></a>
+## 第二十七阶段：V8.5 Sol — 诊断白屏根因修复与内部正确性审查
+
+- 真实检查点含 42,312 条 Delta；旧诊断一次返回约 462 万字符，折叠详情仍生成 169,404 个 JSX 节点。现改为服务端 50 条分页、前端防御上限与按需展开，完整裁剪记录仍可逐页读取。
+- 未知人物/头衔的本地化扫描移到后台 Worker，IPC 有界等待并明确显示 pending，避免 Main 再被冷搜索阻塞；线程具备请求合并、失败/超时与来源换代隔离。
+- 修正 ID 被当作年份、未来/无效日期与日期范围、实体问题混入无关 Delta、缺失可见性、Supplemental importance 缓存遗漏、无界缓存和 Token 硬上限；政治未知状态不再误报独立。
+- Sol 正确性和 Worker 回归、105 组 release、真实 Checkpoint 只读查询以及 1024px 三主题隔离浏览器展开/翻页通过。浏览器实际展开 50 行、364 个 DOM 节点、无页面异常。
+- **内部预冻结仍 NOT READY**：尚缺 ≥500 真实混合请求、人工标注查询集、Provider/KV cache 对比与完整 Electron 实机视觉验收；不切 Astra、不打开 Prompt Default On。详见 [V8.5 Sol 内部审查](V8.5.md#source-b9daa84ed159)。
+
+<a id="source-bd3947cca735--第二十八阶段v851-sol--historical-definition-index-合同冻结"></a>
+## 第二十八阶段：V8.5.1 Sol — Historical Definition Index 合同冻结
+
+- 完整阅读用户 V8.5.1 方案，核对当前 `8de3a8d` V8.5 基线及真实韩世忠/岳飞的 name、dynasty 来源链；明确全名索引不能依赖人物 given name 或 ID 猜测。
+- 冻结来源与冲突、后台索引接口、通用 metadata、候选确认、Coverage、single-pass、稳定 revision 与三层 UI 交接合同；缺少 curated 资料不阻止召回，现有评分阈值保留。
+- 四项现有针对性回归通过；本轮只改文档。`CONTRACT FREEZE = PASS`，V8.5.1 实现/最终冻结待后续阶段，下一步切 Terra。
+- 详见 [V8.5.1 Sol 合同冻结](V8.5.md#source-ea50bf2e19e0)。本版按新方案不引入 Astra。
+
+<a id="source-bd3947cca735--第二十九阶段v851-terra--historical-definition-index--通用召回完成等待-luna"></a>
+## 第二十九阶段：V8.5.1 Terra — Historical Definition Index / 通用召回（完成，等待 Luna）
+
+- 新增后台 Historical Definition Index：仅读取 Base Game 与当前启用 Playset 的人物、dynasty、简中 localization；全名必须有可验证链路，raw ID、文件名与注释不作为姓名。
+- 索引不整份回传主线程；Worker 仅返回 generation metadata 与查询候选。来源内容或 alias policy 改变会更新 revision，且 topic cache 隔离旧 generation。
+- 通用候选不再受两名 curated 人物白名单限制；现有分数和唯一性门槛不降低。正反 Definition/Runtime 绑定、来源完整性、同 ID source 冲突均为确认门禁。
+- 新增 3 组 V8.5.1 回归，含固定 15 人的 100 条确定性 fixture matrix。V8.4.2 identity、V8.5 Sol correctness、V8.5 localization worker、manifest 与完整 `node scripts\test-release.js`（108/108 groups）通过；真实 CK3/Electron 验收仍待后续阶段。
+- 下一步 Luna 仅消费已有 coverage/index/resolver DTO，完成玩家可读摘要、依据层、开发者层和视觉回归；不在此阶段开放 Prompt Default On。详见 [V8.5.1 Terra 实施报告](V8.5.md#source-757f68be759a)。
+
+<a id="source-bd3947cca735--第三十阶段v851-luna--历史人物诊断可读性完成等待-sol"></a>
+## 第三十阶段：V8.5.1 Luna — 历史人物诊断可读性（完成，等待 Sol）
+
+- 新增纯 Renderer 历史诊断展示转换，将 `RESOLVED`、`AMBIGUOUS`、`SOURCE_INCOMPLETE`、`NAME_INDEX_MISS`、`DEFINITION_FOUND_RUNTIME_MISSING`、`REJECTED_BY_EVIDENCE` 和 `VOTC_METADATA_MISSING` 转为稳定的玩家可读状态与判定原因。
+- 诊断页按“玩家摘要 → 判定依据 → 开发者追踪”分层：默认摘要显示结论和来源命中，历史依据面板懒展开并最多展示 50 条可读候选；raw/Definition/Runtime/原始枚举仍只留在高级 Resolver trace。
+- Terra Shared Query Analyzer 对短中文姓名查询透传索引未命中/来源不完整 coverage；“赵思昭”等查询可明确区分索引未收录与来源尚未完成，不把未命中升级为人物不存在。
+- CSS 沿用现有世界线卡片和语义警告体系；本阶段未改变 Game Truth、Prompt、IPC、Cache 或 Prompt Default On。
+- Renderer、主进程、V8.5.1 index/worker/query、V8.5 Luna UI、V8.4 Luna UI 和 V8.5 Sol correctness 定向回归通过。真实 Electron 三主题视觉、真实 CK3 查询、Provider/KV Cache 与 Sol 最终审查仍待完成。
+- 详见 [V8.5.1 Luna 历史人物诊断可读性实施报告](V8.5.md#source-53454541dace)。下一步切换 Sol，审查 P0 正确性、边界隔离和实机白屏/卡死风险。
+
+<a id="source-bd3947cca735--第三十一阶段v851-sol--最终审查与修复未冻结"></a>
+## 第三十一阶段：V8.5.1 Sol — 最终审查与修复（未冻结）
+
+- 修复本地化正则灾难性回溯、嵌套身份字段污染、绑定冲突选胜者、记忆/本地化绕过历史拒绝，以及 Worker 迟到、失败、换代和 pending cache 风险；异步诊断准备后只执行一次 Analyzer。
+- 历史映射筛选接入通用索引；赵思昭不再被较短历史姓名抢占。明确文化/姓氏链要求与源冲突门禁，不降低身份确认阈值。
+- 修正 A/B 层 raw key、参与者 ID 和理由码泄漏；C 层懒展开与 50 条分页保留原始数据，候选总数与当前分页区分。
+- 109 组完整发布回归通过，178 个测试文件分类、68 个历史检查归档；真实指定存档 15/15 姓名召回到 Definition，但未确认候选均不进入 Game Truth，玩家赵思昭命中当前角色事实。隔离浏览器九组合交互通过，不替代完整 Electron 视觉/稳定性验收。
+- INTERNAL FREEZE 仍 NOT READY：实际 Electron、全量召回率、来源覆盖语义/来源链证明与长期运行等 Gate 未完成；Prompt Default On 保持关闭，不调用 Astra。完整证据和用户验收步骤见 [V8.5.1 Sol 最终审查](V8.5.md#source-1dbb62ba1c71)。
+
+<a id="source-bd3947cca735--第三十二阶段v851-摘要-p0--多人入场-p2-事故热修"></a>
+## 第三十二阶段：V8.5.1 摘要 P0 / 多人入场 P2 事故热修
+
+- 实际快照确认同时存在长摘要截断和历史摘要恢复混入当前玩家导致的投影缺失；修复参与者/日期隔离，保留隐私和投影完整性校验。
+- 长会话失败后按真实在场边界有界分段提取，合并为同一 finalization 后验证；任一片失败保留原始快照，不提交部分摘要。
+- 摘要恢复转后台并 single-flight，不再阻塞新会话和入场按钮；游戏关闭指令异常不再阻断摘要，补齐诊断错误字段。
+- 新增事故复现回归与两阶段恢复维护工具；真实恢复、备份路径、发布回归和人工 Gate 见 [摘要事故修复报告](V8.5.md#source-e510ff2d7ad5)。不改变世界线 NOT READY 状态。
+- 最终 110 组发布回归通过；最新 4 人会话恢复 12 个有向文件，近期 7 人会话恢复 42 个有向文件，独立磁盘核对非空正文、原日期和投影视角全部通过；原数据完整备份，更早三份失败记录未改动。
+
+<a id="source-bd3947cca735--2026-09-05-追加长期约定召回-p0"></a>
+### 2026-09-05 追加：长期约定召回 P0
+
+- 修复同场不同关系投影被 finalizationId 提前去重、以及超长正文裁掉尾部长期事项；只改变召回副本，不重写原始摘要。
+- 直接关系最近记录基线由 2 条改为 3 条，预算内补充较早钉住记忆，保留整场冻结与每名 NPC 自有目录边界。
+- 新增复现测试并扩展真实 PromptBuilder 集成回归；真实两名角色的 8 组只读召回（两档预算、场外人物有/无）均命中约定，完整发布回归 111 组通过。Provider 回复与实际游戏新会话仍待人工验收，详见同一[摘要事故修复报告](V8.5.md#source-e510ff2d7ad5)。
+
+<a id="source-bd3947cca735--第三十三阶段v852-astra-stage-0--架构索引生命周期与长姓名扫描完成等待-sol"></a>
+## 第三十三阶段：V8.5.2 Astra Stage 0 — 架构、索引生命周期与长姓名扫描（完成，等待 Sol）
+
+- 冻结身份核心/世界线差异、Runtime-native、多实体 DTO、数字 namespace 和来源不完整优先级合同；本阶段仅实现基础设施，身份规则由 Sol Stage 1、数据与 DTO 由 Terra Stage 2 接续。
+- 来源每 60 秒只探测配置、描述符与文件清单/stat；未变化不读大文件正文、不重建、不失效缓存。正文/来源语义变化才更新 generation；构建中来源改变丢弃候选代，失败与旧回复 fail-closed。
+- 静态历史索引与 checkpoint、autosave 路径和 Live 状态解耦；查询完成只通知 UI，不当作来源换代清空 topic/summary。pending 结果不进入最终缓存。
+- 新增 Worker 内存 Trie 长姓名扫描和 snapshot Runtime 全名保护，覆盖多实体、重叠、独立短姓名、限额和不完整来源；未硬编码真实人物 ID。
+- 完整发布回归 113/113 组通过，保留摘要事故恢复和最近三条召回测试；真实来源读取 127,088 个 Definition，未变化探测约 101–128 毫秒，实际周期探测额外重建/缓存失效均为 0。
+- 真实来源仍缺部分复姓完整姓名构造，不能把算法 fixture 通过视作通用召回验收。Electron、真实存档全量身份、长期运行与 Provider Gate 留后续；Prompt Default On 关闭，INTERNAL FREEZE = NOT READY。
+- 详见 [V8.5.2 Astra 架构合同与交接证据](V8.5.md#source-5a521ec90946)。下一步切换 Sol Stage 1。
+
+<a id="source-bd3947cca735--第三十四阶段v852-sol-stage-1--historical-identity-gate-20完成等待-terra"></a>
+## 第三十四阶段：V8.5.2 Sol Stage 1 — Historical Identity Gate 2.0（完成，等待 Terra）
+
+- Historical Identity 改为完整姓名 exact、唯一 Definition、唯一且双向一致的 Runtime 绑定、来源/候选完整和性别无硬冲突；年龄、出生年、家庭、婚姻、子女、文化与旧评分阈值全部退出身份决定路径。
+- 同名多 Definition、同 Definition 多 Runtime、单向绑定、来源冲突和性别冲突均 fail-closed；未知性别中性。Evidence 分为 `IDENTITY_CORE` 与 `IDENTITY_SUPPORT`，Worldline Difference 数据留 Terra。
+- 纯数字仅在整个查询为 Runtime ID 或 `#RuntimeId` 时直查；年份句中的数字同时跳过 Runtime 和 Definition direct lookup，并不成为 entity anchor。
+- Shared Query、Diagnostics、Historical Mapping 和 additive Player coverage 统一保持 `SOURCE_INCOMPLETE > DEFINITION_FOUND_RUNTIME_MISSING > REJECTED_BY_EVIDENCE > NAME_INDEX_MISS`。
+- 新增 Sol 对抗 Gate 并纳入发布清单；完整回归 114/114 组通过。真实 `autosave_1.ck3` 只读复核 156,393 个角色，15 个历史姓名的重复/缺失 Definition 全部未注入 Game Truth，玩家赵思昭仍由既有 Runtime 姓名路径命中。
+- `SOL STAGE 1 CODE REVIEW = PASS`，不代表 Stage 3 独立后端复审或 Astra 最终冻结。下一步 Terra Stage 2 实现 Runtime-native、Domain DTO、Worldline Difference、复姓/长姓名来源和 Mapping 集成。
+- 详见 [V8.5.2 Sol Stage 1 正确性审查](V8.5.md#source-9d8476a281f7)。
+
+<a id="source-bd3947cca735--第三十五阶段v852-terra-stage-2--runtime-identity差异数据与通用映射完成等待-sol"></a>
+## 第三十五阶段：V8.5.2 Terra Stage 2 — Runtime Identity、差异数据与通用映射（完成，等待 Sol）
+
+- `entityResolutions` 作为 additive Domain DTO 输出历史与 Runtime-native 身份；唯一无 Historical Definition 的当前全名可解析，多个 Runtime 保持歧义且不进入 Game Truth。既有 `identityResolution`、coverage 与诊断字段不变。
+- 年龄、父母、配偶、子女差异只提供 INFO/NOTICE 的世界线诊断，无法从静态来源验证的基线不输出差异；历史身份仍完全遵守 Sol Stage 1 的 full-name、唯一 Definition、双向 binding、完整来源和性别 Gate。
+- 静态姓名来源策略升至 `v8.5.2-historical-index-4`：复姓及耶律/完颜等长名只经可验证姓前文化的 unique dynasty/house 简中 localization 链构造，不使用 raw key、文件名或未知文化猜测；真实来源从 47,147 增至 49,224 个可搜索姓名。
+- Historical Mapping 使用安全显示名优先级，并把仅有静态 Definition 的条目明确呈现为当前存档未找到；保留非 CJK Runtime alias 的既有兼容路径，不影响中文历史 Gate。
+- 新增三组 Terra 回归并扩展长姓名 fixture；完整发布回归 117/117 通过。指定 CK3 用户目录只读构建 127,088 个 Definition，六个长/普通姓名均命中；三次 no-op 探测零重建、零缓存失效。
+- 真实 Electron、CK3 同名/原生人物、Provider 和长期运行尚未验收，`INTERNAL FREEZE = NOT READY`，Prompt Default On 保持关闭。下一步切 Sol Stage 3。详见 [V8.5.2 Terra Runtime Identity 实施报告](V8.5.md#source-348261d23f88)。
+
+<a id="source-bd3947cca735--第三十六阶段v852-sol-stage-3--后端正确性独立审查完成等待-luna"></a>
+## 第三十六阶段：V8.5.2 Sol Stage 3 — 后端正确性独立审查（完成，等待 Luna）
+
+- 独立复核 Historical Gate、Runtime-native 分流、Numeric Namespace、source completeness 优先级和 additive DTO；False Resolution 与 False Game Truth Injection 均为 0。
+- 修复历史解析成功时完整 checkpoint 与 Definition records 经兼容字段进入 Renderer IPC 的 P0，诊断 DTO 现保持有界，避免大型真实存档触发白屏/长时间无响应。
+- 修复 Runtime 姓名扫描超过限额后仍可能部分注入的 P1；截断结果统一为 `SOURCE_INCOMPLETE / candidateSetComplete=false`，只诊断、不写 Game Truth。
+- 补齐 Historical Mapping 的 `DEFINITION_FOUND_RUNTIME_MISSING`、未截断候选总数和 Player DTO coverage；`SOURCE_INCOMPLETE` 始终保持最高优先级，raw key 不再作为历史人物显示名。
+- 新增 Sol Stage 3 safety gate 并登记发布清单；`node scripts\test-release.js` 118/118 组通过。`SIBLING_DIFFERENT` 因未冻结来源/日期合同保留为非阻断后续项。
+- `SOL STAGE 3 CODE REVIEW = PASS`，不等于 Astra 最终冻结；Electron、CK3 Live、Provider 和长期 Worker 尚待后续实机 Gate。下一步切 Luna Stage 4，详见 [V8.5.2 Sol 后端正确性独立审查](V8.5.md#source-9d8476a281f7)。
+
+<a id="source-bd3947cca735--第三十七阶段v852-luna-stage-4--玩家语义世界线差异与多实体诊断-ui完成等待-sol"></a>
+## 第三十七阶段：V8.5.2 Luna Stage 4 — 玩家语义、世界线差异与多实体诊断 UI（完成，等待 Sol）
+
+- 新增玩家语义层对 `HISTORICAL / RUNTIME_NATIVE` 身份和 `RESOLVED / AMBIGUOUS / SOURCE_INCOMPLETE` 状态的稳定文案：已确认历史人物、已确认当前存档角色、当前存档存在多个同名角色等状态不再回退到内部枚举。
+- 年龄、父母、兄弟、婚姻和子女差异统一进入懒展开的 Worldline Difference 面板；出生偏移使用“当前角色出生时间与历史基准存在偏移，不影响已确认的历史身份。”，差异只显示为 INFO/NOTICE，不改变身份结论。
+- Prompt / World Recall 诊断改为逐实体渲染 `entityResolutions`，不再以 coverage 第一项代表整句查询；岳飞、韩世忠、赵思昭等实体可分别展示历史歧义、历史确认和 Runtime-native 确认。历史 Mapping 的玩家层不显示 `Fei_name11`、Definition/Runtime ID，原始值仅留开发者 C 层。
+- Renderer 保持 preload 边界、懒展开和 50 条候选/裁剪分页；新增 Worldline Difference UI 确定性回归，并扩展隔离 Chromium smoke fixture 覆盖三实体、出生偏移和 A/B 层 raw 值隔离。
+- `node scripts\test-v8.5-luna-player-ui.js`、`node scripts\test-v8.5.2-worldline-difference-ui.js`、Renderer/helper `node --check`、`git diff --check` 与 `node scripts\test-release.js` 通过；完整 Gate 为 119/119 发布组、188 个测试文件。仓库未提供 Playwright 运行库，因此隔离 Chromium 视觉脚本本轮只完成 fixture/断言施工，未将其执行结果冒充视觉验收；真实 Electron、CK3、Provider 和 Sol Stage 5 UI/DTO 边界审查仍待后续。
+- 详见 [V8.5.2 Luna 玩家语义与世界线差异 UI 实施报告](V8.5.md#source-b152c3bfd00e)。
+
+<a id="source-bd3947cca735--第三十八阶段v852-sol-stage-5--ui--dto-边界独立审查完成等待-astra"></a>
+## 第三十八阶段：V8.5.2 Sol Stage 5 — UI / DTO 边界独立审查（完成，等待 Astra）
+
+- 独立复现 additive `entityResolutions` 与 legacy 聚合字段不一致：赵思昭已为 `RUNTIME_NATIVE + RESOLVED` 时，摘要仍可能显示候选 0、“未找到对象”和 Historical `NAME_INDEX_MISS`。现由逐实体 DTO 优先驱动候选数与结论；无 additive 字段时继续兼容旧 DTO。
+- coverage 状态先统一为大写再比较；`SOURCE_INCOMPLETE` 保持最高优先级，`REJECTED_BY_CONFLICT` 纳入拒绝层级。多实体摘要不再由单个 historical coverage 代表全部对象，纯 Runtime-native 查询也不再显示不适用的历史判定面板。
+- 修复 Renderer 语义助手缺失时的 fail-open 降级：Historical raw key、Runtime ID、内部状态和原因码不再进入 A/B 玩家层；C 层原始诊断、懒展开和 50 条边界保持不变。
+- 新增 `test-v8.5.2-sol-ui-boundary.js`，覆盖 Runtime-native/历史索引冲突、来源不完整乱序与大小写、旧 DTO、对抗 raw 值和有界渲染，并登记发布清单。
+- 定向 UI/语法检查和完整 `node scripts/test-release.js` 通过：120/120 发布组、189 个测试文件分类、68 个历史检查归档。`SOL STAGE 5 CODE REVIEW = PASS`。
+- 本结论不替代真实 Electron、CK3 存档矩阵、Provider / Prompt、长期 Worker / Cache 和最终集成 Gate；`INTERNAL FREEZE = NOT READY`。下一步切换 Astra Stage 6，详见 [V8.5.2 Sol UI / DTO 边界审查](V8.5.md#source-9bc8b82467de)。
+
+<a id="source-bd3947cca735--第三十九阶段v852-astra-stage-6--最终集成审查本轮完成保留实机-gate"></a>
+## 第三十九阶段：V8.5.2 Astra Stage 6 — 最终集成审查（本轮完成，保留实机 Gate）
+
+- 修复“赵思昭”与历史前缀“赵思”的交叉误拆、Runtime-native 旁重复 UNKNOWN 实体，以及历史定义存在但 Runtime 缺失时 Domain 状态降级；保留兼容 coverage、来源不完整优先级与全部身份门禁。
+- 完整发布回归 120/120 组通过；三份真实存档各 10 查询、三分辨率/三主题的隔离浏览器组件交互、隔离打包 Electron 的年度存档构建与补充知识 CRUD/诊断 IPC 通过。
+- 真实来源 127,088 个定义、49,224 个可搜索姓名；180 秒内 2 次周期探测无重建/缓存失效，不冒充小时级长测。当前真实来源的韩世忠/李师师仍多候选，不能以文档样例要求为由自动猜选。
+- 确认补充知识已实现检查点内持久化与受限召回；正式配置 `promptIntegrationEnabled=false` 未改变，默认不进入 NPC 对话。跨检查点长期 Player Canon 属于 V8.7 规划，V8.6 侧重 Character Knowledge。
+- `INTERNAL FREEZE = NOT READY`：正式 Overlay 可见交互、真实 Provider/CK3 新会话和长会话稳定性仍需验收；黑色 Electron 截图不算视觉通过。详见 [Astra 最终集成审查](V8.5.md#source-3da5e574ba74)。
+
+<a id="source-bd3947cca735--第四十阶段v86-astra-stage-0--架构切换审查完成等待-sol"></a>
+## 第四十阶段：V8.6 Astra Stage 0 — 架构切换审查（完成，等待 Sol）
+
+- 基于干净 `59640b7 v8.5.2` 核对 V8.6 兼容性能增强设计与总路线，审查 Historical/Worldline/Memory/Prompt/Presence 主链路；输出 [V8.6 架构切换合同](V8.6.md#source-5aeacea2e6c5)。
+- 冻结身份、事实权威、角色知情三道独立条件，字段级 Policy 先于正文展开/冲突裁决，共享候选与 responder/scene 隔离缓存，以及旧 checkpoint/Memory/Prompt 的安全兼容。
+- 只读复现：仅有给名“世忠”的原生 Runtime 会被“韩世忠”查询错误确认。旧回归 120/120 通过但未覆盖这一缺口；此前“赵思昭 → 思昭”成功不能视作新全名安全 Gate 通过。Sol Stage 1 负责修复并补对抗测试。
+- 确认 birth/family 来源差异仍合并为硬冲突、Memory query 仍全表读取、world stableText 的旧优先级与新合同冲突；真实血缘不可自动视作 SELF 已知。已有 GitHub CI 应复用补强。
+- 本阶段只改合同及文档入口；V8.6 生产功能尚未实施，`FREEZE = NOT READY`。下一步 Sol Stage 1，之后 Terra 2/3、Sol 4、Luna 5、Sol 6；用户当前数据与 Prompt 开关不变。
+
+<a id="source-bd3947cca735--第四十一阶段v86-sol-stage-1--identity-debt--knowledge-safety完成等待-terra"></a>
+## 第四十一阶段：V8.6 Sol Stage 1 — Identity Debt / Knowledge Safety（完成，等待 Terra）
+
+- 修复 Runtime-native 给名误确认：旧 `nameToCharacterIds` 只作为 `GIVEN_NAME` 候选；只有带来源的 `verifiedFullNameToRuntimeIds` 唯一命中才可确认。raw alias、非 CJK fallback 和 Memory hint 均不能绕过 Historical Gate；直接 Runtime ID 仍只确认存档对象。
+- Historical Index 升级 `v8.6-historical-index-5`：birth/father/mother 差异转为 `sourceVariants` 并保留多来源值，不再否决核心身份；姓名、已知性别、全名 provenance、来源完整性和双向 binding 冲突继续 fail-closed。
+- 新增 Character Knowledge 纯规则合同，冻结八级分类、`ALLOW / DENY / UNKNOWN`、SELF 字段白名单、scope/时间要求、Secret knownBy/观察/私信/定向投影授权及非 ALLOW 正文脱敏。该模块尚未接入 Prompt，实际逐 NPC 主观世界由 Terra Stage 3 完成。
+- 新增三项 V8.6 安全回归并登记 manifest；真实 Parser 给名夹具、同名、错误 provenance、未知生物父母、来源不完整、Secret 撤权和冲突优先级均通过。完整 `node scripts\test-release.js` 为 123/123 groups PASS。
+- `SOL STAGE 1 = PASS`，V8.6 总冻结仍为 `NOT READY`；下一步 Terra Stage 2 实现可信全名/reverse index、Worker bounded retry 与 Base Game Discovery 2.0。详见 [Sol Stage 1 安全审查](V8.6.md#source-8b03a2920995)。
+
+<a id="source-bd3947cca735--第四十二阶段v86-terra-stage-2--native-index--recovery--discovery完成继续-terra"></a>
+## 第四十二阶段：V8.6 Terra Stage 2 — Native Index / Recovery / Discovery（完成，继续 Terra）
+
+- 完成可信 Runtime 完整姓名索引：只有同一 Checkpoint 日期、玩家、Runtime ID 和给名的 Live 记录可提供全名；给名、旧 `character.fullName`、raw alias 均不能升级为身份确认。索引只存在于当前进程 Checkpoint，不迁移用户存档格式。
+- Runtime Definition 正反联合索引以 `WeakMap` 按 Snapshot 构建；Historical Worker 失败改为单 Worker 1 秒 / 5 秒 / 30 秒有限恢复，三次耗尽稳定失败，显式刷新或配置变化才开启新 episode。
+- Base Game Discovery 按显式路径、Steam 元数据、可执行路径、Mod 推断、手工回退验证；多安装显式要求选择，周期探测只 stat 已解析来源和小型配置依赖。
+- 新增四项 V8.6 契约回归并登记 manifest；`node scripts\test-release.js` 为 127/127 groups PASS。真实 CK3/Electron/Provider 未在本阶段启动，V8.6 `FREEZE = NOT READY`；下一步继续 Terra Stage 3，实施共享候选、字段级 Policy、Scope/Memory、主观 DTO 和 Prompt Phase A。详见 [Terra Stage 2 实施报告](V8.6.md#source-3200ee4d1cea)。
+
+<a id="source-bd3947cca735--第四十三阶段v86-terra-stage-3--subjective-world-phase-a完成等待-sol"></a>
+## 第四十三阶段：V8.6 Terra Stage 3 — Subjective World Phase A（完成，等待 Sol）
+
+- 新增 Scope resolver、共享安全候选池、定向 Memory adapter 和逐 responder Subjective World View。候选/DTO 分别限制为 128/24，过滤诊断不包含 Secret 正文、标题或参与者姓名；缺少范围证据的真实 Checkpoint 事实仍为 UNKNOWN。
+- Memory adapter 只按 responder Knowledge ID 读取定向记录，输出 opaque contentRef；不扫描全量 Memory，也不批量迁移或改写旧摘要。Self 与本人 Memory 由 Character Knowledge Policy 审批后才可进入该 responder View。
+- 注册独立设置键 `subjectiveWorldMode=DIAGNOSTIC`；Phase A 保留 legacy Prompt，未开启新 Prompt 注入、未翻转 `promptIntegrationEnabled`，Conversation 只传可信 responder/conversation/turn 上下文。
+- 新增四项回归并登记 manifest；`node scripts\test-release.js` 为 131/131 groups PASS。没有执行 CK3/Electron/Provider 验收，`FREEZE = NOT READY`；下一步切 Sol Stage 4 进行独立 Prompt/Secret/时间/cache 审查。详见 [Terra Stage 3 主观世界报告](V8.6.md#source-3c63f7d05d3a)。
+
+<a id="source-bd3947cca735--第四十四阶段v86-sol-stage-4--subjective-backend-safety-review完成等待-luna"></a>
+## 第四十四阶段：V8.6 Sol Stage 4 — Subjective Backend Safety Review（完成，等待 Luna）
+
+- 独立复核共享候选、Character Knowledge、逐事实 Scope、定向 Memory 和 responder View，修复共享缓存遗漏 assist/entity/revision、主观缓存遗漏在场/观察/撤权，以及未知 responder 可进入构建流程的 P0/P1 风险。
+- 共享池对 Secret、SELF、直接观察和个人记忆正文脱敏并深拷贝；Subjective DTO 改为白名单，移除 ACL/knownBy/参与者信息，24 条超长中文事实保持在 100 KB 目标内，并保留 500 KB 硬上限和每 responder 8 条缓存上限。
+- Scope 改为逐事实实体判定，单有 Live 日期仍不能冒充 Live Scope；当前 SELF 胜过旧 Memory，不可见 Secret 不再压制更高权威事实。完全相同上下文保持一次共享检索。
+- 静态审计确认生产 Conversation 仍只调用旧 `getPromptContext`，新 `getSubjectiveWorldView` 没有进入 Prompt、IPC、preload 或 Renderer；Phase A 没有重复注入，但 NPC 非全知生产目标也尚未签发。
+- 新增 `test-v8.6-sol-stage-4-safety.js` 并登记 manifest；完整 `node scripts\test-release.js` 为 132/132 发布组 PASS（201 个测试文件分类，68 个历史检查归档）。`SOL STAGE 4 CODE REVIEW = PASS FOR LUNA STAGE 5`。
+- 未执行正式 Electron/CK3/Provider/远端 CI，且生产 Prompt 尚未切换，故 `V8.6 FREEZE = NOT READY`。下一步 Luna Stage 5 只接安全 Subjective DTO 与诊断 UI，之后由 Sol Stage 6 审查 Prompt 唯一入口和最终 Gate。详见 [Sol Stage 4 安全审查](V8.6.md#source-778ae83857f8)。
+
+<a id="source-bd3947cca735--第四十五阶段v86-luna-stage-5--character-knowledge-diagnostics完成等待-sol"></a>
+## 第四十五阶段：V8.6 Luna Stage 5 — Character Knowledge Diagnostics（完成，等待 Sol）
+
+- 新增服务端回应角色候选和安全 Subjective DTO IPC；Renderer 只能提交 `responderId` 与查询，不能提交 knownBy、Presence、直接观察或其他授权证据。候选服务端搜索并限制 50 条，当前玩家作为安全默认首位。
+- 世界线诊断新增单角色主观世界与可选第二角色 A/B 对照；玩家层只显示白名单事实、可读判定、计数、检查点/验证状态和 Secret 过滤计数，opaque factId/decision/reason 仅留折叠开发者层。
+- 保留原 Prompt / World Recall 只读诊断、Historical Identity / Worldline Difference 和既有 Worker/检查点状态入口；新增回归明确防止 UI 修改再次删除旧诊断面板。
+- 新增 Luna Stage 5 回归并登记 manifest；Renderer、main service、IPC、preload 语法检查通过，完整 `node scripts\test-release.js` 为 133/133 发布组通过。实际 Electron 1024/1280/1440 × 三主题、CK3/Provider、多人 Secret A/B 和长期 Worker 恢复仍未验收。
+- Phase A 继续只读诊断，生产 Conversation 仍使用既有 `getPromptContext`，`promptIntegrationEnabled` 与 Prompt Default On 不变；`V8.6 FREEZE = NOT READY`。下一步切 Sol Stage 6，详见 [Luna Stage 5 实施报告](V8.6.md#source-f48a645425ed)。
+
+<a id="source-bd3947cca735--第四十六阶段v86-sol-stage-6--final-correctness-reviewfail退回-terra"></a>
+## 第四十六阶段：V8.6 Sol Stage 6 — Final Correctness Review（FAIL，退回 Terra）
+
+- 修复 Worldline 首屏预取并排序完整角色表的主线程风险：回应角色候选仅在诊断标签读取，空查询只物化 50 条且不排序；搜索增加请求世代，Checkpoint 切换清空旧 A/B 结果。
+- 补齐 Character Knowledge 玩家语义：授权 Secret、来源、as-of、验证状态、冲突胜者、Subjective/Shared Cache 与 Historical Worker 恢复状态不再缺失或显示 raw code。
+- 新增 Sol Stage 6 边界回归并登记 manifest；完整 `node scripts\test-release.js` 为 134/134 发布组通过，`git diff --check` 无错误。
+- 最终调用图确认生产 Conversation 仍只走旧 `getPromptContext`，`getSubjectiveWorldView` 仅为诊断 IPC；Game Truth/Delta 也仍统一为 `UNKNOWN`，不能形成 Court/Realm/Public 已知事实。Historical Context Replacement Phase B、生产 Prompt、真实 Provider/CK3/视觉/性能 Gate 均未完成。
+- 结论：`CODE REVIEW FAIL`、`V8.6 FREEZE = NOT READY`。下一步切 Terra 按 [Sol 最终正确性审查](V8.6.md#source-d325eccc31ba)完成字段级公开范围、Historical Phase B 与唯一 Subjective Prompt block，再回 Sol 复审。
+
+<a id="source-bd3947cca735--第四十七阶段v86-terra--production-subjective-prompt--historical-phase-b完成等待-sol"></a>
+## 第四十七阶段：V8.6 Terra — Production Subjective Prompt / Historical Phase B（完成，等待 Sol）
+
+- 共享候选改为字段级、可追溯事实：角色姓名仅作为 `PUBLIC_WORLD`，地点仅作为 `COURT_PUBLIC`，头衔持有人仅作为 `REALM_PUBLIC`，明确公开战争变化作为 `PUBLIC_WORLD`；无日期、无字段证据或未分类 Delta 保持不输出，未把“来自存档”整体升格为公开。
+- 新增显式 `subjectiveWorldMode=PRODUCTION`，默认仍为 `DIAGNOSTIC`，`promptIntegrationEnabled=false` 不变。仅当二者明确开启时，Conversation 才从服务端构建 responder-scoped 世界事实；Renderer/IPC 不能提交授权、Presence 或 observation 证据。
+- `worldline-subjective` 是唯一生产世界事实 block；构建异常时 Conversation 继续，但不会回退到旧 `getPromptContext` 的未过滤 world recall。已有 Memory Engine 的定向摘要保持原路径，新的 world block 不序列化秘密正文或 opaque memory reference。
+- Historical Context Replacement Phase B 保持 legacy 四字段形状，以时间安全历史对象替换旧 context；标准模板屏蔽未过滤帝王/年号字段，旧自定义模板缺少新 block 时仍可渲染。
+- 新增生产 A/B、Secret、Self、Temporal、历史兼容和生产降级回归，并登记 release manifest；真实 Electron/CK3/Provider/性能矩阵仍未执行，`V8.6 FREEZE = NOT READY`。下一步 Sol 重审，详见 [Terra 实施报告](V8.6.md#source-0364b1221b98)。
+
+<a id="source-bd3947cca735--第四十八阶段v86-sol-stage-6--final-correctness-re-review代码通过等待实机-gate"></a>
+## 第四十八阶段：V8.6 Sol Stage 6 — Final Correctness Re-review（代码通过，等待实机 Gate）
+
+- 复审发现并修复两项 P0：普通存档人物姓名不再升为全世界公开，战争/年度变化必须带角色范围锚点并按 Realm 审批；远方陌生 NPC 不再因共享查询命中而获得这些内容。
+- Historical Phase B 不再把旧 `period.context`、事件、人物原样复制后标成“时间安全”；现从结构化 Baseline 按检查点逐项执行 Temporal Gate，未来或缺少时间证据的条目保守排除，日期无效时走旧四字段兼容回退且不双重注入。
+- 回归提升到真实 `PromptBuilder` provider messages，确认 Subjective World 块恰好一次，旧背景、旧未来事件和未授权帝王/头衔/年号均不进入生产 Prompt。
+- 定向 V8.6/完整 Prompt 回归、相关语法检查、`git diff --check` 与完整 `node scripts/test-release.js` 通过；最终为 204 个测试文件、135/135 发布组、68 个历史归档。
+- `CODE REVIEW PASS`；真实 Electron、CK3 Secret A/B 与 Presence、Provider Prompt/usage、同存档 cold/warm p95、相对 V8.5.2 性能和远端 CI 仍未签发，故 `V8.6 FREEZE = NOT READY`。详见 [Sol 最终正确性复审](V8.6.md#source-d325eccc31ba)。
+
+<a id="source-bd3947cca735--第四十九阶段v861-sol-stage-1--prompt--memory-兼容性合同完成等待-terra"></a>
+## 第四十九阶段：V8.6.1 Sol Stage 1 — Prompt / Memory 兼容性合同（完成，等待 Terra）
+
+- 复现生产 `worldline-subjective` 虽为 `stable: false`，却由 `insertPreHistoryContext()` 放在 History / Current User 之前；查询变化会提前 Provider Cache Breakpoint。现有唯一注入测试只证明出现一次，尚未覆盖相对顺序。
+- 确认 Memory Core 使用既有 8%/800–2400 Token 预算、Turn Recall 固定 256 Token，Worldline 在其后独立检索，尚无统一 `remainingContext`；同时保留 Worldline 异常只 warning、Memory/LLM 继续的正确降级。
+- 冻结新顺序：Stable/冻结内容在前，Presence/History/Current User 居中，Memory Turn Recall 后接唯一 `worldline-turn-recall`；所有 query-dependent Worldline 内容必须在 Current User 后并标为动态。
+- 冻结 Memory Engine 2.5 selected IDs、数据格式、缓存与摘要写入不主动修改；Global Headroom 只把剩余预算交给 Worldline，压力下先裁剪 Supplemental/Delta/Top-K/表述/历史背景，不能先删除 Memory Turn Recall。
+- 冻结 Current Game Truth > Self > Direct Observation > Personal Memory > Scoped World > Supplemental > Historical 的当前事实优先级，同时保留 Memory 的历史叙事；Secret 和 responder-specific 内容只能进入动态定向 Lane。
+- 本阶段只修改合同与文档入口，没有改生产代码或默认开关；`SOL STAGE 1 CONTRACT = FROZEN`，`V8.6.1 FREEZE = NOT READY`。下一步切换 Terra Stage 2，实施 Prompt 调序、World Stable/Dynamic 分离、Global Headroom 及第一批确定性回归。详见 [Sol Stage 1 兼容性合同](V8.6.md#source-f5d441735b1e)。
+
+<a id="source-bd3947cca735--第五十阶段v861-terra-stage-2--3--promptbudget-与-scopeobservation完成等待-sol"></a>
+## 第五十阶段：V8.6.1 Terra Stage 2 + 3 — Prompt/Budget 与 Scope/Observation（完成，等待 Sol）
+
+- Prompt 改为 Stable/冻结内容、既有 History/Current User、Memory Turn Recall、`worldline-turn-recall`；查询相关 Worldline 事实不再进入 Current User 之前的前缀。稳定 Checkpoint Anchor 与动态 Worldline Turn Recall 分离，后者显式标记 `stable: false`。
+- 现有 Memory Engine 2.5 保持不动。Conversation 先按旧预算决定 Memory Turn Recall，再只将最终剩余 Context Headroom 分配给 Worldline；Worldline 上限 900 Token，压力下依次裁剪 Supplemental、Annual Delta、GameState、Game Truth，空间耗尽只省略 Worldline。
+- 新增递归 Liege/Top Liege Realm Root index；断链与循环均不证明同 Realm。最小 Direct Observation 仅证明同时处于当前对话场景的 Presence，不从场景推断行动、信件或秘密。
+- Scoped Supplemental 只信任 `entities` 中的 CK3 Runtime ID 作为受众证据。Personal/Secret 缺少该证据即不成事实；Secret 共享缓存仅含元数据，授权 responder 才在局部获得正文。未填游戏日期的条目锁定当前 Checkpoint，未来条目不可注入。
+- 新增 12 个 V8.6.1 确定性发布组，覆盖顺序、缓存断点、Memory 不回归、预算、裁剪、失败隔离、事实优先级、Provider 元数据、Presence、Realm、Scoped Supplemental 与时间边界；完整发布门禁为 147 个发布组、216 个测试文件分类、68 个历史检查归档。默认 `subjectiveWorldMode=DIAGNOSTIC`、`promptIntegrationEnabled=false` 未改变，未执行 Electron/CK3/Provider 实机验收；`V8.6.1 FREEZE = NOT READY`。下一步切换 Sol Stage 4，详见 [Terra Stage 2 + 3 实施报告](V8.6.md#source-b1c94d5c0c30)。
+
+<a id="source-bd3947cca735--第五十一阶段v861-sol-stage-4--memory--secret--cache-独立审查完成等待-luna"></a>
+## 第五十一阶段：V8.6.1 Sol Stage 4 — Memory / Secret / Cache 独立审查（完成，等待 Luna）
+
+- 独立复现 Production 开启时 192 Token 旧规则可能先删除 Memory Turn Recall，并把释放空间重新分给 Worldline。现由 Memory-only Prompt 先保留 Memory，Worldline 只消费剩余空间；Stable World 放不下时 Worldline 全部省略，只有 Memory-only 已超过硬上限才最后删除 Memory，且不重新加入 Worldline。
+- Personal Supplemental 与 Secret 共享缓存统一为无正文、无 `knownBy/ownerId` 的最小引用；授权仅在 responder 局部水合。Direct Observation facts 与 cache key 稳定排序并携带正文/as-of fingerprint，保持 responder/presence 隔离。
+- 冲突仲裁显式实现 Current Game Truth/GameState > Self > Direct Observation > Personal Memory > Scoped World/Supplemental；相同字段使用当前事实，历史 narrative Memory 保留在独立 `MEMORY` key。
+- Worldline 格式改为确定性排序，显式 `hardMax=0` 不再回退 900；Provider usage 持久化 Memory/Worldline token、Prefix/Suffix、retrieval/policy/format/Memory/Prompt build 耗时及两级 cache hit，不保存正文或 ACL。
+- 强化真实 MemoryEngine selected-ID 矩阵和真实 PromptBuilder 顺序，新增 `test-v8.6.1-sol-safety.js`；13 个 V8.6.1 专项与完整发布门禁通过（148 个发布组、217 个测试文件分类、68 个历史归档）。默认生产开关未变，真实 Electron/CK3/Provider A/B 尚未执行，故 `SOL STAGE 4 CODE REVIEW = PASS FOR LUNA STAGE 5`、`V8.6.1 FREEZE = NOT READY`。详见 [Sol Stage 4 审查](V8.6.md#source-96cbbbc6a912)。
+
+<a id="source-bd3947cca735--第五十二阶段v861-luna-stage-5--diagnostics--token--cache-ui完成等待实机-gate"></a>
+## 第五十二阶段：V8.6.1 Luna Stage 5 — Diagnostics / Token / Cache UI（完成，等待实机 Gate）
+
+- 世界线诊断页新增只读 `Token / Cache 观测`：通过既有 `usageAPI` 读取本机已持久化的对话元数据，展示 Provider 输入/命中/未命中/输出、稳定前缀/动态后缀、Memory/Worldline 分块 Token、Worldline shared/subjective cache 与 recall/retrieval/policy/Prompt build 耗时，不展示 Prompt 正文。
+- 补充知识编辑器新增会话/检查点/Runtime ID 角色范围说明，Personal/Secret 没有可验证 Runtime ID 时不会自动共享；既有角色认知、A/B、Secret 计数和 Prompt/World Recall 诊断入口保持不变。
+- 新增 `test-v8.6.1-luna-diagnostics-ui.js` 并登记 manifest；14 个 V8.6.1 专项、完整发布门禁 149 个发布组/218 个测试文件分类/68 个历史归档及 Renderer 语法检查通过。生产 `subjectiveWorldMode=DIAGNOSTIC`、`promptIntegrationEnabled=false` 未变，真实 Electron/CK3/Provider 10/30/50 回合 A/B 尚未执行，故 `V8.6.1 FREEZE = NOT READY`。详见 [Luna Stage 5 实施报告](V8.6.md#source-dc411c3ecea4)。
+
+<a id="source-bd3947cca735--第五十三阶段v861-sol-stage-7--最终审查人工验收通过"></a>
+## 第五十三阶段：V8.6.1 Sol Stage 7 — 最终审查（人工验收通过）
+
+- 采纳用户时序说明，将 Terra 主程序完成后的实机对话记为有效主链路冒烟；本机元数据确认 2026-09-07 00:10:38–00:17:01 完成 11 次 DeepSeek Chat 请求，输入 122,634、输出 3,591 Token，Provider Cache 命中 102,912、未命中 19,722，窗口命中率 83.9%。
+- 最终版完全重启后于 01:30:05–01:35:23 新增 7 条带 V8.6.1 分块字段的 Chat 记录：输入 78,339、输出 3,529 Token，缓存命中 56,832、未命中 21,507，窗口命中率 72.5%；主进程遥测与 Luna/Sol 观测管线 Gate 通过。
+- Sol 发现并修复一项 P1 诊断来源问题：旧 Chat 记录缺少 V8.6.1 Memory/Worldline 分块字段时，不再被 Token/Cache 面板当作当前版本观测；空证据状态明确要求完成当前版对话后刷新。
+- 14 个 V8.6.1 专项、149 个发布组、218 个测试文件分类、68 个历史归档、相关语法检查与 `git diff --check` 全部通过；未发现遗留 P0，`SOL STAGE 7 CODE REVIEW = PASS`。
+- 最终版补测对应 `subjectiveWorldMode=DIAGNOSTIC`、`promptIntegrationEnabled=false`，7 条记录的 Worldline Token 均为 0，符合默认 A 组；生产 B 组尚未执行，A 组也未达到 10 次最小检查点。用户确认当前实机没有问题，并明确要求豁免剩余 10/30/50 生产 A/B；未执行部分保留为证据边界，不写成测试通过，也不再阻断本版本。最终签发 `V8.6.1 FULL FREEZE = PASS (USER ACCEPTANCE)`。详见 [Sol Stage 7 最终审查](V8.6.md#source-ebbd64fd6b78)。
+
+<a id="source-bd3947cca735--第五十四阶段v862-sol--subjective-grounding--kinship--death--temporal代码完成等待人工-gate"></a>
+## 第五十四阶段：V8.6.2 Sol — Subjective Grounding / Kinship / Death / Temporal（代码完成，等待人工 Gate）
+
+- 将 Subjective World 的 Policy Facts 与 Prompt Facts 分槽选择，修复诊断/空值事实占满 24 条额度后生产 Prompt 无有效世界事实的问题；缺失 Realm 节点继续 fail-closed，兼容 `allowedFacts` 保留且 DTO 维持 100 KB 目标。
+- 新增 Entity-grounded `ThirdPartyEvidencePatch`，按当前轮明确第三人、回应 NPC 自有目录、Query relevance 与 Subject Centrality 召回；每实体最多 2 条/320 Token，总计最多 512 Token，并保留来源、epistemic status、冲突和 Game Truth 权威边界。
+- 生产 Subjective World 开启时，Legacy Mentioned Character Info 不再绕过 Knowledge Policy；第三人证据固定在 Current User 后且 `stable=false`。Cache Anchor 升至 v5，用强规则约束明确记录不得否认、未说明内容不得补造。
+- 新增 DeathFact、确定性相对时间、在世/已故年龄、Kinship Graph 与 Family Fact Block；死亡事实保留 deceased/killer/date/cause，已故年龄固定，兄弟姐妹只由共享父母推导，任何关系多类型冲突均返回未知。
+- 可见 UI 标签按用户要求更新为 `Memory Engine 2.6 · V8.6.2`；内部 `MEMORY_ENGINE_VERSION=2.5`、摘要 schema 和人物目录格式保持不变，不迁移用户数据。
+- 新增 38 个 V8.6.2 发布组；完整 `node scripts\test-release.js` 为 187/187 发布组通过，256 个测试文件分类、68 个历史检查归档。未发现遗留自动化 P0。
+- 本轮未执行 CK3 Death/Kinship、第三人真实 Provider Grounding、Production Worldline A/B 与 Electron UI 人工测试，不能签发 Full Freeze；当前为 `SOL V8.6.2 CODE REVIEW = PASS`、`V8.6.2 FREEZE = PENDING MANUAL GATES`。详见 [V8.6.2 Sol 实施与最终审查](V8.6.md#source-caf1227f3c7e)。
+<a id="source-bd3947cca735--第五十五阶段v871-terra--branch-safety--current-truth--canon-api完成等待-luna"></a>
+## 第五十五阶段：V8.7.1 Terra — Branch Safety / Current Truth / Canon API（完成，等待 Luna）
+
+- Branch Registry 升级为兼容读取 v1、后续写入 v2：同路径日期向前的 autosave 自动延续；同日不同内容 fail-closed；回档返回候选而不串线；同路径 archived 指纹恢复原 Branch；复制存档继续默认隔离。恢复 Branch 保持可写，分支 lineage 记录当前/历史指纹、父分支和生命周期时间。
+- Canon 时间合同新增当前日期、指定日期、长期规则与未来计划。服务端生成当前日期；长期规则可召回；未来计划以“尚未发生”标记召回；指定日期缺失拒绝保存。当前状态只接受 location/alive/faith/culture/liege/primaryTitle/courtEmployer/imprisoned 的结构化 claim；自由文本当前状态不再进入 Prompt。
+- 新增角色选择、Canon 测试和 Branch resume IPC/preload API；测试 API 复用生产权限、时间、分支与 Current Truth 门禁，Secret 未授权时不返回正文。主程序增加 Electron 单实例锁，避免同目录双进程写入。
+- 新增 18 个 V8.7.1 Terra 发布组，完整 `node scripts\test-release.js` 为 222/222 通过（291 个测试文件分类、68 个历史归档）。P2 per-branch Worker 并行延期 V8.8；Luna 仍需完成玩家化 UI、引导、模板、选择器、冲突交互和测试面板，之后交 Sol 审查与实机 Gate。详见 [Terra 实施报告](V8.7.md#source-df9089b2fcbd)。
+
+<a id="source-bd3947cca735--第五十六阶段v871-luna--player-first-world-memory-ui完成等待-sol"></a>
+## 第五十六阶段：V8.7.1 Luna — Player-first World Memory UI（完成，等待 Sol）
+
+- 世界记忆编辑器改为玩家优先的基础模式：标题、自然语言正文、成立时间、类型、可见性、重要性和人物选择可直接完成；Runtime ID、known-by、scope、冲突标识、会话固定和分支/revision 继续保留在高级选项中。
+- 新增五类玩家模板、Terra 人物选择器、记录级 Canon 召回测试面板，以及权限/时间/分支/CK3 当前事实冲突的可读结果；历史修订分页改为追加展示。
+- 召回关闭时给出可执行引导和一键推荐设置。新增 `worldline:setRecallSettings` 窄 IPC 只修改召回集成与主观世界模式并清理相关缓存，不修改模型、CK3 存档或记忆正文；默认召回开关保持关闭。
+- 新增 Luna UI 定向回归并登记 manifest；完整发布门禁为 227/227，296 个测试文件分类、68 个历史归档。Playwright 隔离 fixture 已通过宽屏/600px 窄屏和核心交互验证，真实打包 Electron、CK3、Provider 和生产 Prompt 仍交 Sol 审查。详见 [Luna 实施报告](V8.7.md#source-9c4e7c217ba9)。
+
+<a id="source-bd3947cca735--第五十七阶段v871-sol--final-correctness-review代码通过等待人工-gate"></a>
+## 第五十七阶段：V8.7.1 Sol — Final Correctness Review（代码通过，等待人工 Gate）
+
+- 修复 Canon Test 使用记录自身实体造成无关问题伪命中、隐藏/恢复局部更新重写时间字段、归档分支恢复优先级与候选 DTO 不一致等跨模块缺陷。
+- Current Claim 现强制 `CURRENT_DATE` 且必须绑定当前 Checkpoint 人物；Court/Realm scope 同样服务端核验。召回关闭时测试返回 `RECALL_DISABLED` 且无 Prompt；Secret 未授权不返回正文或 Current Truth 值。
+- 玩家编辑器接通结构化 Current Truth、CK3/世界记忆值对照及改为过去事件、取消声明、隐藏记录三种安全处理；设置更新不再关闭编辑器，会话固定仅对合同允许的记录开放。
+- 新增 Memory、Cache、局部时间保持、分支歧义和 Current Truth UI 回归；28 个 V8.7.1 定向测试、生产形态 Canon、语法、manifest 与完整 release gate 全部通过。最终为 301 个测试文件、232/232 个发布组、68 个历史检查归档。
+- 隔离真实浏览器已完成 Current Truth 创建、人物绑定、Canon Test 和冲突处理布局验证；未出现白屏或重叠。真实打包 Electron、CK3、Provider 与生产 cold/warm Cache 尚未执行。
+- 结论：`SOL CODE REVIEW = PASS`、代码侧 `P0=0 / P1=0`；`V8.7.1 FREEZE = PENDING MANUAL GATES`。详见 [Sol 最终正确性审查](V8.7.md#source-453208ed1801)。
+
+<a id="source-bd3947cca735--第五十八阶段v872-terra--current-truth--load-boundary--legacy-migration完成等待-luna"></a>
+## 第五十八阶段：V8.7.2 Terra — Current Truth / Load Boundary / Legacy Migration（完成，等待 Luna）
+
+- Current Claim 收敛为 location、alive、faith、culture、liege、courtEmployer 六项；生产事实采用可读 `value`、机器比较 `structuredValue`、玩家显示 `displayValue` 的双值合同。`primaryTitle` 与 `imprisoned` 缺少解析器生产来源，服务端直接拒绝写入。
+- Branch Registry 新增 `loadSessionId`，在 VOTC `LOAD_SESSION` marker 存在时仅允许同会话自动前进。新载入会话的未知 fingerprint 返回 `LOAD_BOUNDARY_CANDIDATE`，不再按日期把 Canon 写入旧分支；预 V8.7.2 无 marker 行保持兼容。
+- Legacy Supplemental 对玩家只读。公开记录可迁移为 Canon，敏感记录必须人工审阅；迁移后旧记录隐藏并使用 `legacyMigrationId` 幂等去重，避免旧/新两套记录同时召回。
+- 新增 Terra 与 Legacy 迁移回归并登记 manifest；当前 `node scripts\test-release.js` 为 234/234 发布组通过。`test-action-system.js` 因既有缺失 `action-system` 模块而无法加载，非本阶段导致。未执行 CK3 marker、打包 Electron、Provider 实机 Gate。下一步切 Luna 完成玩家化预览、分支选择和迁移 UI，详见 [Terra 实施报告](V8.7.md#source-511012a06bbd)。
+
+<a id="source-bd3947cca735--第五十九阶段v872-luna--current-truth--load-boundary--legacy-ui完成等待-sol"></a>
+## 第五十九阶段：V8.7.2 Luna — Current Truth / Load Boundary / Legacy UI（完成，等待 Sol）
+
+- Current Claim 改为玩家可理解的角色与字段选择，并通过 `getCanonCurrentTruth` 生成只读 CK3 预览；页面不再提供当前值手填输入，角色或字段变化会清空旧预览，保存仍由服务端二次核验。
+- `LOAD_BOUNDARY_CANDIDATE` 进入前端不可写门禁，明确提供“继续当前分支”或“建立独立分支（不继承旧 Canon）”，避免玩家在未确认新的 CK3 载入会话前误写旧分支。
+- Legacy Supplemental 改为只读兼容区；公开记录可以查看迁移草稿，非公开记录先显示迁移审阅，明确确认后才迁移为 Canon；零记录和已迁移状态均有可读反馈，前端没有旧 Supplemental 的编辑/删除写入口。
+- 新增 8 个 Luna 定向回归；结合既有 V8.7.1 UI、V8.7.2 Terra/Legacy 回归及主进程/Renderer 语法检查，完整 `node scripts\test-release.js` 为 242/242 发布组通过（311 个测试文件分类、68 个历史归档）。
+- `V8.7.2 LUNA CODE = PASS`；打包 Electron、CK3 Load Session marker、真实 Legacy migration、Provider Prompt、视觉与性能人工 Gate 尚未执行，当前 `V8.7.2 FREEZE = PENDING SOL / MANUAL GATES`。详见 [Luna 实施报告](V8.7.md#source-ef1e919e0d58)。
+
+<a id="source-bd3947cca735--第六十阶段v872-sol--final-correctness-review代码通过等待人工-gate"></a>
+## 第六十阶段：V8.7.2 Sol — Final Correctness Review（代码通过，等待人工 Gate）
+
+- 将日志文件身份、marker 绝对偏移和原始 `LOAD_SESSION` marker 哈希为桌面端不透明会话 ID；同一次载入后的普通日志追加保持稳定，相同 epoch 的再次载入也不会自动串入旧分支。
+- Legacy migration 增加进程内串行化、存储层原子去重和 Canon 已提交后的旧召回抑制，关闭并发重复写入及 Canon/Legacy 双重注入窗口。Personal/Secret 必须显式确认并重新选择有效知情人物，Court/Realm 必须绑定当前 Checkpoint 范围人物。
+- Current Truth 六项生产事实统一可读值、结构化值与显示值，修复 `courtEmployer` 的字段名归一化；世界线默认首屏不再读取历史人物全量映射、诊断或 Legacy 列表，诊断/技术 ID 仅在开发者模式显示，零 Legacy 记录不显示兼容区。
+- 新增 Sol 审计回归并登记 manifest；完整 `node scripts/test-release.js` 为 243/243 发布组通过（312 个测试文件分类、68 个历史检查归档），主进程与 Renderer 语法通过。
+- 结论：`V8.7.2 SOL CODE REVIEW = PASS`、代码侧 `P0=0 / P1=0`；真实 CK3 两次载入、六项 Current Truth、Legacy 权限迁移、Provider cold/warm Prompt 与三主题打包 Electron 仍待人工验收，当前 `V8.7.2 FREEZE = PENDING MANUAL GATES`。详见 [Sol 最终正确性审查](V8.7.md#source-00f0e2dc6408)。
+- 后续 UI 小修：DeepSeek 静态模型列表新增 `deepseek-v4.1-flash-expires-on-0910`，既有选项与配置合同不变；移除“优化 → 历史人物”普通入口，保留 Historical Resolver、Index、Alias Catalog 和诊断 IPC 供后台/开发诊断使用。新增模型选项与普通 UI 移除回归，完整发布门禁复核为 244/244（313 个测试文件分类、68 个历史检查归档）。
+
+<a id="source-bd3947cca735--第六十一阶段v872-p0--世界记忆输入稳定性热修完成等待人工-gate"></a>
+## 第六十一阶段：V8.7.2 P0 — 世界记忆输入稳定性热修（完成，等待人工 Gate）
+
+- 根因是世界线后台 `historical_definition_index_updated`、`historical_query_ready`、`localization_updated`、`runtime_name_index_updated` 和 `live_updated` 通知被编辑器误当成存档/分支变化；每次通知都执行 `setData(null)`，导致世界记忆表单在玩家刚开始输入时被卸载，输入内容丢失。
+- 编辑器现在忽略上述不影响 Canon 表单的后台通知，保持已打开表单与草稿稳定；真正的存档、Checkpoint、分支和 Canon 数据变化仍触发安全失效，避免沿用过期写入上下文。
+- 新增 `test-v8.7.2-world-memory-input-stability.js`，完整发布门禁复核为 245/245（314 个测试文件分类、68 个历史检查归档）。真实打包 Electron 的输入交互仍需人工复测，当前 `V8.7.2 FREEZE = PENDING MANUAL GATES`。
+
+<a id="source-bd3947cca735--第六十二阶段v872-luna--ck3-中文日期链兼容热修完成等待人工-gate"></a>
+## 第六十二阶段：V8.7.2 Luna — CK3 中文日期链兼容热修（完成，等待人工 Gate）
+
+- `normalizeGameDate()` 现在统一接受 CK3 生产中文日期 `YYYY年M月D日`，并与点号、短横线、斜线输入统一 canonical 为 `YYYY.M.D`；月份、日数、闰年和不完整输入继续 fail-closed。
+- Canon 的 `CURRENT_DATE`、`SPECIFIC_DATE`、带日期的 `PLANNED` 和 Legacy Supplemental migration 在进入 Store 前主动 canonicalize；`TIMELESS` 仍固定为 `gameDate=null/totalDays=null`。Branch Registry、Checkpoint freshness、GameState date comparison 和 Runtime Name Index 复用同一日期权威，Store 写入再次保证 canonical。
+- 世界记忆编辑器增加指定/计划日期前端校验、中文日期显示和日期错误玩家化映射；CURRENT_DATE 仍只信任后端 CK3/Checkpoint 日期，不信任前端草稿。
+- 新增中文生产日期 normalizer、CURRENT_DATE 链、SPECIFIC_DATE/PLANNED/TIMELESS、Legacy migration、Branch、日期 UI 错误边界回归；完整 `node scripts\test-release.js` 为 249/249 发布组通过（318 个测试文件分类、68 个历史检查归档），主进程/世界线/预加载/Renderer 语法和 `git diff --check` 通过。
+- 本阶段没有签发实机 Gate；真实 CK3 中文日期存档、Provider Prompt 与打包 Electron UI 仍需人工复测，当前 `V8.7.2 FREEZE = PENDING MANUAL GATES`。
+
+<a id="source-bd3947cca735--第六十三阶段v88-stage-0-sol--人物身份与亲属关系合同审计完成等待-terra"></a>
+## 第六十三阶段：V8.8 Stage 0 Sol — 人物身份与亲属关系合同审计（完成，等待 Terra）
+
+- 冻结 Runtime Identity、Historical Identity、Kinship 与 Current State 四层职责：身份只决定“是谁”，亲属只决定 Runtime ID 间关系，当前状态只服从 CK3 结构化事实；年龄/家庭不得参与 Historical Identity hard gate，Kinship 不得提升 Secret 权限。
+- 审计确认生产 `historical-identity-resolver` 的 Definition ID、双向 Runtime 绑定、精确名称和性别门禁可以保留；现有 Kinship Graph 的直接边和事实节点已按 Runtime ID 隔离。
+- 只读复现发现 `alive=true` 与 relation death metadata 可同时进入 canonical profile，且 `evidence.conflicts.alive=false`；Family Fact 输出“已故”而 Current Truth 仍可输出“在世”，记为 `S0-P0-01`。
+- 另有 8 项 P1：缺少 RelationMentionResolver；dead raw age 可冒充 ageAtDeath；Shadow Historical Resolver 仍以年龄/家庭判定身份；缺少 branch-local HistoricalEntityBinding；性别冲突未统一；状态/路径 DTO 分裂；Family Prompt 全量非 query-aware；Historical/Kinship 联合缓存与 Load Boundary 合同缺失。
+- 既有 Historical Identity、source conflict、relation conflict、death/age/gender/family prompt、production family adapter 和 Kinship cache 回归通过；当前完整发布基线仍为 249/249。本阶段未修改生产代码，也未签发 CK3/Provider/Electron Gate。
+- 结论：`V8.8 STAGE 0 = AUDIT COMPLETE`、`P0=1 OPEN / P1=8 OPEN`、`V8.8 FREEZE = NOT READY`。下一步切换 Terra 执行 Stage 1—4，详见 [Stage 0 Sol 审计](V8.8.md#source-b5e7f951a36a)。
+
+<a id="source-bd3947cca735--第六十四阶段v88-terra-stage-14--runtime--historical--kinship完成等待-luna"></a>
+## 第六十四阶段：V8.8 Terra Stage 1—4 — Runtime / Historical / Kinship（完成，等待 Luna）
+
+- 修复 `alive=true + deathDate` 双重权威 P0：Canonical Profile 统一标记 `RELATION_LIFE_STATUS_CONFLICT`，不再输出相互矛盾的“在世”与精确死亡结论；已故人物缺 birth/death 证据时改为 `AGE_AT_DEATH_UNAVAILABLE`，不使用 raw age 冒充终年。
+- Runtime 名称保持 full-name 唯一解析、given-name 同名 fail-closed；仅当前会话 active participant 唯一命中时进入 `RESOLVED_CONTEXTUALLY`。Historical Binding 新增 campaign/branch/checkpoint/dataset scope 和 256 条上限缓存，Definition/Runtime 双向绑定或性别不一致均不下身份结论，年龄/家庭差异仅为世界线差异。
+- 新增 RelationMentionResolver 与 FamilyEntityFactBundle。亲属称谓从回应 NPC 为锚点解析到 Runtime ID，单一候选输出结构化关系路径；多个候选返回 `RELATION_AMBIGUOUS` 并避免注入任何候选地点、生死或私人事实。Prompt 仅在问题含亲属称谓时投影相应家庭事实，日常对话不再全量倾倒家谱。
+- 新增 14 个 V8.8 回归并登记 manifest；`node scripts/test-release.js` 为 263/263 发布组通过，主进程语法与 `git diff --check` 通过。Shadow Historical Resolver 迁移、全链路性别仲裁、Historical/Kinship/Relation 联合 Load Boundary cache 和 Luna/Sol/真实 CK3、Provider、Electron Gate 尚待完成，当前 `V8.8 FREEZE = NOT READY`。详见 [Terra 实施报告](V8.8.md#source-9981785970b4)。
+
+
+<a id="source-bd3947cca735--第六十五阶段v88-luna--entity--kinship-inspector完成等待-sol"></a>
+## 第六十五阶段：V8.8 Luna — Entity & Kinship Inspector（完成，等待 Sol）
+
+- 新增开发者只读 Entity & Kinship Inspector，并通过 worldline:getEntityKinshipInspector IPC 接入 Terra DTO；页面按身份依据、当前世界状态、亲属关系、历史差异四栏展示，不把历史差异覆盖为当前 CK3 事实。
+- 补齐同名候选与证据、关系歧义状态、已故亲属状态、Runtime ID Relation Path、关系距离和历史身份映射页；普通玩家只看到语义化结果，Historical/Runtime/provenance/raw enum 仅在开发者诊断层显示。
+- 新增 Luna 夹具回归；修复历史身份页 raw-data 保护分支缺少外层 children 闭合导致旧 WorldlineView 局部初始渲染安全门解析失败的问题。node scripts\\test-release.js 为 264/264 发布组通过，主进程/Renderer 语法与 git diff --check 待本轮最终复核。
+- 本阶段不修改生产 Prompt 默认开关、存档、Canon 或 Supplemental。Shadow Historical Resolver 迁移、全链路性别仲裁、联合 Load Boundary cache、Terra profiling/soak、Sol 正确性审查和真实 CK3/Provider/Electron Gate 仍未完成。详见 docs/v8.8-luna-implementation-report.md。
+
+<a id="source-bd3947cca735--第六十六阶段v88-sol--静态架构与安全审查完成等待-terra实机-gate"></a>
+## 第六十六阶段：V8.8 Sol — 静态架构与安全审查（完成，等待 Terra/实机 Gate）
+
+- 修复世界线延迟白屏的高风险算法路径：亲属图不再全人物两两比较，Inspector 改用 3 层、最多 4096 节点的 revision-scoped 邻域；超界候选返回 `RELATION_SOURCE_INCOMPLETE`，候选 DTO 上限 50。
+- Historical Binding 改用一次性 reverse index 与证据感知的 256 条缓存；关系方向统一为“目标相对回应角色”，唯一称谓可直接确定 Target，显式 Target 不再混入其他查询人物的候选或差异。
+- Current Truth 的 alive 统一经过生死仲裁；Canonical 与 relation-entry 性别冲突 fail-closed；Kinship 不得授予 Secret 权限。新增 Historical 同名 Definition、家庭差异、Secret negative、Load Boundary 与 16 万人物性能回归。
+- 指定 `autosave_1.ck3` 的隔离打包 Electron 测试读取 158865 人物/92306 Historical Bindings：存档解析约 3.0 秒、岳飞查询约 420 毫秒、Inspector 约 170 毫秒，世界线/历史身份/开发者诊断切换无 Renderer exception；用户实机确认延迟白屏已消失。
+- `node scripts/test-release.js` 为 269/269 发布组通过（338 个测试文件分类、68 个历史检查归档）。Shadow Resolver 迁移、Biological/Adoptive/Step 分类、integrity scan、Stage 8 真实 CK3/Provider/2 小时 Soak 与 Stage 9 Final Freeze 尚未完成。详见 [Sol 静态安全审查](V8.8.md#source-39e478143778)。
+
+<a id="source-bd3947cca735--第六十七阶段v88-terra-stage-6--v83-退役与-kinship-integrity完成等待实机-gate"></a>
+## 第六十七阶段：V8.8 Terra Stage 6 — V8.3 退役与 Kinship Integrity（完成，等待实机 Gate）
+
+- 依据当前版本策略退役 V8.3/V8.3.1 的 Shadow Historical Figure Resolver、评分输入、Ground Truth、诊断 IPC/预加载桥接和 Dashboard；历史人物定义数据继续由 V8.8 Definition-ID 双向绑定使用，`DynamicHistoryService` 保留 Campaign/Worldline 边界但不再写 `figureResolution`。
+- 关系类型只接受来源明确标记的 `BIOLOGICAL`、`ADOPTIVE` 或 `STEP`，未标记 CK3 关系保持 `UNSPECIFIED`。新增按需完整性扫描，检查互反关系、节点、自关联、重复与显式类型冲突；开发者 Inspector 仅扫描有界邻域，完整 Checkpoint 扫描走独立 IPC，避免重引世界线白屏路径。
+- Checkpoint 重建和取消配置清空 Historical Binding 缓存；新增退休链路、定义数据、关系类型/完整性三组回归，既有 Inspector、Load Boundary 与 16 万人物性能回归保持通过。
+- 当前 `V8.8 FREEZE = NOT READY`：接下来执行 Stage 8 真实 CK3/Provider/Load/branch/2 小时 Electron Soak，之后交 Sol Stage 9 Final Freeze。详见 [Terra Stage 6 收口](V8.8.md#source-462f71c26f61)。
+
+<a id="source-bd3947cca735--第六十八阶段v88-sol-最终代码审查完成等待-stage-8-人工-gate"></a>
+## 第六十八阶段：V8.8 Sol 最终代码审查（完成，等待 Stage 8 人工 Gate）
+
+- 重新追踪生死真值到原始家庭事实、结构化人物输出、确定性世界摘要、年度 Delta 与配偶分类，关闭仍可输出“在世/已死亡/亡妻亡夫”精确结论的旁路；未知或冲突统一不下结论。
+- Historical Identity、亲属图标签和人物格式化统一使用性别共识仲裁；冲突时拒绝身份绑定并使用中性称谓。父子重复边可补充后到显式 Biological/Adoptive/Step 类型，显式类型冲突降级并进入 integrity report。
+- 审查中触发并撤回一次角色选择 API 的非必要三态扩展，V8.7.1 冻结 DTO 精确兼容保持不变。
+- `node scripts/test-release.js` 为 262/262 发布组通过（331 个测试文件分类、68 个历史检查归档）；160000 人物性能门禁约 101 ms，隔离 Electron 世界线五页导航通过且无 Renderer exception。
+- 结论：`V8.8 SOL FINAL CODE REVIEW = PASS`、已审计生产代码 `P0/P1=0 OPEN`。Stage 8 的真实 CK3/Provider、100 次对话、Canon/Load/branch 矩阵与 2 小时 Soak 尚未提供完成证据，因此 `V8.8 FINAL FREEZE = PENDING STAGE 8 MANUAL GATES`。详见 [Sol 最终代码审查](V8.8.md#source-8ab66596e2d1)。
+
+<a id="source-bd3947cca735--第六十九阶段v881-第三方亲属关系-anchor完成等待实机-gate"></a>
+## 第六十九阶段：V8.8.1 第三方亲属关系 Anchor（完成，等待实机 Gate）
+
+- `Responder Runtime ID`、`Relation Anchor Runtime ID` 与 `Target Runtime ID` 已拆分。第二人称“你儿子”仍锚定回应者；第三方姓名、头衔和“府”表达不再默认绑定回应 NPC，同称号/同名 Anchor 拒绝静默选择。
+- 新增自然中文关系意图：得一子/女、最近得的儿子/女儿、长/次/三/幼子女、父母、兄弟姐妹和配偶。最新出生或出生顺序只在所有候选具备完整 `birthDateTotalDays` 时选定，否则 `RELATION_AMBIGUOUS`。
+- Family Fact Block 改为使用 Anchor 图查询；已解析对象直接注入 CK3 的 Runtime ID、性别、生死和年龄。Anchor 或候选失败而玩家已明确“一子/一女”时，仍注入不得反转性别的 fail-closed 约束；无关系意图的普通对话继续不注入家谱。
+- 子女 profile 补齐辅助 alias；`[VOTC Relation]` 诊断可直接显示 intent、sex、Anchor、Target 与 resolution。Golden Test “幽王府又得一子”使用零摘要、零 Memory fixture，仅从 CK3 亲属结构解析赵允韬为男性。
+- 新增 V8.8.1 发布回归；完整 `node scripts/test-release.js` 为 263/263 发布组通过（332 个测试文件分类、68 个历史检查归档）。真实 CK3/Provider 的 10 组自然中文关系询问与 Stage 8 其余 Gate 尚待执行，`V8.8 FINAL FREEZE` 继续保持 `PENDING STAGE 8 MANUAL GATES`。详见 [V8.8.1 实施报告](V8.8.md#source-c1015a3f2a65)。
+
+<a id="source-bd3947cca735--第七十阶段v88-ui-主题背景补充完成等待人工视觉-gate"></a>
+## 第七十阶段：V8.8 UI 主题背景补充（完成，等待人工视觉 Gate）
+
+- 保留 `parchment`、`knight`、`ink` 内部主题键，将玩家可见风格分别映射为游牧、骑士、水墨；主题按钮的标题和 ARIA 标签同步更新，按钮图标仍为原有主题控制资源，只负责切换风格。
+- 主对话/配置面板及其内容区使用 `image/草原游牧.png`、`image/中世纪骑士.png`、`image/中国古典.png` 作为整块背景，并叠加主题专用遮罩；配置内容、对话内容、世界线卡片、诊断卡片和世界记忆编辑器使用半透明内容层。输入框、下拉框、状态标签和世界记忆提示按浅色/深色主题分别设定对比色，避免背景图直接压住 UI。
+- 基于人工视觉反馈，降低了主面板、内容区与信息卡的遮罩不透明度；背景图不再被近乎纯白的内容层覆盖，输入控件仍保留足够对比度。
+- 针对游牧/水墨世界线页面补充冷灰蓝/暖褐半透明面板、指标卡与深色辅助文字，避免世界线数据卡再次与浅色背景融为一体。
+- 2026-09-11 水墨主题按实机反馈适度压低对话外层与内容层背景亮度；非语义功能图标统一为黛青灰，悬停为暖铜、当前主题为朱砂，错误/警告/成功状态色保持不变。
+- 2026-09-11 将游牧主题遗留的西欧羊皮卷按钮图标替换为马首铜徽、反曲弓和游牧织毯图标；保留 `parchment` 内部键、资源路径与主题持久化兼容性。
+- 新增 `test-v8.8-ui-style-backgrounds.js` 并登记 manifest；三张图存在性、整块面板 CSS 映射、原有主题控制图标未变、遮罩和控件可读性静态回归通过。完整 `node scripts\\test-release.js` 为 264/264 发布组通过（333 个测试文件分类、68 个历史检查归档）；Renderer 语法通过。
+- 当前代码侧未修改 CK3 存档、Worldline/Canon、Prompt 或 Memory 数据合同。现有 Electron 烟雾测试受本机 Chromium GPU 进程异常退出影响未完成，三主题实际视觉仍需用户重启 VOTC 后人工确认。详见 [V8.8 UI 主题背景补充](V8.8.md#source-18a4b5c0d46e)。
+
+<a id="source-bd3947cca735--第七十一阶段v882-亲属关系正确性闭环代码完成等待实机-gate"></a>
+## 第七十一阶段：V8.8.2 亲属关系正确性闭环（代码完成，等待实机 Gate）
+
+- 兄弟姐妹长幼改为候选出生日相对 Relation Anchor 出生日判定；Anchor 或候选缺日期、长/次/幼与最近出生并列时均返回歧义，不再使用候选排序或 Runtime ID 兜底。子女 alias 同步只在同性别出生日完整且唯一时生成顺序称谓。
+- `RELATION_GENDER_CONFLICT` 使用独立权威块，玩家称谓性别仅为 Query Constraint；Anchor/Target 未解析时禁止输出具体身份、年龄、地点、生死、头衔、配偶和私人事实，也禁止 Memory、历史常识或模型代选人物。
+- 新增按类型限定的亲属查询，配偶兼堂亲等多重角色只按当前问题的关系类型解析；“配偶”保持性别中立，“丈夫/妻子”保留显式性别。
+- Historical Definition↔Runtime 要求双向真正一对一且缓存纳入反向 Definition 集；Targeted Graph 在精确节点上限处检查未展开邻居。Family Entity Fact Bundle 仅在图未截断、人物非 partial、关系无诊断时标记来源完整。
+- 新增 11 个 V8.8.2 专项并登记 manifest；V8.8.1 “幽王府又得一子”零 Memory Golden Test、V8.8 性别/缓存/Secret/16 万人物性能门禁继续通过。完整 `node scripts/test-release.js` 为 275/275 发布组通过（344 个测试文件分类、68 个历史检查归档）。
+- 当前 `V8.8.2 CODE = PASS`；真实 CK3/Provider 十问矩阵、“幽王府又得一子”实机复测、100 次对话和 2 小时 Soak 尚未执行，`V8.8 FINAL FREEZE = PENDING STAGE 8 MANUAL GATES`。详见 [V8.8.2 实施报告](V8.8.md#source-7387c1e90c6e)。
+
+<a id="source-bd3947cca735--第七十二阶段v882-后续亲属边界热修代码完成等待实机-gate"></a>
+## 第七十二阶段：V8.8.2 后续亲属边界热修（代码完成，等待实机 Gate）
+
+- 已故配偶按 `edge.from` 人物自身状态写入：活着的丈夫指向亡妻为 `SPOUSE_OF`，亡妻指回丈夫为 `DECEASED_SPOUSE_OF`；双方在世为双向普通配偶，双方已故为双向已故配偶，前配偶保持双向前配偶。活人不再被标成“亡夫/亡妻”。
+- Kinship Graph 缓存指纹纳入 gender、birthDateTotalDays、alive 与权威冲突标志，原始人物对象替换但未递增 revision 时亦会重建；中性“配偶”忽略性别冲突而继续唯一解析，性别化“妻子/丈夫”仍返回冲突，Family Fact 显示中性冲突提示。
+- 普通“妻子/丈夫/配偶”、前任称谓与已故称谓分别只查询 `SPOUSE_OF`、`FORMER_SPOUSE_OF` 与 `DECEASED_SPOUSE_OF`；第二人称和第三方 Anchor 同步，长词优先。现任 + 前任 + 已故同时存在时可分别唯一解析，配偶兼堂亲与性别冲突规则不回归。
+- 生产 Checkpoint 使用完整 gamestate SHA-256 作为 `contentFingerprint`，其 revision invariant 已由测试固定；缺少显式 revision 的运行时对象继续走人口属性 fallback。新增两项配偶状态/revision 回归并修正旧方向断言；`node scripts\test-release.js` 为 280/280 发布组通过（349 个测试文件分类、68 个历史检查归档）。真实 CK3/Provider 十问矩阵、100 次对话与 2 小时 Soak 仍未执行，`V8.8 FINAL FREEZE = PENDING STAGE 8 MANUAL GATES`。
+
+<a id="source-bd3947cca735--第七十三阶段v882-p1-已故前配偶与-github-ci-修复代码完成等待远端实机-gate"></a>
+## 第七十三阶段：V8.8.2 P1 已故前配偶与 GitHub CI 修复（代码完成，等待远端/实机 Gate）
+
+- FORMER_SPOUSE 关系类型不再被人物已故状态覆盖；图谱中的已故前配偶保持 FORMER_SPOUSE_OF，而显式或普通已故婚配仍保持 DECEASED_SPOUSE_OF。因此前任称谓和已故称谓的候选集合严格分离。
+- 新增四态配偶矩阵回归，固定已故前配偶的 canonical record、图谱边、前妻歧义/唯一查询与亡妻排除行为；既有方向、性别冲突和多重角色门禁继续执行。
+- CI 的 Prompt Order 回归不再依赖特定换行符、缩进或字段同行格式；工作流保留 Windows 单门禁，补充手动触发、最小只读权限和超时，Checkout LFS 语义继续由 Manifest 测试覆盖。
+- 本地完整发布门禁为 281/281（350 个测试文件分类、68 个历史检查归档）。未推送本次变更，故远端 GitHub Actions 结果和真实 CK3/Provider/Soak Gate 均未签发。
+
+<a id="source-bd3947cca735--第七十四阶段v883-luna--action-生命周期可观测性完成等待-terra"></a>
+## 第七十四阶段：V8.8.3 Luna — Action 生命周期可观测性（完成，等待 Terra）
+
+- 在官方 Action Engine 的选择与运行结果上增加统一生命周期与诊断结构：`selected`、`validated`、`dispatched`、`confirmed`、`status`，并保留 source/target Runtime ID、selected/requested args、revision、dispatch/confirmation status 和 expected/confirmed state change 字段。既有 Action 返回字段保持兼容。
+- 会话 Action Feedback、Approval、Conversation Manager 输出和 Prompt Action History 均保留生命周期。`DISPATCHED` 只显示为“已发送到游戏，等待确认”，只有后续真正写入 `CONFIRMED` 才使用完成标记；校验失败、发送失败、未确认、状态不一致和超时进入失败态显示。
+- Renderer 增加中英文生命周期文案和待确认样式；无正文但有生命周期诊断的 Action 也不再被过滤。新增 Luna fixture 与 UI 静态回归并登记到 release manifest。
+- 本阶段刻意不修改官方金币动作的本地乐观扣款、不实现 CK3 revision/双状态确认、不实现 Current Runtime Truth 或参数漂移裁决；这些是 v8.8.3 Terra/Sol 的后续阻断项。未修改存档、Memory、Worldline 或 Prompt 默认开关。
+
+<a id="source-bd3947cca735--第七十五阶段v883-terra--action-回读确认与-mentioned-character-单一事实源完成等待-sol"></a>
+## 第七十五阶段：V8.8.3 Terra — Action 回读确认与 Mentioned Character 单一事实源（完成，等待 Sol）
+
+- `playerPaysGoldTo` 与 `paysGoldTo` 删除本地 `gold` 乐观扣改，只声明 `GOLD_TRANSFER` 预期变化。动作派发后保留 `DISPATCHED`，等待对应 RunFile ACK；ACK 后重新解析 CK3 debug log，并以新 `gameDataRevision` 比对来源与目标的金币变化。只有双边精确匹配才为 `CONFIRMED`/`success=true`；无变化为 `UNCONFIRMED`，单边或非预期变化为 `STATE_MISMATCH`，未收到确认则 `TIMEOUT`。
+- 回读快照、RunFile command id/status、before/after 金额与 revision 均进入 Action diagnostic；用户请求与 selected amount 不同会写入 `ACTION_ARGUMENT_DRIFT`。未确认动作不会以完成结果进入 Prompt Action History 或当前状态。
+- 新增 Relationship Current Truth DTO。Mentioned Character 不再独立从 relation payload 推导性别/称谓，而是和 Family Fact 共用当前 kinship graph 事实与每轮 registry。canonical Runtime 性别优先；relation-side 性别冲突保留诊断但不能覆盖当前 Runtime；缺 canonical 性别时使用中性称谓，Memory 不参与该决策。
+- 新增金币确认、禁止乐观改值、参数漂移和未对话男性亲属单一权威四组回归并登记发布 manifest。Sol 仍须完成 RunFile→CK3 实机执行根因、最终 Current Runtime Truth 边界和完整架构审查；本阶段未宣称 CK3 实机或 Freeze 通过。
+
+<a id="source-bd3947cca735--第七十六阶段v883-sol--actionrelationship-最终正确性收口代码完成等待实机-gate"></a>
+## 第七十六阶段：V8.8.3 Sol — Action/Relationship 最终正确性收口（代码完成，等待实机 Gate）
+
+- 追踪 Action Definition → ActionEffectWriter → RunFileManager → `run/votc.txt` → CK3 Effect → debug.log ACK 全链路。金币动作在目标增加、来源扣除后分别执行 `log_income = yes`，两份动作后 Runtime 金币证据均位于同 command ACK 之前；Parser 将最新 income 回读同步为 canonical `Character.gold`。
+- 关闭确认竞态：命令记录缺失不再等价于 ACK，只有同 command ID 的 `acknowledged` 才触发状态核验；失败、取消、过期和隔离命令保持未确认。`playerPaysGoldTo` 的 RunFile source 与诊断来源统一为玩家 Runtime ID，Effect Writer 记录 source/target index、effect body、写入时间与 command 状态。
+- 玩家最新消息中的显式金币数值进入 `requestedByUser`；与模型 `selectedArgs.amount` 不一致时记录 `ACTION_ARGUMENT_DRIFT`，以玩家明确金额作为 `effectiveArgs`，最终仍只接受 CK3 双边回读的 `confirmedStateChange`。
+- Current Truth DTO 同时服务在场人物、Family Fact 与 Mentioned Character，并共享每轮 registry。canonical Runtime 性别先经冲突仲裁；relation-side 只作低权证据。缺失/冲突时使用中性称谓；原始 `siblings[]` 兼容输入也统一由该 DTO 裁定，Memory 与 Historical Identity 不参与当前性别。
+- 新增 Sol Action Contract 与 Current Runtime Truth 两组 Golden Regression。`node scripts\test-release.js` 为 289/289 发布组通过（358 个测试文件分类、68 个历史检查归档）。代码审查判定 `PASS`；真实 CK3 金币双边变化、未对话亲属、100 次常规对话与 2 小时 soak 尚未执行，因此 `V8.8.3 FINAL FREEZE = PENDING MANUAL CK3 GATES`。详见 [Sol 最终正确性审查](V8.8.md#source-3c10089bdc67)。
+
+<a id="source-bd3947cca735--第七十七阶段v88-水墨摘要与对话可读性热修"></a>
+## 第七十七阶段：V8.8 水墨摘要与对话可读性热修
+
+- 水墨摘要目录的玩家名与人物名改为无阴影深黛墨色，摘要数量与人物 ID 改为沉铜色，解决浅色卡片上亮银文字发虚的问题。
+- 水墨游戏对话区从配置页中独立为稍深青灰底，玩家、NPC 与系统对话框增加暖褐或青灰半透明底色，适度降低白纸亮度；游牧与骑士主题及 CK3、Memory、Worldline 数据合同均未改动。
+
+<a id="source-bd3947cca735--第七十八阶段v88-三主题视觉与按钮体系收口"></a>
+## 第七十八阶段：V8.8 三主题视觉与按钮体系收口
+
+- 审计游牧、骑士、水墨三套实机背景下的对话、配置、摘要和常用按钮：浅色主题摘要姓名改为清晰深墨，骑士摘要只保留无模糊的单像素阴影，消除旧全主题银色光晕在浅色卡片上的发虚问题。
+- 游牧按钮改为织纹皮革与铜边切角皮牌；骑士按钮改为带双侧铆钉的黑钢盾牌切面；水墨按钮改为宣纸渐变、黛青墨线和朱砂选中态。主题切换框同步使用各自材质语言，内部主题键、图标资源和功能行为保持兼容。
+
+<a id="source-bd3947cca735--第七十九阶段v88-世界书命名与主题图标透明背景热修"></a>
+## 第七十九阶段：V8.8 世界书命名与主题图标透明背景热修
+
+- 中文界面的“世界线”统一改称“世界书”，涵盖配置导航、页面标题、状态、诊断、差异说明和召回提示；内部 `worldline` 键、IPC、存储与英文兼容名称保持不变。
+- 游牧马首主题图标移除深色方形底图并保留透明通道；骑士主题切换器及三个图标按钮移除黑色填充，只保留纹章本体、边框和选中标记。
+- 主题专项与完整发布回归均通过，发布门禁为 289/289；2026-09-12 用户已在正式界面人工确认本次命名与透明背景显示正常。
+
+<a id="source-bd3947cca735--第八十阶段v884-关系与动作事故修复"></a>
+## 第八十阶段：V8.8.4 关系与动作事故修复
+
+- 兼容用户实际保留的旧英文 pList 中文代词输入，实时亲属使用可信来源标记且不加入动作参与者 Map；用户已实机确认儿子/女儿识别恢复。
+- 修复旧日期探针 null/0 有效期、旧会话动作积压与排队假发送。原 968 条队列在隔离副本恢复后为 0 条，保留原件备份，已写入未知结果的动作禁止自动重放。
+- 后续实机动作仍失败，继续修复公共 Scope 索引（NPC 名单排除玩家）、玩家 root 绑定、空绑定保护，以及游戏每 0.4 秒轮询载体时的同命令防重复执行。28 个实际安装的标准动作与项目定义哈希一致。
+- 金币/好感度改为同命令 BEGIN—ACK 内前后证据；ACK 不再冒充状态成功，区分好感度无变化/上限与实际变化，修复排队 Unknown error。其他动作仅有 ACK 时明确未验证效果。
+- 290/290 发布组、359 个文件分类及隔离 Electron 启动/导航通过；最新动作补丁仍待 CK3 实机复测，不宣布 Full Freeze。详见 [V8.8.4 事故修复报告](V8.8.md#source-24618219ff00)。
+
+<a id="source-bd3947cca735--第八十一阶段v885-审查问题与扩展亲属"></a>
+## 第八十一阶段：V8.8.5 审查问题与扩展亲属
+
+- 修复同轮后排 Action 被 12 秒提前取消；120 秒排队 TTL 归 RunFileManager，确认计时从实际写入开始，已写入未知效果不自动重放。
+- 多金额、否定/改口文本不再强制覆盖模型金额；好感度初始文案改为等待确认，确认后的成功文案单独保存。
+- 修复年龄空值转零的共享服务及上游解析路径；补入直接手足边、父母数组分支和长幼比较，支持堂表兄姐弟妹、叔父/伯父、姑舅姨及父母系祖辈。
+- 旧英文 pList 通过执行入口接入共享亲属事实，不覆盖用户模板、不扩充 Action 参与者；数据缺失/同龄/出生冲突不猜测，输出带条数上限与截断标记。
+- 291/291 发布组、360 个文件分类及隔离 Electron 冒烟通过，真实 CK3/Provider/Soak 待验收。详见 [V8.8.5 实施报告](V8.8.md#source-b5007cff8177)。
+- 实机追查补充：动作链连续 39 条 ACK 后，一次紧邻 ACK 的非原子 `votc.txt` 重写丢失 BEGIN/ACK，并留下永久阻塞队列的 STALLED 项。载体改为 UTF-8 BOM 临时文件原子替换；新动作只在载体安全清空后隔离旧未知项，不重放效果。DeepSeek 两项 Action 优化改为默认开启且可关闭；OpenAI-compatible 增加标准 JSON Schema / 本地校验兼容传输选择。自动化已覆盖对应边界，仍需重启后执行真实 CK3 Action Gate。
+- 用户随后实机确认关系提取与动作执行已恢复正常。Token 热修补齐 OpenAI 风格流式 usage-only 尾块和 Gemini `usageMetadata`；服务商不提供 usage 时按实际 Prompt/回复记录带 estimated 标记的估算值。按用户决定不修改摘要生成链路，摘要继续使用官方 DeepSeek。完整发布门禁保持 291/291；跨 Provider Token、扩展亲属与长时 Gate 仍待人工验收。
+- 接入独立智谱 GLM 官方 Provider：大陆官方端点可编辑、默认 `glm-5.3-flash`、90,000 Context、低推理强度与清除历史思考；流式和非流式用量均归一化缓存/推理/可见输出 Token。配置页可单独选择“智谱 GLM”，并保留 NPC 消息、动作、摘要三路 Provider Override 隔离。新增离线专项后完整发布门禁为 292/292、361 个文件分类；真实 GLM API、模型支持范围、缓存命中与长时对话仍待人工验收。
+
+<a id="source-bd3947cca735--第八十二阶段v885-独立智谱缓存诊断代码完成等待真实-provider-gate"></a>
+## 第八十二阶段：V8.8.5 独立智谱缓存诊断（代码完成，等待真实 Provider Gate）
+
+- 在“世界书”按钮右侧新增独立“诊断”入口，不复用世界书既有诊断页；Renderer 通过专用 preload/IPC 链路调用独立的 `ProviderDiagnostics` 服务，诊断配置固定读取智谱 Provider，不受当前对话 Provider 切换影响。
+- 按设计档案接入 Raw Usage 与 Normalized Usage 脱敏展示，保留 `cached_tokens` 缺失、明确为 `0` 和正数三态；缓存命中/未命中、reasoning/visible output Token、缓存探针、`clear_thinking=true/false` A/B、最近 50 条导出与本地前缀估算均分开展示，不保存 Prompt 或回复正文。
+- 诊断记录写入 `%APPDATA%/VOTC/provider-diagnostics.jsonl`，保留最多 500 条且不超过 10 MB；普通智谱请求自动记录，测试请求使用固定稳定前缀/变化后缀，清理历史思考 A/B 使用独立命名空间。服务商缺失 `cached_tokens` 时明确显示为未报告，不把未知值折算为 0。
+- 新增 `test-v8.8.5-provider-diagnostics.js` 并登记 manifest；智谱 Provider 与独立诊断链路专项、Renderer/IPC/preload 静态合同、主进程语法和完整 `node scripts\test-release.js` 均通过，当前为 293/293 发布组、362 个文件分类。未执行真实智谱 API、缓存命中有效性、`clear_thinking` 因果性和打包窗口视觉 Gate；P2 TTFT 观测暂未实现。
+
+<a id="source-bd3947cca735--第八十三阶段v89-主对话多模型缓存代码完成等待人工-gate"></a>
+## 第八十三阶段：V8.9 主对话多模型缓存（代码完成，等待人工 Gate）
+
+- 修复缓存三态归一化中的 `null → 0` 风险；正式聊天请求在 Provider 调用前生成脱敏 Outbound 指纹，只保存消息位置、角色、估算 Token、内容哈希、累计前缀哈希和 Block ID。相邻请求按 Provider、模型和请求类型比较，界面按 Provider Truth、Outbound 实际公共前缀、Block 归因估算展示。
+- Chat Prompt 默认使用 `VOTC_CACHE_ANCHOR_v6`，顺序调整为稳定块、历史消息、当前 Runtime、当前用户、Family Facts、查询证据、最终指令；关闭 `chatPromptV89Layout` 可恢复 V8.8.5 v5 顺序。Family Fact 构造与内容、关系/亲属、Memory/Worldline、Action 和 Summary 语义均保持不变。
+- 主对话流式观测新增请求开始、首 reasoning、首 visible content、完成时间及 reasoning TTFT、visible TTFT、输出耗时、总耗时。独立诊断页可显式创建 `GLM53F-Low`（`glm-5.3-flash`、low、`clear_thinking=true`）与 `DSV4F-0731`（`deepseek-v4-flash-0731`）预设；复用现有 Provider 凭据/端点，不自动改变 NPC、Action 或 Summary 当前选择。
+- `chatPromptV89Layout` 与 `chatPromptV89OutboundDiagnostics` 默认开启；`chatPromptV89RuntimeProfileSplit` 默认关闭，人物 Stable/Runtime 字段拆分未接入并延期到 V8.9.1，本版不改 pList 或亲属语义。
+- 四个 V8.9 专项、官方 Action/亲属回归、主进程/Renderer 语法、`git diff --check`、297/297 发布组（366 个测试文件分类）及隔离 Electron 诊断页导航通过。真实 GLM/DeepSeek 缓存、20 轮每模型 TTFT 与 RP 矩阵、CK3 Action/Summary 路由隔离、100 次对话/2 小时 Soak 尚未执行，因此 `V8.9 FULL FREEZE = PENDING MANUAL GATES`。详见 [V8.9 实施报告](V8.9.md#source-d1a6bd6fce92)。
+
+<a id="source-bd3947cca735--第八十四阶段v891-实机缓存统计与-runtime-profile-补全"></a>
+## 第八十四阶段：V8.9.1 实机缓存统计与 Runtime Profile 补全
+
+- 只读核对用户实机批次：DeepSeek 35 次 Chat，输入 529,913、原生缓存命中 449,536（84.83%）；GLM 21 次 Chat，输入 283,937、命中 57,600（20.29%）。DeepSeek 的“—”由嵌套 cached_tokens 未映射导致；GLM 0 命中则为原生返回，公共前缀甚至完整消息相同也出现未命中，尚不能归因于应用布局。
+- 统一 Usage 归一化，保留缺失/0/正数三态；通过 Provider/模型/类型/Token/时间唯一匹配恢复历史报表，原始数据不改写。诊断页新增请求间隔和前缀相同但服务商未命中的说明。
+- 实现延期 RC4：保留描述脚本和亲属适配，稳定身份前置，人物状态每轮重新生成并放入 Runtime 尾部；未知自定义格式完整保留为动态内容。首次升级启用 v7，关闭拆分恢复 v6，关闭 Layout 恢复 v5，玩家关闭后的选择跨重启保留。无关 Action/Summary/Resolver/Memory/Worldline 语义未变。
+- 299/299 发布组、368 个文件分类、只读真实数据核对和打包 Electron 三开关/导航通过。GLM 缓存目标、v7 实机 RP/CK3 和长时 Soak 尚未验收。详见 [V8.9.1 实施报告](V8.9.md#source-1e9d9b4e34db)。
+
+<a id="source-bd3947cca735--第八十五阶段v892-glm-缓存-ttl-探针已移除"></a>
+## 第八十五阶段：V8.9.2 GLM 缓存 TTL 探针（已移除）
+
+- TTL 探针曾用于等待间隔实验；按用户要求，阶段性任务完成后删除 `analytics/cache-ttl-probe.js`、专项测试和实施报告，不再作为当前生产诊断入口。正式 Prompt、Action、Relation、Memory、Worldline 与 Summary 合同不变。
+
+<a id="source-bd3947cca735--第八十六阶段v891-测试2-synthetic-缓存路径诊断已完成并移除"></a>
+## 第八十六阶段：V8.9.1-测试2 Synthetic 缓存路径诊断（已完成并移除）
+
+- Synthetic Exact/Stream/Prefix/Multi-turn 诊断已完成任务，证明 GLM Synthetic 缓存路径正常；按后续设计要求删除运行器、专项测试、IPC/Preload 入口和旧诊断界面，不再把 Synthetic 结果当作真实 VOCT 归因。
+
+<a id="source-bd3947cca735--第八十七阶段v891-后续-real-request-diff"></a>
+## 第八十七阶段：V8.9.1 后续 Real Request Diff
+
+- 真实 Chat 在 Provider 参数组装完成、调用 `provider.chatCompletion()` 前捕获；Conversation metadata 传入稳定 `conversationId` 与 NPC Runtime `responderId`，只处理 `requestType=chat`，Action、Summary、Memory 与旧 Synthetic 工具排除。
+- 新增 Route Scope 与 Conversation/Responder Scope 的内存上一请求比较；持久化消息 role、Block ID、估算 Token、SHA-256 content/message/chunk hash、公共 Prefix、首差异 Message/Block、时间间隔和有效参数变化，不落盘 Prompt、Memory、Worldline、回复正文或凭据。
+- 新增 Provider Raw Usage 对齐：`aligned`、`provider_under_hit`、`provider_over_estimate`、`provider_zero_despite_large_prefix`、`insufficient`；提供 Prefix/时间桶、同 NPC/换 NPC、Provider A/B、首差异 Block 汇总与 `real_request_diff_v1` 脱敏导出。8K 只是诊断阈值，不是 Provider 官方缓存阈值。
+- 不修改 Prompt v7/v6/v5、Runtime Profile Split、Provider 路由、Action、亲属、Memory、Worldline 或 Summary 合同。专项、发布回归、Electron 冒烟和真实 GLM/DeepSeek、CK3、RP、Soak 人工 Gate 分开记录。详见 [Real Request Diff 实施报告](V8.9.md#source-e9b11c4134c3)。
+- 本阶段专项、完整发布回归（300 个发布组、369 个测试文件分类）和隔离 Electron 启动冒烟通过；真实 GLM/DeepSeek、CK3、RP 与 Soak 仍待人工 Gate。
+
+<a id="source-bd3947cca735--第八十八阶段世界记忆编辑器删除闭环"></a>
+## 第八十八阶段：世界记忆编辑器删除闭环
+
+- 世界记忆编辑器新增带二次确认的“删除”按钮；删除操作沿现有 `worldline:mutateCanon` IPC 和 Canon 存储边界执行，不新增绕过分支令牌或 ACL 的路径。
+- 删除按 `recordId + revision` 校验，永久移除选中记忆及其替代链、修订历史，并清空服务端召回缓存；“隐藏 / 恢复生效”继续作为可逆选项。
+- UI、Canon Worker、SupplementalStore、CanonService 和生产 Canon 回归均覆盖；静态检查与自动化通过，真实存档中的世界记忆删除仍需人工确认。
+
+<a id="source-bd3947cca735--第八十九阶段多人对话摘要落盘-p0-修复"></a>
+## 第八十九阶段：多人对话摘要落盘 P0 修复
+
+- 实机四人会话的恢复快照显示参与者与在场窗口均完整，失败原因是 Summary Provider 连续返回非结构化内容且缺少 `messageIds`；质量门禁在写入人物目录前正确拦截，非多人配对文件上限或参与者遗漏。
+- 保留 Summary Provider 的整段重试与按在场边界分块重试；两者仍无法产出合格结构时，Memory Engine 生成来源可追溯的本地摘要：按在场边界分段、保留原始发言和精确 `messageIds`、不凭空生成 durable memories，再沿既有有向人物摘要链写入。
+- 四人异常 Provider 输出及其 `failed_retryable` 恢复快照均已覆盖，自动化通过；下次成功初始化对话数据时会按现有恢复流程处理本次遗留快照。真实 Provider 和玩家存档落盘仍需人工确认。
+
+<a id="source-bd3947cca735--第九十阶段v810-provider-prompt-adapter-layer"></a>
+## 第九十阶段：V8.10 Provider Prompt Adapter Layer
+
+- 新增轻量 Provider Prompt Adapter：复用同一份 Core Prompt 与既有 Block/Token 元数据，不维护 DeepSeek、GLM 两套正文。只有启用 `chatPromptV810ProviderAdapter` 且当前聊天 Provider 为 `zhipu / glm-5.3-flash` 时启用 `GLM Cache v1`；关闭该开关立即恢复原 V8.9/v7 布局。
+- GLM Profile 使用 `VOTC_CACHE_BLOCK_v8.10` 稳定锚点、最近 12 条消息（含当前输入），并将当前状态、在场关系、世界动态、话题记忆、历史与用户输入置于稳定块之后的动态尾部。真实出站仍只构建窗口内历史；滚动摘要压力另行累计被窗口裁剪的消息 Token，避免旧对话无声丢失，也避免预检把窗口外旧人物写回本轮 Mention 上下文。DeepSeek Profile 的消息字节与 V8.9 顺序保持不变；V8.9 的 OpenAI-compatible DSV4F-0731 预设也归入该 Profile。
+- 真实 Request Diff 在不保存 Prompt 正文的前提下记录当前 Profile、实际布局版本、稳定块 Token 与动态尾部 Token；诊断页仅显示与当前有效 Profile 及布局版本同时匹配的最近请求 Token，切换 Runtime Profile Split 后不复用旧布局样本，并修正时间间隔分桶的 Prefix 列，提供 V8.10 Adapter 开关。
+- Action 与关系抽取路径未改动；Memory Engine 的 2.5 存储合同、Summary Provider 输入和摘要落盘路径不变，仅修正滚动摘要的长历史压力判断。已通过 Prompt Layout（含 DeepSeek 精确回归、GLM 12 条窗口与关闭回退）、真实 Request Diff、诊断静态合同和主进程/Renderer 语法检查；真实 GLM 目标命中率 50%+、角色质量、长时对话及 CK3 Gate 仍需人工验收，不以自动化替代 Provider 真值。
+
+<a id="source-bd3947cca735--第九十一阶段v8102-memory-删除一致性与-glm-cache-v2"></a>
+## 第九十一阶段：V8.10.2 Memory 删除一致性与 GLM Cache v2
+
+- 先完成 Memory 删除 P0：统一 `clearAllLongTermMemory()`、Owner Conversation 和 Summary Projection 遗忘入口；“清除全部”同步清理可见摘要、episodes、characters、pairs、knowledge、index 与 recovery，并使当前会话 Recall、Mention 和 Character 兼容缓存失效。Memory generation 阻止已经发出的异步摘要请求在清空后重新写回旧内容。
+- 单条摘要和单人物摘要删除使用既有 `perspectiveMemoryIds`、`perspectiveSummarySegmentIds` 与 `finalizationId` 撤销指定 Owner 的知识及 Episode Segment 可见性；共享 Memory 仍为其他 `knownBy` 角色保留，无知情者且非 public/world 时才物理删除。`loadSummaries()` 与 GameData 重载先清空旧数组和缓存，避免文件删除后继续沿用 stale state。
+- GLM Profile 升级为 `glm_cache_v2`，引入 `GLOBAL_STATIC`、`CONVERSATION_FROZEN`、`RESPONDER_FROZEN`、`DYNAMIC` 四级生命周期和显式 Stable/Live Character DTO。缓存边界前只保留全局规则、会话日期/时代、回应者稳定身份/Traits 及仅含 Runtime ID、姓名、性别、亲属类型的稳定血亲；Memory、Worldline、当前状态、社会关系、Location、Scene、Presence、历史和当前输入全部位于动态尾部。DeepSeek 与关闭 Adapter 的旧路径保持兼容，GLM 最近历史窗口仍为 12 条。
+- Real Request Diff 与诊断页新增 Global/Conversation/Responder/Stable Kinship Token、Declared/Actual Stable Prefix、Dynamic Tail、当前/上次 Prefix Fingerprint、是否变化和首次变化 Block；仅保存脱敏 Hash、计数和元数据，不保存 Prompt 正文。
+- 新增 `test-v8.10.2-memory-deletion.js` 与 `test-v8.10.2-glm-cache-v2.js` 并登记 manifest，覆盖全量清理、Owner 选择性遗忘、Recovery 竞态、RAM stale state、UI 删除接线、生命周期顺序和运行态变化下的 Prefix Invariance。完整 `node scripts/test-release.js` 为 302/302 发布组通过（371 个测试文件分类、68 个历史检查归档），主进程/Renderer 语法、`git diff --check` 和隔离 Electron 启动/诊断页导航通过。
+- 本阶段仍未执行玩家真实数据上的“删除后重启且 NPC 失忆”、真实 GLM 连续 20—30 轮 Prefix Fingerprint/Provider Cached Tokens、真实 CK3 关系与 Action 隔离、角色质量和长时 Soak，因此 `V8.10.2 FULL FREEZE = PENDING MANUAL GATES`。
+
+<a id="source-bd3947cca735--第九十二阶段v811-世界事实召回与知情边界"></a>
+## 第九十二阶段：V8.11 世界事实召回与知情边界
+
+<a id="source-bd3947cca735--已实现"></a>
+### 已实现
+
+- 设计合同见 [V8.11 方案](V8.11.md#source-e1b571bf410d)。修复的代码根因是自动召回缺少 WAR 候选/分类，而非仅依赖模型理解能力；原 LOCATION 与复合 IDENTITY 的宫廷公开权限还会绕过亲友限制。
+- `worldline/war-facts.js` 从 Checkpoint 活跃战争生成明确的日期、进攻方、防守方和“正在交战”事实，无需先存在年度 Delta。Retriever、Ranker、Summary、Classifier 和 Scope Resolver 全链路接入；参战双方领国都可获得战事，宫廷成员可经雇主归入领国，无关人物不自动获权。多国查询优先完整匹配，泛问优先会话领国，Topic Cache 包含参与者指纹。
+- `game-state-adapter.js` 读取游戏动态国号，`shared-query-analyzer.js` 支持对应国号别名。只对入选战争的主要双方进行本地化，避免全量战争触发 Worker 队列；不从战争消失推断胜负。
+- `knowledge-scope-resolver.js` 使用现有 Targeted Kinship Graph 和本轮 GameData 显式朋友关系判权；`conversation.js` 在两条生产召回入口传入 GameData。位置与宫廷归属限本人、可靠亲属、正式朋友或对应直接观察；同宫廷/高好感不单独授予权限。移除 IDENTITY 内嵌地点旁路，关系撤销会使同轮主观缓存失效，不改变 Definition↔Runtime 一对一与冲突 fail-closed 合同。
+- 查询所需战争、生死、行踪字段优先进入有限预算；明确游戏为先、历史为次，移除历史参考中的现实事件/人物命运列表，召回失败也不恢复历史结局。未知地点、冲突生死保持未知；数字地点无可靠地名映射时禁止猜测。诊断元数据新增查询意图、行踪拦截、事实保留和裁剪数量，不记录新 Prompt 正文。
+- 新事实保持在既有 `worldline-turn-recall` 动态尾部；Global / Conversation Frozen / Responder Frozen 和 Cache Anchor/Block ID 均未重排。Action、Summary 落盘和 Memory Engine 2.6 / 2.5 存储兼容合同不变。
+
+<a id="source-bd3947cca735--验证与边界-1"></a>
+### 验证与边界
+
+- `node scripts/test-v8.11-world-facts.js` 通过：无 Delta 的战争、动态宋金国号、攻守双方/异国 NPC、亲属/朋友/陌生人、同宫廷非朋友、关系撤销、直接观察、生死冲突、历史时间查询、数字地点和 STALE 降级。另覆盖十场干扰战争下的目标召回、切参与者缓存隔离、900 Token 输出及实际 PromptBuilder 的 GLM 稳定前缀逐字节不变。
+- 更新两项旧测试中“同宫廷可知地点”的旧断言，改为显式亲友证据；完整 `node scripts/test-release.js` 为 **303/303 发布组通过**，**372 个测试文件已分类，68 个历史检查归档**。
+- `node scripts/v8.8-electron-startup-smoke.js` 隔离启动、诊断页和世界书导航通过，Renderer 异常为 0；未连接真实 Provider 或 CK3。隔离环境的 Player2 健康检查不可达不等于 GLM 回归失败。
+- 只读抽查本机已有 Checkpoint（1149.1.1，90,124 人物、111 场活跃战争）及来源存档，确认动态国号字段与数字地点限制；未修改用户存档/设置/摘要，也未将其写入仓库。该抽查不等于确认玩家当前场景中的宋金战争，不能代替当前日期的实机回归。
+- 仍待人工 Gate：重启应用等待新 Checkpoint 后，分别用相关领国 NPC 问宋金战事、用岳飞亲友与陌生人问行踪及生死；核对回答引用的数据日期和真实 GLM Cached Tokens，进行长时对话。V8.11 未实现数字地点的新命名空间映射器，未宣称真实 CK3/Provider 或 Full Freeze 通过。
+
+<a id="source-bd3947cca735--第九十三阶段v8111-一致性与知情边界收尾"></a>
+## 第九十三阶段：V8.11.1 一致性与知情边界收尾
+
+- 按用户改进文档完成 P1/P2 与本版 P3 诊断项，详见 [实施记录](V8.11.md#source-60e632561bc2)。Checkpoint 稳定亲属不再含配偶；配偶/朋友仅凭 Runtime 证据授权，离婚及前任冲突撤权。Direct Observation 使用全部明确查询实体，无关观察拒绝。
+- `MemoryEngine.updateSummaryProjection()` 将编辑正文同步为 Owner-only 内部记忆，撤销旧 Owner 知情、重建 Segment/Consolidation/引用，清 RAM 召回；编辑和 UI 删除使用受影响文件日志事务，失败或中断可回滚。Legacy 摘要依 finalizationId/Episode 回溯映射，无法映射时保留文件并报告诊断。owner-status 区分来源，清除记忆派生记录、保留 CK3 死亡标记；2.6 标签/2.5 存储合同不迁移。
+- Self LOCATION/COURT_EMPLOYER/LIEGE/ALIVE 共用 Current Truth，可读名称与数字地点边界一致；本年且当前语义的显式查询保留当前 Intent，过去日期不升级为当前。未支持的 War Side 输出 `WAR_SKIPPED_NO_RUNTIME_ACTOR`，未扩展 Faction 实体。
+- GLM Stable Profile 与稳定亲属名称不再包含动态 fullName；当前全名在 Live State 刷新。既有 Anchor/Block ID、Dynamic Tail 和 Action/Provider 路由不变，升级后正文有一次预期变化，不承诺实测缓存比例恒定。
+- 新增两个专项、更新旧静态缓存断言和 GLM 前缀变更测试；完整发布回归 **305/305**、测试分类 **374**、历史归档 **68**，隔离 Electron 导航通过、Renderer 异常为 0。真实离婚/多人观察、摘要编辑后的新会话、GLM cached tokens 与长时 Soak 仍待人工 Gate。
+
+<a id="source-bd3947cca735--第九十四阶段v812-第一部分安全收口与-temporal-archive-底座"></a>
+## 第九十四阶段：V8.12 第一部分安全收口与 Temporal Archive 底座
+
+- 基于 `702fb7e`，按用户第一部分方案完成；详见 [实施报告与实机 Gate](V8.12.md#source-5c6f1d29141b)。Legacy Summary 增加 Owner × Counterpart 精确过滤，旧 Segment 也隔离；Episode 清理陈旧 Memory 引用及空知情无保留需求的 Segment，保留 Recovery/Audit。
+- 本轮直接观察优先于旧 Checkpoint，生产 PRESENCE 与 LOCATION 合并冲突组。Self 配偶、朋友、领主、宫廷、当前头衔只读取 Runtime；非社会 Checkpoint 事实保留来源日期。知识策略版本更新，Prompt Anchor/块顺序及 GLM Cache v2 生命周期不改。
+- 新增 HistoricalQueryProjection、HistoricalCheckpointIndex、TemporalArchiveStore、诊断与 Worker，独立存入 `worldline-v8.12/history/<campaign>/<branch>`；Source/Parser/Freshness/既有 Branch 门禁齐全，同日内容冲突阻断，gzip/checksum/节点先于索引原子提交，损坏节点跳过。旧 checkpoint、Memory 和 Canon 不迁移删除，不伪造往年历史。
+- 世界书开发者诊断新增 Shadow 开关、手动归档和索引/节点检查。Enabled 默认 false、Shadow 固定 true、HistoricalPromptIntegration 固定 false；Archive 没有正式 Prompt 或 NPC 回答接入。
+- 新增两项发布组，完整回归 **307/307**、测试分类 **376**、历史归档 **68**；隔离 Electron 新面板/开关/IPC 与原导航通过，Renderer 异常 0。V8.8 百年旧档验收仅按用户文档回填并注明证据范围，见 [用户验收记录](V8.8.md#source-9ca28c865264)。
+- **暂停在第一部分实机 Gate，未记录 V8.12 PART 1 = PASS，未开始第二部分。** 等待真实 CK3 当前事实/Memory/Action/Canon、GLM 同 NPC 至少 10 轮前缀与缓存、Archive 分支与重启验证，以及用户明确确认继续。
+
+<a id="source-bd3947cca735--第九十五阶段多人终局摘要-provider-异常-p0-修复"></a>
+## 第九十五阶段：多人终局摘要 Provider 异常 P0 修复
+
+> 历史方案，已由第九十六阶段撤销转录降级；其原文保全不等于正常模型摘要。旧实现也会对缺失结构化 JSON 降级，下述当时的质量分流结论并不完整。
+
+- 实机日志确认三人会话（17 条消息）和双人会话（10 条消息）都在摘要请求阶段收到 `deepseek-v4-flash` 的 `402 Insufficient Balance`，未进入解析、投影或人物文件写入；参与者数量和连续终局队列不是本次根因。
+- `MemoryEngine.requestFinalSummary()` 对真正的请求异常增加来源忠实降级路径：按原始消息、真实 `messageIds` 和 participant presence 生成结构化 `summarySegments`，不让模型离线时丢失整场对话，也不凭空生成长期记忆；结果带 `providerFallback`，追踪记录保留原 Provider 错误。
+- 截断、结构化 JSON 缺失、来源 ID 错误和 Perspective Coverage 失败不走该降级提交，继续保留 recovery snapshot；分块恢复与半成品禁止提交的安全门禁保持不变。连续三人→两人终局已加入回归。
+- `test-p0-summary-provider-fallback.js`、`test-memory-regression.js` 夹具、摘要事故恢复与 `v7.9.3` Presence 回归通过；完整发布回归更新为 **308/308**、**377 个测试文件分类**。隔离 Electron 启动/导航冒烟通过，Player2 健康检查失败仍只属于未配置外部服务，不计作 Provider 成功。
+- 本次实机生成的两份 `failed_retryable` recovery 快照不在代码回归中直接改写；重启新版应用后会按既有恢复流程重试，若仍为 402 则自动提交上述来源忠实降级摘要。
+
+<a id="source-bd3947cca735--第九十六阶段摘要失败必须重新调用模型撤销原文转录降级"></a>
+## 第九十六阶段：摘要失败必须重新调用模型，撤销原文转录降级
+
+- 按用户最新明确要求，删除 `MemoryEngine` 的本地转录摘要路径：Provider/结构化输出最终失败只保留完整恢复快照，不提交摘要、重点记忆和 Episode。整场最多两次请求，截断/质量失败仍可有界分块；正常模型 Prompt、Source-ID 与在场权限校验不变。
+- 摘要页新增“重试失败摘要”和待恢复/余额不足状态。新 IPC `conversation:retryFailedSummaries` 使用当前 Summary Provider、用户摘要指令和 Token 上限，可在没有活动 CK3 对话时补生成，并允许人工重试已达自动上限的记录。仅摘要生成请求，无游戏 Effect；不改 Provider 配置。
+- 修复达到自动重试上限时 `rawMessages` 被错误清空；清空记忆后的恢复流程不再写回空壳快照；恢复批次检测 Memory generation，避免旧任务继续。跳过活动会话/终局、共享单航班、保留 finalizationId 防重复提交。快照人物、原日期、入离场记录通过真实 `GameData` 双向落盘路径恢复，不混入当前玩家。
+- 定向测试覆盖两人/三人请求异常零摘要写入、重启、人工越过重试上限、再次 402、临时失败后模型成功、并发去重，以及六个多人方向文件加两个双人方向记录和重点记忆。四人 malformed JSON 不再伪成功。
+- 历史已提交的转录记录保留，不删除或根据正文猜测覆盖手工编辑；旧补丁成功提交时删除了恢复快照，不能保证这些记录可原样重放。当前按钮仅处理仍有恢复快照的失败记录。
+- 本轮完整发布回归 **308/308**、测试文件分类 **377** 通过；隔离 Electron 摘要页按钮、恢复状态 DTO、空队列 IPC 和原导航通过，Renderer 异常 0。本轮未调用真实收费 Provider，也未改写运行时用户摘要；真实模型压缩质量、账户恢复后的补生成和 CK3 实机仍待用户验证。
+
+<a id="source-bd3947cca735--第九十七阶段世界书历史候选去重与玩家完整姓名召回修复"></a>
+## 第九十七阶段：世界书历史候选去重与玩家完整姓名召回修复
+
+- 用户截图中的岳飞、韩世忠误判来自两个模组的同名历史定义：每个名字在当前存档只有一个已绑定 Runtime，旧解析器却按 Definition 数量判定重名。`historical-identity-resolver.js` 改为先区分已实例化定义，再验证双向一对一绑定；候选按 Runtime ID 去重。不同 Runtime 的真重名仍为歧义，多个定义指向同一 Runtime 仍按绑定冲突拒绝；来源不完整和截断继续 fail-closed。
+- `shared-query-analyzer.js` 的 `candidateTotal` 表示已观测的唯一 Runtime 人数，另用 `definitionCandidateTotal` 保留未截断的历史定义总数；`candidateSetComplete` 不变。已解析身份使用选中的绑定定义计算世界线差异，不再因存在未实例化定义而丢掉差异信息。
+- 上官德俊属于无历史定义的游戏角色。`main.js` 修复错误读取 GameData 类的姓名源，改接每次实际解析的 GameData 实例；`runtime-name-index.js` 支持经可靠本地化核实的存档原始姓名键与 Live 中文姓名匹配，同日期、同玩家及冲突门禁不变，`worldline-service.js` 在本地化完成后刷新索引。
+- `game-state-adapter.js` 从存档增加只读 `dynastyHouses` 姓名字段；没有 Live 对话时也可由明确的家族中文名与可靠本地化的 given name 验证查询中的完整中文姓名。多个本地化键对应同一中文名时，按当前存档实际人物取并集，逐个核实键值；不把未实例化的姓名键误作第二个人，也不将冲突翻译强行采用。删除解析流程自身产生的 UNKNOWN/短名重复诊断。
+- 针对当前实际 `1157.1.1` 存档和已启用模组进行了只读解析：岳飞 **#50534**、韩世忠 **#48493**、上官德俊 **#81358** 均为 `RESOLVED`，候选人数各 **1**；前两人的历史定义数各 **2**。没有修改 CK3 存档、用户设置、摘要或检查点，也未调用收费模型。
+- 专项回归新增未实例化定义、同 Runtime 冲突去重、诊断显示人数、选中定义差异、家族完整姓名、本地化冲突/缺失和真实重名保护；长姓名与 Native 安全回归通过。完整发布回归 **308/308**、测试文件分类 **377** 通过；隔离 Electron 启动/导航/Archive 开关检查通过，Renderer 异常 **0**。此证据不是 CK3/Provider 对话质量或 V8.12 第一部分完整实机验收。
+- 使用新版需完全退出并重新启动 VOTC，在世界书中重建当前存档检查点，等待本地化/历史索引完成后重试。旧检查点没有 `dynastyHouses`，兼容读取但不能凭空恢复缺失的家族姓名。Prompt 块 ID、稳定前缀、GLM Cache v2 和动态尾部位置均未更改；历史归档开关与 Memory 2.5 存储合同保持不变。
+
+<a id="source-bd3947cca735--第九十八阶段v812-第一部分首项实机-gate-验收"></a>
+## 第九十八阶段：V8.12 第一部分首项实机 Gate 验收
+
+- 用户实机复测当前世界线检查点：`#50534`、日期 `1157.1.1`，界面可读出姓名、子女、地点、生死及对应来源；查询“岳飞在哪里？”显示已确认历史人物、唯一候选 1、存档事实命中。该证据确认当前世界线事实与历史人物唯一解析的首项 Gate。
+- 该条记录的是首项刚通过时的中间状态；随后用户确认其余四项实机 Gate 通过，已由第九十九阶段更新为 `V8.12 PART 1 = PASS`。
+
+<a id="source-bd3947cca735--第九十九阶段v812-第一部分实机验收通过"></a>
+## 第九十九阶段：V8.12 第一部分实机验收通过
+
+- 用户确认第一部分剩余实机项目全部通过：多人摘要删除/编辑及配对保留、Action/Canon 无回归、GLM 同 NPC 十轮的 Stable Prefix/`cached_tokens`/`firstChangedBlock` 与 Shadow 稳定前缀、Temporal Archive 的归档/index、Campaign/Branch、年度分离及重启读取。
+- 五项 Gate 已全部在 [V8.12 第一部分实施报告](V8.12.md#source-5c6f1d29141b) 标记为 `[x]`，状态更新为 **`V8.12 PART 1 = PASS`**。第二部分尚未开始，等待用户明确继续指令。
+
+<a id="source-bd3947cca735--第一百阶段v812-第二部分历史检索与时间线施工完成"></a>
+## 第一百阶段：V8.12 第二部分历史检索与时间线施工完成
+
+- 在第一部分已签发 `V8.12 PART 1 = PASS` 的前提下，实现独立 Historical Retriever。Query Planner 支持 AS_OF、RANGE、相对年份、年份比较和开放起点；只在历史查询中读取 Temporal Archive，普通 Current Query 不扫描历史。
+- 新增人物历史状态/变化、头衔持有与 Realm Root 变化、战争活跃/出现/消失/换边时间线。WarActor 正式支持 Character、Title、Faction 与 Unknown；无法解析的一方保留 opaque 证据并报告 `WAR_ACTOR_UNRESOLVED`，战争消失且无明确结果时不推断胜负。
+- 新增独立 Historical Scope；过去私密地点只允许历史血亲、历史同宫廷或个人记忆等可验证证据，当前好友/配偶不能反推过去知情权。Historical Canon 强制日期范围并走 Branch、ACL、Temporal 与冲突门禁，RANGE 中每条记录按自身日期选择历史投影；Cache Key 包含归档 revision、时间范围、Responder、Policy 与 Canon revision。
+- 历史结果只写入 `worldline-turn-recall` Dynamic Tail；Stable Prefix、Cache Anchor、GLOBAL_STATIC、Conversation/Responder Frozen 与 Current World 路径不变。世界书开发者诊断新增检索开关、Prompt 注入开关、范围/节点/裁剪/Scope/冲突/Reason Code 及 Stable/Dynamic 指纹；Retrieval 默认 true、Diagnostics 默认 true、Prompt Injection 默认 false。
+- 新增 `test-v8.12-historical-retrieval.js` 并登记发布清单，覆盖 AS_OF/RANGE、字段级时间线、WarActor、Scope、分支隔离、Historical Canon、当前查询隔离和 Stable Prefix。补测发现并修复字段筛选晚于 Top-K 导致参战变化被提前裁剪的问题。完整发布回归 **309/309**，测试分类 **378**、历史归档 **68**；主进程/Renderer 语法和隔离 Electron 启动/导航通过。
+- 详细实现与两阶段实机清单见 [第二部分实施报告](V8.12.md#source-3574f173458a)。当前强制暂停：先在 Prompt Injection 关闭时验证诊断，再手动开启验证真实 NPC 回答、GLM 缓存、Current World 回归、分支和重启。**尚未记录 `V8.12 PART 2 = PASS`，不得进入第三部分。**
+
+<a id="source-bd3947cca735--第一百零一阶段v812-第二部分-review-fix-收口"></a>
+## 第一百零一阶段：V8.12 第二部分 Review Fix 收口
+
+- 根据第二部分复核文档修复 Historical Archive 索引膨胀：新 `index.json` 节点只保存 Character/Title/War 计数；旧数组索引兼容读取，并在幂等归档时只原子迁移 `index.json`，不删除 gzip、CK3 存档、Memory 或 Canon。
+- 收紧历史知情边界：普通叙事 Memory 不再解锁历史私有 LOCATION/COURT_EMPLOYER；结构化目标实体字段、日期和地点直接观察分别经过显式 ACL。无实体 `RANGE` 进入玩家/领地/主要头衔/战争/高优先级 Canon 的有界检索；唯一解析的多人物保留多实体，Resolver 真歧义继续阻断。
+- 修复 Primary Title 不可靠回退、Character WarActor 的 Realm 桥接、历史 Character/Title/Liege/Court/Spouse 可读名称和多字段筛选；FRIEND/RIVAL 因 Save Parser 无可靠来源明确报告未启用。索引、Checkpoint 与字段错误码分离，cache key 纳入 Realm、策略和索引布局版本。
+- 新增/扩展 Temporal Archive 与 Historical Retrieval 专项断言：紧凑索引、旧索引迁移、120 节点大小边界、结构化 Memory、直接观察、无实体 RANGE、多实体、Realm WarActor、可读名称、字段累积、候选头衔回退和未启用字段诊断。代码与自动化结果仍不替代真实 CK3/GLM Gate；`V8.12 PART 2` 继续保持未通过状态。
+
+<a id="source-bd3947cca735--第一百零二阶段part-3-前置上下文与摘要可靠性工程"></a>
+## 第一百零二阶段：Part 3 前置上下文与摘要可靠性工程
+
+- `providers/request-budget.js` 为 Chat、Summary 分别解析 Provider/模型上下文与输出上限，元数据缺失时保守回退；请求在 Provider 发送前按估算输入、输出预留、消息开销和安全边际校验。GLM Prompt Profile 取消固定 `historyWindow: 12`，沿既有 Cache v2 布局追加活动历史，压力达有效输入预算 75% 时才压缩；最近 6 条原文保留。
+- `memory-system/summary-budget-planner.js` 预估最终摘要输出并决定整场或分块；已配置的最终摘要最大输出 Token 保持单次请求上限，不再是整场摘要总量上限。分块优先按 Presence 边界，再按 Token；每块只带相关人物与窗口，保持原消息 ID。每块完成后存 recovery checkpoint，恢复时校验会话、来源、Provider 与摘要指令指纹，已完成块不重复请求；合并后做全局质量检查，覆盖缺口针对性修补。原文只存在恢复快照，不能作为成功摘要提交。
+- 多人滚动摘要以 `knownBy` 的 Presence Segment 投影，离场者不可读缺席期内容；成功压缩递增 cache epoch。Chat 流/非流统一识别 `finish_reason=length`，续写完成前不得提交可见回复、Action 或 Memory 历史；续写仍不完整时删除部分回复并显示错误。Provider 诊断保留预算、完成原因及缓存/Segment 计数，不写完整对话文本。
+- 新增发布组 `v8.12-context-summary-reliability`，覆盖路由独立预算、低输出预分块、分块 checkpoint/续跑、Presence 隔离、截断续写与 Action 门禁；同步更新旧固定窗口、旧无条件 402 重试的断言。Memory Engine 仍显示 2.6、存储维持 2.5；Recent2/Temporal Extra3/CK3 官方追忆不在本阶段。自动化通过不代表真实 GLM/CK3/打包窗口 Gate，通过前不签发 `VOCT CONTEXT / SUMMARY RELIABILITY 3.0 = PASS`。
+- 本地专项与完整发布回归通过：**310/310 发布组、379 个已分类测试文件、68 个历史归档检查**；修改的主进程模块语法检查与 `git diff --check` 通过。未执行真实 CK3、收费 Provider、打包窗口 30–50 轮/多人 50+ 轮/100+ 消息摘要与 Soak，故这不是实机验收结论。
+
+<a id="source-bd3947cca735--第一百零三阶段v812-part-3-memory-engine-30-施工"></a>
+## 第一百零三阶段：V8.12 Part 3 Memory Engine 3.0 施工
+
+- 用户确认前置验收与 Part 2 验收通过，明确要求摘要分块采用 64 块统一合同；据此开始 Part 3。前述阶段当时的“待验收”记载保留为历史时点，不反推自动化等于用户实机证据。
+- Memory Engine 标识更新为 3.0，保留 2.5 摘要存储 schema/目录；直接关系最近两篇和场外快照在会话中冻结，Temporal/Topic/Important 共用最多三篇动态 Extra。日期索引按 owner、counterpart 与游戏时间；当前游戏日期缺失不借用电脑时间。GLM Cache v2 冻结块与动态尾部分界保持，旧 `past_summaries` 在 3.0 下跳过。
+- CK3 官方回忆从全局数据库和人物 `alive_data.memories` 反向关联，只读、Owner-only、预算上限 1000 Token；未解析类型 fail-closed。Shadow 默认开、Prompt 注入默认关，世界书开发者诊断可检查；当前 CK3 事实仍为优先级最高的状态来源。
+- Part 2 最终预检补全 Historical Retrieval Worker（正式对话与异步诊断）、无人物 RANGE 战争候选、历史 LOCATION ACL、双领国战争排序与超长 RANGE 有界采样。历史事实继续在 Worldline Dynamic Tail，不移入稳定前缀。
+- 新增 Part 3 专项并更新版本/路由/UI 回归；最终完整发布门禁 **311/311**（380 文件分类，68 历史归档检查）、40 个修改 JS 的语法检查、`git diff --check` 与隔离打包 Electron 启动/开发者诊断控件冒烟通过。官方回忆 CK3 UI 对照、正式注入后的多人/长对话、真实 GLM 缓存、64 块极限与 Soak 均未签发，`V8.12 PART 3 = PENDING MANUAL GATES`。详见 [Part 3 施工记录](V8.12.md#source-1605e6d78e72)。
+
+<a id="source-bd3947cca735--第一百零四阶段part-3-存档重建-p0-修复"></a>
+## 第一百零四阶段：Part 3 存档重建 P0 修复
+
+- 官方回忆 `variables.data` 中变量块前有空白时，解析器以旧游标调用 `readBlock`，触发 `jomini_block_expected`，使世界书检查点重建失败。改为使用 `readToken` 找到的实际左花括号位置，并补充连续变量项回归。
+- 当前配置的 `autosave.ck3` 只读解析与隔离打包 Electron 重建通过：存档日期 `1162.1.1`、99,684 人物、76,935 官方回忆，检查点 `ACTIVE`、`lastError=null`、Renderer 异常 0。该结果不代表用户实际配置窗口已重启或 CK3 UI/Provider Gate 已通过；截图中的实时游戏日期 `1162.5.19` 比存档新，须等待 CK3 更新存档才能读取较新的事实。详见 [Part 3 施工记录](V8.12.md#source-1605e6d78e72)。
+
+<a id="source-bd3947cca735--第一百零五阶段官方追忆预算与原生复制导入评估"></a>
+## 第一百零五阶段：官方追忆预算与原生复制导入评估
+
+本阶段是中间方案，已由第一百零六阶段的原生日志共享预算方案替代。
+
+- 每名回应者的 CK3 官方追忆额度由默认 800 / 硬上限 1000 Token 提升为 1200 / 1200 Token，保留既有 Prompt 块 ID、回应者冻结与稳定前缀位置；额度独立于 Memory Engine 的 8% 主召回预算。注入开关仍默认关闭。
+- CK3 回忆窗口的“一键复制”可作为最终本地化文本来源。文本本身没有稳定角色 ID，故可靠流程是玩家首次复制后在 VOTC 明确绑定战役与 NPC ID，之后每轮回应自动按 `npc.id` 读取该 NPC 已导入的记录。剪贴板的自动读取、持久化导入及角色绑定仍属设计评估，本阶段未实现。
+- 本阶段未运行自动化测试或打包窗口验证。
+
+<a id="source-bd3947cca735--第一百零六阶段原生官方追忆摘要与缓存优先的动态预算"></a>
+## 第一百零六阶段：原生官方追忆摘要与缓存优先的动态预算
+
+- 新对话从现有 CK3 `log_memories` 接收原生本地化追忆（含模组描述），按 NPC ID 在原人物目录覆盖 `官方追忆摘要.json`。保留事件日期，无生成时间标签；通过现有摘要页查看、编辑、删除，下次新对话更新。同场捕获冻结，战役/会话/Owner 校验避免读取旧场追忆；原 Save 路线保留只读诊断。
+- Memory Engine 3.0 按首次生成时的在场人数冻结预算：2 人 10%/3600，3 人 12.5%/4500，4 人以上 15%/5400，取百分比与 Token 上限较小值。每名回应者各自使用预算；每条直接关系 Recent2 与本人的一篇官方追忆共享冻结通道，避免多人投影遗漏。官方追忆不再使用独立额度，完整原文落盘，注入副本保留完整事件。
+- 场外人物与时间/话题/重要旧摘要统一 Extra≤3，只有成功回复且实际注入才去重；保留在该 NPC 私有历史的原回复位置，后续不重复新注入，压缩/删除历史后可再召回。原有 Prompt 稳定块 ID/动态尾部分界保留，历史注释不成为终局摘要的实际对话来源。修改路径集中在 `conversation`、`game-data`、`memory-system`、`prompts`、`summaries` 与摘要页 Renderer。
+- 最终发布回归 **311/311**、380 测试文件分类通过；20 个变更 JS 语法及差异空白检查通过。隔离 Electron 启动/导航/控件冒烟通过，Renderer 异常 0。检查结果及剩余实机 Gate 见 [Part 3 施工记录](V8.12.md#source-1605e6d78e72)；原生导出逐条覆盖和真实 GLM 缓存仍需实机确认。
+
+<a id="source-bd3947cca735--第一百零七阶段官方追忆事件经过修复"></a>
+## 第一百零七阶段：官方追忆事件经过修复
+
+- 用户实机发现摘要只留人物姓名。真实 CK3 日志核对确认原生第三人称描述包含事件动作；通用 `removeTooltip` 错删控制码及其所在词的文本。仅对 `memory` 描述字段清理 CK3 链接控制标记，保留完整句子；其他字段不改。
+- 专项回归加入带两种 `L` 标记、双人物链接和动作的日志形态；本地只读检查实际 `debug.log` 同一事件经清理仍能得到完整“成了朋友”句子。旧文件需要下一场新对话覆盖，游戏复制按钮第一人称与日志第三人称措辞允许不同。最终发布门禁结果和人工 Gate 见 [Part 3 施工记录](V8.12.md#source-1605e6d78e72)。
+
+<a id="source-bd3947cca735--第一百零八阶段四人及多轮摘要截断与恢复过慢修复"></a>
+## 第一百零八阶段：四人及多轮摘要截断与恢复过慢修复
+
+- 只读核对本机恢复快照：当时 11 场仍未提交，其中 10 场错误为 `truncated_final_summary_response`；四人会话也在其中。Provider 诊断记录显示多次 `completion_tokens` 恰好等于请求 `max_tokens`（例如 681/681），不是摘要持久化失败，而是 `summary-budget-planner` 按较低的叙事 Token 估值设置了输出硬上限，结构化 JSON 连同细节被提前截断。
+- 终局结构化摘要优先预留当前 Summary Provider 与摘要设置允许的完整 `maxOutputTokens`；只有输入与完整输出无法同时装入上下文时，才缩到上下文可容纳的最大输出预留，并依所需输出分块。估算输出不再直接截短模型可用输出。
+- 递归分块每完成一个叶块即保存恢复快照，并记录递归拆分决策；恢复时已完成的子块和拆分树均复用，不重复请求。手动恢复按最近更新时间优先，最多两场并行；自动启动恢复保持串行，Memory generation 取消与稳定提交语义不变。
+- 摘要专项覆盖配置输出上限传递、四人会话、64 轮双人会话、递归失败后恢复复用子块，以及人工恢复的并行上限和清空取消。`test-v8.12-context-summary-reliability.js`、`test-p0-summary-provider-fallback.js` 与完整发布门禁通过：**311/311 发布组、380 个测试文件分类、68 个历史归档检查**。仅为测试夹具；未调用真实收费 Provider 或改写这 11 个运行时恢复快照，真实模型输出质量与本机快照补生成仍需用户重启应用后实测。
+
+<a id="source-bd3947cca735--第一百零九阶段明确时间召回精度与摘要覆盖率修补"></a>
+## 第一百零九阶段：明确时间召回精度与摘要覆盖率修补
+
+- “五年前”原本虽能解析目标日期，但动态 Extra 后续仍会用 Topic/Important 摘要填满，可能选中两年前的内容；相对年份的扩展窗也会碰到相邻整年。明确时间查询现只使用命中时间窗的直接关系或被提及场外人物的 Owner 目录摘要，收紧相对年份扩展，并在用户消息后的既有动态块提示模型不能把冻结的近年摘要误当目标时间；无新命中时明确保留未知。Prompt 块 ID、冻结位置与预算合同不变。时间索引按摘要归档日期，不把摘要中提到的更早事件误当该摘要日期；这一语义限制仍需实机对照。
+- 同一游戏日期下若人物目录列表更新，时间索引现在核对列表来源，不沿用旧列表的索引。回归夹具覆盖两年前高重要性摘要不得补位、四年前不得替代五年前、同日目录更新可检索新摘要。
+- 复查终局摘要链路发现分块覆盖修补的多个块共用未定义检查点键，且漏掉一两条至少 8 字符的对话消息时旧阈值不会修补；现每个修补块独立保存、可续跑，并对任一符合此条件的源消息缺口尝试修补。修补本身仍漏引时剔除该失败块及子块、保留已成功块，恢复优先继续分块，避免反复复用同一份残缺输出或重新请求整场；仍失败则保持 recovery snapshot，不提交残缺摘要。专项测试覆盖多块、小缺口和失败块复用边界；真实四人/长轮次 Provider 输出和既有失败快照仍待实机重试验收。
+- `test-v8.12-memory-engine-3.0.js`、`test-v8.12-context-summary-reliability.js`、`test-p0-summary-provider-fallback.js`、`test-memory-engine-2.5-cache-preservation.js` 专项及完整发布门禁 **311/311** 通过；这些是确定性夹具，不等同于 CK3/Provider 实机质量验收。
+
+<a id="source-bd3947cca735--第一百一十阶段使用-ck3-游戏日期进行年份召回"></a>
+## 第一百一十阶段：使用 CK3 游戏日期进行年份召回
+
+- 核对链路：对话的当前日期取自 `GameData.date`，终局摘要把同一游戏日期作为 `summary.date` 落盘；最近两篇的模型正文从未作为“今天”的来源。实际偏差是“五年前”仍按 `5×365 天 ± 半年` 估算，可能跨进 1146/1148 年，且缺少 `totalDays` 时即使游戏日期存在也放弃时间检索。
+- 现在将“几年前”解释为当前游戏历年份减去指定年数，直接匹配该目标年的 1 月 1 日至 12 月 31 日；有 `totalDays` 时把两端映射到同一数轴，没有时使用游戏日期序号。日期索引优先使用摘要落盘时保存的 CK3 对话日期，只有旧摘要缺日期才回退到可比的 `totalDays`。动态尾部同时标明当前游戏日期和目标年份，不移动最近两篇冻结块，不改变 Prompt 块 ID、预算或 2.5 存储合同。
+- 确定性回归覆盖游戏日期单独可检索、原 `totalDays` 与游戏日期矛盾时以日期为准、年份两端排除、闰日和游戏日期缺失时失败关闭。摘要中引用的往年事件仍不等于该篇摘要的对话日期；实机 CK3/Provider 对话效果仍需验收。
+- `test-v8.12-memory-engine-3.0.js` 专项、`node scripts/test-release.js` 完整门禁 **311/311**、相关 JS 语法及 `git diff --check` 通过；未读取或改写玩家运行时摘要、未调用收费 Provider。
+
+<a id="source-bd3947cca735--第一百一十一阶段part-3-用户实机验收与-v8121-实施授权2026-09-24"></a>
+## 第一百一十一阶段：Part 3 用户实机验收与 V8.12.1 实施授权（2026-09-24）
+
+- 用户明确确认 Part 3 实机 Gates 验收通过，记录为 **`V8.12 PART 3 = PASS`（用户报告）**。未回填逐项指标或原始实测证据；前述阶段的“待验收”、自动化计数、隔离 Electron 和只读检查均保留历史时点及原证据类别。当前结论见 [Part 3 施工与验收记录](V8.12.md#source-1605e6d78e72)。
+- 用户同时授权 V8.12.1 双时间记忆实施，状态为**实施中，新测试待执行**。预期在 `schemaVersion: 2` 下增量加入摘要顶层 `temporalRefs`，经 Owner 投影映射到 `memory.provenance.temporalRefs`，区分对话记录日期和事件日期；当前游戏日期仍为查询锚点，Campaign 隔离、Extra≤3、既有预算和稳定前缀保持不变。
+- 新建 [V8.12.1 实施报告骨架](V8.12.md#source-af916fa119a6)，实际代码路径、验证命令结果和新版本人工 Gate 待实施后单独回填。本次仅更新文档，不将并行代码工作记作已验证结果；**Part 3 验收通过不等于 V8.12.1 验收通过，也不代表全局 V8 Full Freeze**。
+
+<a id="source-bd3947cca735--第一百一十二阶段v8121-双时间记忆施工与自动验证"></a>
+## 第一百一十二阶段：V8.12.1 双时间记忆施工与自动验证
+
+- 从终局原始消息与 CK3 当场日期确定性提取时间引用，经 Segment 来源 ID 和各 Owner 在场/知情投影写入 schemaVersion 2 摘要顶层；保留原 `summary.date` 作为对话时间。读盘映射到 provenance，建立 Event/Conversation 双索引，并以当前游戏日期解析查询与多轮时间焦点。时间解析异常不阻断合格摘要提交，旧摘要无引用仍可读取。
+- 精确时间检索先按目标窗口过滤，再经 Owner 关系路由和主题排序进入动态 Extra≤3；无命中不拿其他年份补位，成功回复后同一 NPC 不重复注入。Campaign/场景切换清理时间焦点。官方追忆预算裁剪保留完整事件及事件内空行，编辑器提示下场可能从 CK3 覆盖；Provider 报告的 cachedTokens 可进入 Memory Trace。
+- `test-v8.12.1-temporal-anchors.js`、`test-v8.12.1-dual-temporal-memory.js`、`test-v8.12.1-part3-closure.js` 及旧 Memory 回归通过；完整 `node scripts/test-release.js` 为 **314/314**，383 个测试文件分类、68 个历史检查归档。JS 语法及 `git diff --check` 通过。隔离 Electron 冒烟因本机 GPU 子进程 `-1073741515` 而未完成，真实 CK3/Provider、GLM 缓存数据及长时间运行待验收。详见 [V8.12.1 实施记录](V8.12.md#source-af916fa119a6)。
+
+<a id="source-bd3947cca735--第一百一十三阶段v81211-审查修复与本地门禁"></a>
+## 第一百一十三阶段：V8.12.1.1 审查修复与本地门禁
+
+- 按评审逐项修复 3 项 P1、3 项 P2：Campaign 空标记不再跨战役召回；编辑摘要重绑时间来源片段；私有持久 Memory 的事件时间证据进入所属 Owner 投影；焦点跨游戏日期推进继续使用绝对时间窗口，但跨对话/真实场景变化失效；中文“说了/讲了/问了/告知/登基”等进入正确时间轴。Windows 主题测试统一读取文本换行，避免 CRLF 假失败。未改 Recent2、官方追忆共享预算、Extra≤3、Prompt block ID 或 GLM Stable Prefix。
+- 新增发布清单专项 `test-v8.12.1.1-review-fixes.js`，覆盖 Campaign 四态、Owner 私有引用、无绑定证据拒绝、22 条问句；原有双时间与 Memory 3.0 夹具按严格战役合同更新。本地 `node scripts/test-release.js` **315/315**，384 个测试文件分类、68 个历史检查归档。代码结果详见 [V8.12.1 实施记录](V8.12.md#source-af916fa119a6--v81211-审查修复2026-09-24)。远端 Windows CI、真实 CK3/Provider 与打包 Electron 未据此宣称通过；V8.12.1 实机 Gate 仍待验收。
+
+<a id="source-bd3947cca735--第一百一十四阶段v81212-campaign-元数据与时间证据收口"></a>
+## 第一百一十四阶段：V8.12.1.2 Campaign 元数据与时间证据收口
+
+- 修复 Mention Profile 构建先读跨 Campaign 摘要的问题：在提取人物资料之前复用严格的 `memoryMatchesCampaign`，缓存键增加 Campaign，切换时清除旧提及状态和路由缓存；同 Campaign 正常绑定，Legacy 空标记不成为当前战役通配。Event-Time 仅接受本篇投影 `perspectiveMemoryIds` 中的持久 Memory ID；读盘视图清除幽灵 ID，但不改写玩家原始摘要文件，Segment 证据独立保留。
+- 新增并登记 `test-v8.12.1.2-review-closure.js`，旧 8.12.1.1 私有记忆夹具补全 Perspective ID；专项与本地完整 `node scripts/test-release.js` **316/316 发布组通过**，385 个测试文件分类、68 个历史检查归档。详细路径和证据见 [V8.12.1 实施记录](V8.12.md#source-af916fa119a6--v81212-campaign-元数据与时间证据收口2026-09-24)。远端 CI、真实 CK3/Provider、打包 Electron 及长时运行仍待验收；不签发 V8.12.1 或全局 V8 Full Freeze。
+
+<a id="source-bd3947cca735--第一百一十五阶段v813-会话冻结前缀与动态尾部"></a>
+## 第一百一十五阶段：V8.13 会话冻结前缀与动态尾部
+
+- 目标：不让对话轮次中的金币、在场关系、世界线查询和新召回打断稳定 Prompt 前缀。所有 Chat Provider 统一 `v813` 布局；缓存锚点升级为 `VOTC_CACHE_ANCHOR_v8.13`。静态规则及回应者本场冻结资料排在前面；角色实时资料、关系、历史消息、当前用户消息、已确认动作、被提及场外人物摘要和时间检索结果只排在后面。Prompt Block ID 尽量沿用既有标识，新增 `cache-anchor-v8.13`、`action-confirmed-context`、`worldline-historical-recall`；既有 GLM-only 布局供旧配置测试保留。
+- 边界按**开场已选名单**，不是开场在场名单：选中的候场 NPC 也在初始化时预取各自的主观世界线快照；未选角色不可能在该场作为 NPC 中途加入，不设计此路径。候场者预取时不授权现场直接观察；入场/离场和随后真实 CK3 状态在动态区更新。每名 NPC 的冻结摘要与世界线独立，不把他人的私人知识复制给自己。显式 AS_OF/RANGE 查询仍可在单轮动态区召回，后续不把该结果改写进本场冻结前缀。
+- 影响路径：`conversation/conversation.js`、`prompts/prompt-builder.js`、`prompts/provider-prompt-adapter.js`、`config/settings-repository.js`、`analytics/provider-diagnostics.js`、`worldline/subjective-prompt-context.js`；专项 `scripts/test-v8.13-frozen-worldline-prefix.js` 已登记于发布清单。人物摘要存储、3.0 预算、CK3 只读事实和动作 CONFIRMED 门禁不变。缓存命中率统计仍只是估算；真实 CK3、Provider、打包 Electron 和长时 Gate 待实测。
+- 验证：专项覆盖 DeepSeek、GLM、OpenAI-compatible、OpenRouter、Gemini 的前缀一致性、候场已选角色预取、角色隔离、确认动作与历史查询只落动态区；更新旧 V8.6 静态测试对双入口互斥的断言。`node scripts/test-release.js` **317/317 发布组通过**，386 个测试文件分类、68 个历史检查归档；相关 `node --check` 与 `git diff --check` 通过。隔离打包 Electron 冒烟已尝试，DevTools 启动后本机 GPU 子进程反复退出 `-1073741515`，`Runtime.enable` 超时；未取得渲染器或 CK3/Provider 的 V8.13 实机证据，不宣称缓存命中率提升已经验收。
+
+<a id="source-bd3947cca735--第一百一十六阶段v8131-frozen-worldline-coverage"></a>
+## 第一百一十六阶段：V8.13.1 Frozen Worldline Coverage
+
+- 在 V8.13 的 `CONVERSATION_BASELINE` 开场预取中，按回应者自身、玩家、已选 NPC 及少量强关联角色构造有界工作集，并主动纳入当前战争、相关头衔和近期变化候选；经原有 Knowledge ACL、冲突裁决后，先为战争/位置/状态/身份/头衔领地/近期事件/补充知识争取最低覆盖，再以优先级填充剩余 16 个事实槽和既有 **900 Token** 预算。普通 Worldline 查询排序和主观知情规则不变；候场 NPC 仍无现场直接观察。
+- 最终真正进入开场 Prompt 的 Fact ID、人物×字段、头衔及截断状态组成进程内 Coverage Manifest，不入 Prompt、不计 Token。CURRENT/UNSPECIFIED 查询先按 Query Plan 检查覆盖；命中不检索，缺口走同一 responder-scoped Worldline ACL 管线，仅把未在冻结 Fact ID 中出现的事实放入 `worldline-coverage-patch` 动态块，补丁上限 **300 Token**。RECENT 走单轮动态召回；AS_OF/RANGE 保持独立历史召回，不把 Query 结果晋升前缀。缓存按回应者、Checkpoint、Intent、实体与事件类型复用；确认动作、游戏资料或存档边界变化使补丁缓存失效，冻结前缀不改。
+- 影响路径：`worldline/frozen-coverage-manifest.js`、`subjective-world-builder.js`、`subjective-prompt-context.js`、`worldline-service.js`、`conversation/conversation.js`、`prompts/prompt-builder.js` 及 `analytics/usage-analytics.js`。新指标只记录覆盖/补丁计数、Token 和 ACL 拒绝数量，不记录事实正文。新增 `scripts/test-v8.13.1-worldline-coverage.js`，并扩充 V8.13 全 Provider 前缀测试；验证涵盖真实服务空查询战争、位置 ACL、补丁 Fact ID 去重、同实体缓存、确认动作和 Checkpoint 失效及历史分流。真实 CK3/Provider、缓存命中率、Wrong-Unknown 与打包 Electron 门禁仍待实测。
+- 验证：专项、相邻世界线/历史回归与 `node scripts/test-release.js` **318/318 发布组通过**（387 个测试文件分类、68 个历史检查归档）；变更 JS 语法及 `git diff --check` 通过。上述仅为代码与夹具验证，不替代真实 CK3、Provider、缓存遥测及打包窗口验收。
+
+<a id="source-bd3947cca735--第一百一十七阶段v8132-temporal-recall--worldline-coverage-closure"></a>
+## 第一百一十七阶段：V8.13.2 Temporal Recall & Worldline Coverage Closure
+
+- Legacy 摘要只在相同 `finalizationId`、Owner/Counterpart 均属于 Episode 参与者、且所有匹配 Episode 都指向同一个非空 Campaign Token 时迁移绑定；写入 `campaignBinding.status=bound/source=migration`。缺编号、缺证据、Campaign 冲突均保留 `campaignToken=null` 并标记 `unresolved`，已知 Campaign 下继续 fail-closed。新摘要照常记录 `native` 绑定；Token 不可用时显式记录 `CAMPAIGN_TOKEN_UNAVAILABLE`，不恢复 null wildcard。迁移通过摘要修改 journal 落盘且幂等。
+- 时间轴新增 `MEMORY_RECALL`，覆盖“记得/记不记得/回忆/想起/印象”等泛化记忆表达；有明确事件 Cue 的战争仍路由 EVENT，有明确对话 Cue 的“我们聊过”仍路由 CONVERSATION。双轴在同一目标窗口竞争，不使用固定轴加权；当目标年份存在当前 Direct Counterpart 的对话摘要时优先保留至少一个。明确时间 miss 仍禁止其他年份 Topic/Important 补位。每轮诊断新增匹配时间表达、Owner、Direct Counterpart 与选中摘要 ID，并带上 Campaign 过滤、双轴候选/命中、Seen/预算抑制计数；不写入完整玩家问题正文。
+- Frozen Coverage Manifest 的 Broad WAR/WORLD_EVENT 判定改为要求对应 Lane 完整，点名战争仍按实体作用域判断。`CHARACTER_OVERVIEW` 为每个对象闭合检查 IDENTITY、ALIVE、PRIMARY_TITLE；值为 `false` 或 `0` 的合法事实不再被丢弃。Coverage Patch Revision 现包含 GameData revision、确认动作指纹、Checkpoint、Campaign、Present Character IDs、Scene、Location 与 Location Controller；补丁文字指出可能含本轮直接观察，观察事实在 Prompt 中单独标记。
+- 保持 V8.13 Cache Anchor、冻结前缀、Prompt block IDs、Memory Engine 3.0 / 2.5 存储合同、Recent2、官方追忆、Extra≤3 及 Historical Recall 路由不变；动态时间召回和 Coverage Patch 仍处于冻结边界之后。主要改动位于 `memory-system/{temporal-anchor-extractor,fuzzy-temporal-resolver,summary-date-index,memory-engine,memory-store,memory-types,memory-trace}.js`、`game-data/game-data.js`、`worldline/{frozen-coverage-manifest,world-query-planner,worldline-service,subjective-world-builder,subjective-prompt-context,world-knowledge-classifier,world-ranker}.js`、`conversation/conversation.js` 和 `analytics/usage-analytics.js`。
+- 新增并登记 `test-v8.13.2-temporal-recall.js` 与 `test-v8.13.2-worldline-closure.js`；扩充 V8.13.1 覆盖及缓存失效测试。覆盖内容包括旧摘要安全迁移并进入完整 Extra 路径、未决摘要与跨 Campaign 隔离、泛化/明确时间轴区分、目标年直接对话保底、Broad Lane 截断、概况字段、false/0、Patch Header/直接观察，以及游戏版本/角色在场/场景/地点/Campaign/确认动作/Checkpoint 的缓存失效。
+- 验证：V8.13.2 两个专项、V8.13.1 Coverage/Cache Prefix、V8.12.1 Dual Temporal 与 V8.12.1.2 Closure 回归通过；完整 `node scripts/test-release.js` **320/320 发布组通过**（389 个测试文件分类、68 个历史检查归档）；变更 JS `node --check` 与 `git diff --check` 通过。该证据仅为确定性自动化与静态检查；目标战役旧摘要、跨存档隔离、Broad WAR 实机补丁、Presence/Scene 改变、真实 Provider 缓存均待 CK3/Provider Gate，不据此宣称实机或缓存收益通过。
+
+<a id="source-bd3947cca735--第一百一十八阶段v81321-acceptance-hotfix"></a>
+## 第一百一十八阶段：V8.13.2.1 Acceptance Hotfix
+
+- 多人 `MEMORY_RECALL` 的目标对话摘要保底现在优先匹配实际提问者 `querySpeakerId`；只有该 ID 缺失或无效时才回退到直接对话对象列表。诊断同时记录提问者 ID，避免其他 NPC 的摘要抢占玩家所问的“我们当年谈过什么”保底位。
+- 摘要管理器为未绑定的普通历史摘要提供逐篇“绑定当前战役”操作。用户二次确认后，主进程要求当前存档/战役已加载、Owner 与 Counterpart 均在当前角色集合中且唯一，并由摘要文件路径、记录位置与内容摘要构成的 ID 精确定位目标；随后再次校验人物配对、未绑定状态和目标新鲜度。只绑定用户选中的条目，已绑定及同文件未选记录保持不变；通过现有摘要变更 journal 落盘并清除相关缓存。官方追忆摘要不提供此操作。
+- 对话检索快照保留 Owner 文件夹的原始摘要集合供诊断；Memory Engine 仍在内部执行 Campaign 过滤，Mention Profile/候选发现继续使用既有 scoped 集合，因此诊断可计入被拒绝及 Legacy 摘要，但不会扩张跨 Campaign 召回。
+- 成功提交终局 Episode 后，为该 Episode 参与者清除进程内“已尝试旧摘要迁移”标记并失效摘要缓存；恢复证据晚到时，同一进程下次读取可重试迁移，不必重启应用。
+- Frozen Coverage Patch 保持原 **300 Token** 上限。新增 `patchCandidateCount`、`patchSelectedCount`、`patchTruncated` 诊断；若事实因条数/Token 预算被裁剪，动态补丁会声明结果仅为部分获准事实、不代表完整列表；没有事实能放入预算时也会说明不能据此推断事实不存在。没有改动 V8.13 Cache Anchor、冻结块顺序、Memory Engine 3.0/2.5 存储、Recent2、Extra≤3、官方追忆或时间模型。
+- 变更路径：`memory-system/{summary-date-index,memory-store,memory-engine}.js`、`summaries/summaries-manager.js`、`conversation/conversation.js`、`ipc/register-ipc.js`、`analytics/usage-analytics.js`、`worldline/worldline-service.js`、`preload/preload.js`、Renderer 打包资源 `renderer/assets/index-Dn3qWlAB.js`，以及 `scripts/test-v8.13.2.1-acceptance-hotfix.js` 和发布清单。Renderer 管理器按钮经 preload/IPC 调用主进程校验，不直接写摘要文件。
+- 验证：新增 Acceptance Hotfix 专项通过；V8.13.2 时间召回/世界线收口、V8.13.1 Coverage、V8.13 Frozen Prefix、V8.12.1 双时间与 8.12.1.2 Closure、Memory 2.5 Cache Preservation 定向回归通过。`node scripts/test-release.js` **321/321 发布组通过**（390 个测试文件分类、68 个历史归档检查）。变更 JS 语法检查与 `git diff --check` 结果见交付验证。自动化只验证代码路径和隔离夹具；用户侧真实 CK3/Provider 操作、跨战役旧摘要绑定 UI 与缓存遥测仍待实机 Gate；没有触发远端 GitHub Actions，不据此宣称远端 CI 或真实缓存命中率通过。
+
+<a id="source-bd3947cca735--第一百一十九阶段v81322-legacy-bulk-campaign-binding"></a>
+## 第一百一十九阶段：V8.13.2.2 Legacy Bulk Campaign Binding
+
+- 在保留逐篇旧摘要迁移的基础上，摘要管理器新增 Conversation-file 与 Owner-folder 两级批量绑定；不提供全局 NPC 迁移。Owner 级不要求所有历史 Counterpart 在当前 Scene，但每条待绑定记录必须有 Owner 对应的稳定数值角色 ID；身份无法解析、结构无效的记录留在原处并在 Preview 计数。
+- 两级批量操作均按 Preview → 人工确认 → Commit 执行。预览输出当前 Campaign、范围内文件/摘要、待绑定、当前战役、其他战役、官方追忆、未解析身份与无效项，并使用目标 ID、文件元信息和内容 SHA-256 形成 revision。Commit 主进程复核当前 Campaign/角色；revision 过期时返回 `legacy_binding_preview_stale`，不写任何文件。
+- 只对 `campaignToken` 为 null/undefined、且 `campaignBinding.status` 不是 `bound` 的普通旧摘要填入 `user_confirmed_bulk_migration`。现有 Campaign Token（包括 `native` 来源）、其他战役、官方追忆不覆盖。Owner 多文件写入复用 `withSummaryMutation` journal，整批失败回滚；成功后失效 Owner 摘要和时间索引缓存、清除迁移尝试标记并刷新当前 Recall。Frozen Prefix 快照保持不变。Legacy 自动迁移也跳过官方追忆，避免刷新附带标记。
+- 更新摘要管理器 Owner/对话分组按钮、Preview 确认和结果提示；四个新增 IPC 与 preload 方法由主进程验证，Renderer 不传任意磁盘路径或直接写文件。Memory Engine 3.0、时间选择、Recent2、Extra≤3、Prompt/Provider 缓存顺序及 Worldline 均未改变。
+- 验收修正：Conversation 的 GameData 在新会话启动后异步解析；摘要绑定现在等待该会话解析完成后再校验 Campaign/角色，并在等待期间会话切换时 fail-closed。无活动会话、GameData 不可用和未读取到 Campaign Token 分别显示明确操作提示，不使用缓存的旧战役信息。
+- 新增并登记 `test-v8.13.2.2-legacy-bulk-binding.js`，覆盖两级范围、填空不覆盖、官方排除、历史身份边界、Preview stale 零写入、跨文件 journal rollback、同场时间召回可见和冻结前缀不变。专项及 V8.13.2.1/13.2/13.2 Worldline/13 Frozen Prefix 定向回归通过；`node scripts/test-release.js` **322/322 发布组通过**（391 个测试文件分类、68 个历史归档）。变更 JS `node --check` 和 `git diff --check` 通过。
+- 本地自动化未覆盖真实 CK3 Campaign/Provider 行为。打包窗口人工 UI 冒烟因 Computer Use 当前应用清单为空未执行；远端 GitHub CI 未触发。详见 [V8.13.2.2 实施报告](V8.13.md#source-36e9813b5889)，以上均不等价于实机或远端验收。
+
+<a id="source-bd3947cca735--第一百二十阶段v814-a-durable-core-基础施工未完成"></a>
+## 第一百二十阶段：V8.14-A Durable Core 基础施工（未完成）
+
+- 按 [工程化施工标准](V8.14.md#source-eda1343ec4aa) 开始 A 阶段，根代理负责核心，默认子代理只读辅助探索。尚未进入 Sol 独立审查或 B 阶段。
+- 新增独立 Memory4 合同、原始片段可见性投影、Known Entity 证据索引、逐 Owner/Campaign 的 JSON sidecar、索引和 journal 原子写入；正文索引一致性校验、幂等和 tombstone 已有夹具。玩家/NPC 原始消息补真实发言者 ID。
+- 生产正文没有可信公开／私密精细分片，因此未知部分仅作者视角；Narrative commit 后逐 Owner Durable Provider、独立失败快照/恢复及状态诊断已接入，Legacy Bridge 保留只读基础。正式 Memory4 Recall、全链路编辑删除和后续 B–E 尚未实施。现有 Recent2、Memory Engine 3.0、官方追忆和冻结前缀不变。
+- 26 组专项检查通过；323/323 发布组通过，392 个测试文件分类、68 个历史归档。旧归档 test-action-system.js 单独运行因已退役目录 MODULE_NOT_FOUND，不修改旧动作系统。没有进行真实 CK3/Provider/UI/缓存 Gate，Sol 独立审查尚未执行，不宣称 A 已验收。详见 [本阶段报告](V8.14.md#source-9139203460dd)。
+
+<a id="source-bd3947cca735--第一百二十一阶段v814-a-sol-独立审查gate-fail"></a>
+## 第一百二十一阶段：V8.14-A Sol 独立审查（Gate FAIL）
+
+- 按工程化施工标准新增独立对抗/回归测试，不修改 Memory4 生产逻辑。公开与私密片段隔离、reported 不能升级为 observed、零 Durable 保留 Narrative/Known、Legacy 保留和幂等重试等 5 项通过。
+- 3 项红灯：同 conversation/finalization ID 的旧 Campaign Episode 被 Narrative 已提交查询接受；Known 来源修订后旧 directConversation 证据不撤销；Owner 取消后聚合状态仍报 COMPLETE。生产 `memory4Fragments` 与 `legacyMemories` 仅有读端，无可信新分片及手工视角投影供给，属覆盖率待补而不能通过默认公开全文解决。
+- `test-v8.14-a-sol-review.js`：5 PASS / 3 FAIL，已列发布清单。现有 Durable Core 26 项仍通过，测试清单 393 文件、324 发布组；完整发布门禁在 Sol 审查组预期失败。未做 CK3/Provider/打包/缓存 Gate。详见 [独立审查报告](V8.14.md#source-16bdeeaea491)；待 Astra 修复与 Sol 复验前不进入 B。
+
+<a id="source-bd3947cca735--第一百二十二阶段v814-a-sol-红灯修复本地复测通过a-gate-待验收"></a>
+## 第一百二十二阶段：V8.14-A Sol 红灯修复（本地复测通过，A Gate 待验收）
+
+- Narrative `isCommitted` 在提供 Campaign 时限定对应 Episode，避免同 conversation/finalization ID 的旧战役提交短路当前终局；未提供 Campaign 的旧调用保持兼容。Known Entity 对同会话来源修订改为替换贡献、重新计算证据类型/计数/来源及日期，不再残留已撤销的直接交流，也不抹掉其他会话证据。
+- Durable 聚合状态区分 `EXTRACTION_FAILED`、`CANCELLED`、`IN_PROGRESS` 与 `COMPLETE`；取消的 Owner 不再被总状态误报成功。首轮三项失败断言保持不变，另加双战役正例、跨会话证据保留与全撤销边界。
+- `test-v8.14-a-sol-review.js` 现为 10 PASS / 0 FAIL；Durable Core 26 项、完整发布回归 324/324 组通过（393 个测试文件分类）。这是实施方本地复测，不等于修复后的独立 Sol 复验。生产可信 `memory4Fragments` 供给仍缺，不能把混合言语/心理全文默认公开；真实 CK3/Provider/打包窗口 Gate 均未执行，正式 Memory4 Recall 保持关闭，A Gate 未验收。详见 [Sol 审查及修复记录](V8.14.md#source-16bdeeaea491)。
+
+<a id="source-bd3947cca735--第一百二十三阶段v814-a-finalization-可见性收口本地完成a-gate-待验收"></a>
+## 第一百二十三阶段：V8.14-A Finalization 可见性收口（本地完成，A Gate 待验收）
+
+- 按 Rev2 将施工限定在 Finalization/Memory4：撤回上次暂停施工的实时分片 Sidecar/Prompt 改动，V8.13 多人 RP 和缓存前缀不改变。新的终局输出必须保留 `source`；本地 Validator 依据原消息、speaker、Presence 与明确耳语对象裁剪 `knownBy`，混合私密/共享内容无法核验时拒绝并进入恢复链路。
+- Memory4 从已提交且通过验证的 Episode 段落按 Owner 构建来源，保留完整 messageIds 与转述状态；Known Entity 仅由 Presence 证明同场，直接对话必须有明确指向，旧数据依旧走 Legacy Bridge。正式 Recall 继续关闭。
+- 新增 21 项定向用例并登记发布组；Durable Core 26 项、原 Sol 审查用例 10 项及完整 325/325 发布组通过（394 个测试文件分类）。本轮未做新的 Sol 独立复验、CK3/Provider 实机及打包窗口验收，因此 **A 阶段仍未 PASS，不进入 B**。详见 [收口报告](V8.14.md#source-86653ded8ffc)。
+
+<a id="source-bd3947cca735--第一百二十四阶段v814-a-二人摘要失败与多人同源问题修复实机复测待验收"></a>
+## 第一百二十四阶段：V8.14-A 二人摘要失败与多人同源问题修复（实机复测待验收）
+
+- 用户二人实机测试显示自动摘要及“重试失败记忆任务”均失败。只读检查真实恢复快照，错误为 `visibility_shared_audience_unverified` 与三次可见性边界误拒；未复制游戏对话正文或修改运行时快照。
+- 修正 Finalization 段落判断：私密词在前时，后续可核验的公开原文段落不再被统统拒绝；仅发言者参与的 `participants` 段不再作为质量错误，而是作者单人知情。模型混写时保守地从原始换行段落重建私密、明示耳语和公开段，无法核验则仍 fail-closed；修复 visibility 错误后的重试不再强制分块。
+- 同一门禁也用于三人以上；分块 Presence 标记加入 `game_fact` 来源。定向测试现 28 项通过，覆盖二人和三人完整 Finalization commit、失败快照重试及多人分块 Presence；原 Durable Core 26 项、Sol 审查 10 项及 325/325 发布组通过。修复后的真实 CK3/Provider 和新的 Sol 独立 Gate 未做，**A 仍未 PASS**。详见 [收口及修复记录](V8.14.md#source-86653ded8ffc)。
+
+<a id="source-bd3947cca735--第一百二十五阶段v814-a-摘要知情恢复-p0-修复实机复测待验收"></a>
+## 第一百二十五阶段：V8.14-A 摘要/知情/恢复 P0 修复（实机复测待验收）
+
+- 两份真实失败快照的只读元数据分别显示：二人/14 消息跨可见性边界，五人/68 消息来源无效，均在 request 阶段且已重试 8 次。终局层针对可核验原文跨源片段、Presence 混入和无效 Durable 候选做确定性局部修复，减少重复整篇 Provider 请求；无法核验发言者或在场者时仍失败封闭。
+- 对话中的 `public/world` 不再绕过人物知识索引。C 未在玩家—B 场出现且没有获得该记忆知识记录时，不能召回 B 场记忆，即使 Narrative 尚未最终提交。Memory4 新提取与手动恢复均最多两位 Owner 并行，不删除失败快照或现有摘要。
+- 新增 7 项 P0 专项并登记发布组；Finalization 28 项、Durable Core 26 项及 326/326 发布组通过，395 个测试文件分类。静态/夹具结论不等于 CK3/Provider 实机速度、隔离、多人成功率和打包 UI 验收；A Gate 继续待验收，正式 Memory4 Recall 关闭。详见 [收口报告](V8.14.md#source-86653ded8ffc)。
+
+<a id="source-bd3947cca735--第一百二十六阶段v814-b-只读-profile-核心gate-待验收"></a>
+## 第一百二十六阶段：V8.14-B 只读 Profile 核心（Gate 待验收）
+
+- 基于工程化规格新增隔离的 Known Entity Profile：Owner/Campaign 证据、当前关系、Worldline 授权字段与 Detail/Legacy 指针按需聚合；未知不等于不认识，同场/仅提及不升级成直接交流。当前关系和生死地点不缓存，缺失或跨战役资料 fail-closed。
+- 关系变化只认同战役、同人物对、前后已确认状态及 CK3 回读效果；ACK 不算确认、未知原因不编造。初始及动作确认的生产 `parseLog` 路径现供给 B 观察器；仅本场动作确认回读的确定性变化提高 Owner 可见片段的 Durable 提取优先级。旧摘要 Prompt、生成/恢复、Recent2 和正式 Memory4 Recall 均不消费该信号。修复年度 Checkpoint 误作实时事实门禁、重复回读可能误判及多行关系未写完时的判定风险。
+- B 定向 15 项及 A 专项均通过，完整发布门禁 327/327 组通过（396 文件分类）。A 阶段与 B 阶段的独立审查、真实 CK3/Provider/打包 Gate 均待完成，不宣称阶段 PASS。详见 [B 施工记录](V8.14.md#source-bf0fcd55c2f7)。
+
+<a id="source-bd3947cca735--第一百二十七阶段v814-关系-action-召回改进实机待验收"></a>
+## 第一百二十七阶段：V8.14 关系 Action 召回改进（实机待验收）
+
+- 复查发现二人 Action 判断默认只包含最近 2 条消息，关系铺垫易丢；通用选择提示缺少双方确认关系的判例。现在仅在 ActionEngine 调用处保留至少 8 条近期消息，并向所有 Action Provider 的既有稳定系统块附加关系判定规则：明确互诉浪漫爱意、接受交友、确立敌对等可选择对应动作；单方表白、玩笑、提问、假设、未接受的提议和过去状态不得触发。官方 ActionPromptBuilder、标准 Action 文件、签名、block ID、传输及 CK3 门禁不变。
+- 标准关系脚本在提交效果后会同步改动传入的人物对象，可能使未获 CK3 确认的关系污染本场后续 check。现在仅对七类关系 Action 隔离脚本使用的人物关系数组；CK3 Effect 仍走原 RunFile，实时关系由后续真实回读决定。新增定向测试覆盖互诉爱意的上下文、DeepSeek 稳定块兼容、全部七类关系未确认时的本地状态隔离，以及至交须已有朋友、死敌须已有仇敌的门禁。`指导者`没有对应的正式标准 Action；宫廷导师职位不是同一种关系，故不能宣称其关系动作触发已验收。
+- 同时确认 B 的关系 Action `RUN_ACK` 尚不保证产出新的完整 CK3 关系日志；生产解析入口接线不能替代游戏侧日志刷新。B Gate 继续待验收，不将 ACK 视为关系变化确认。详见 [B 施工记录](V8.14.md#source-bf0fcd55c2f7)。
+- `node scripts/test-v8.14-relationship-action-recall.js` 及 328/328 发布组通过。仅为代码/确定性测试，尚无真实 Action Provider 选择率和 CK3 效果复测。
+
+<a id="source-bd3947cca735--第一百二十八阶段v814-双向朝贡-action实机待验收"></a>
+## 第一百二十八阶段：V8.14 双向朝贡 Action（实机待验收）
+
+- 新增标准动作 `becomesTributaryOf`，`direction=offer` 表示 A 主动成为 B 贡臣，`direction=demand` 表示 A 要求 B 成为贡臣且 B 已接受；`isPlayerSource` 支持玩家作为 A。单方提出、拒绝、假设和历史叙述不触发。两种方向都调用 CK3 原生 `start_tributary_interaction_effect`，保持东方王朝覆盖及按政体选择合同的既有逻辑；不会执行封臣 `change_liege` 或一次性贡金转账。该通用入口与东方王朝互动默认勾选的“非永久贡臣”不是同一固定合同，若需要指定非永久或永久类型，须另行确认合同范围。
+- 动作标记为破坏性，遵循用户现有审批设置；应用层先验证人物绑定、双方有地且独立，游戏侧再次验证贡臣未朝贡及宗主资格。动作只经现有 RunFile/ACK 队列发送，命令内以 `is_tributary_of` 对指定宗主回读；仅回读成功标记 `CONFIRMED`，条件不满足为 `NO_EFFECT`，仅有 ACK 不视为建交成功。审批源角色、诊断及玩家源绑定同步修正，不改其他动作签名、Prompt 缓存块、Memory 或世界线。
+- `node scripts/test-v8.14-tributary-action.js`、官方标准动作兼容测试及完整 329/329 发布组通过；`scripts/test-action-system.js` 属已退役旧 Action 目录测试，单独运行仍因模块不存在失败，不代表生产 Action 回归失败。真实 CK3/东方王朝加载状态、Provider 选择、审批 UI 和合同类型仍待实机 Gate。
+
+<a id="source-bd3947cca735--第一百二十九阶段v814-东方王朝朝贡契约细化实机待验收"></a>
+## 第一百二十九阶段：V8.14 东方王朝朝贡契约细化（实机待验收）
+
+- 新增独立标准动作 `changesTributaryContract`：仅用于已存在的指定贡臣—宗主关系，双方在当前对话中确认后选择羁縻、藩属、王化、互市、供奉或附庸契约。`direction=offer` 为贡臣发起，`direction=demand` 为宗主发起；`isPlayerSource` 支持玩家作为发起者。原 `becomesTributaryOf` 仍只建立关系，不把细化契约混入第一步。未接受的提议、提问、假设、过去叙述不应触发。
+- 东方王朝将这些方式定义为不同的 `subject_contract_group`。游戏命令先核验双方实际朝贡关系、旧契约组和王化/互市/供奉宗主资格；不满足条件时零更改。切换采用模组同样的 `end_tributary`→`start_tributary` 建约方式，仅在新关系与契约组回读正确后执行模组 `make_tributary` 中的贡臣／宗主特质及朝贡经验效果；未成功时尝试恢复原组，恢复失败明确报状态不一致。应用层没有可靠的实时契约组 DTO，故动作候选显示不是资格证明，最终安全门禁在 CK3 Effect 内；此扩展要求东方王朝在当前游戏中**实际启用**，仅有本地模组目录不够。
+- 新动作沿用现有审批、RunFile/ACK、命令绑定和玩家源规则；仅 CK3 同命令契约回读吻合才 `CONFIRMED`，仅有 ACK 不算成功。未改旧摘要、Prompt 稳定块、Worldline 或其他 Action 签名。`node scripts/test-v8.14-tributary-action.js` 覆盖六类契约、双向/玩家源、非法参数、旧关系门禁脚本、失败恢复标记与状态核验；官方标准动作兼容测试和完整 329/329 发布组通过。真实 CK3 模组加载、税赋/继承/地图色等契约效果、Provider 误触率及回滚仍待实机 Gate。
+
+<a id="source-bd3947cca735--第一百三十阶段v814-跨-npc-缓存前缀修正实机待验收"></a>
+## 第一百三十阶段：V8.14 跨 NPC 缓存前缀修正（实机待验收）
+
+- 昨晚 GLM 统计为 124 次 Chat、命中率 18.6%；其中 123 次有缓存回报，61 次返回 0 cached tokens，93 次不超过 448。统计页 `cold_start` 指服务商返回零命中，不等于真的首次对话；首个估算断点也不是真实缓存断点。只读核对本地同批请求：跨 NPC 时约 440 Token 全局块仍相同，但 `conversation-frozen` 起出现差异。真实 Request Diff 还显示同一 NPC 的数次请求在 Endpoint、有效参数相同且估算公共前缀超过 11,000 Token 时仍返回零 cached tokens；随后相近请求又能超过 90% 命中。后者不是本地 Prompt 排序单独可解释或保证修复的服务商侧现象。
+- 当前用户模板的 `stable_history_rp` 约 4,000 Token，含 17 处 `{{fullName}}`，旧构造因此把整段放在角色冻结块之后，无法作为跨 NPC 共用前缀。现在仅在该段无其他 Handlebars 表达式时，将姓名替成固定 `【当前回应角色】` 并提前放置，随后在 `responder-frozen-profile` 中明确绑定真实姓名；含日期等其他动态变量时完全沿用旧渲染与顺序。未改变缓存锚点、块 ID、人物知情过滤、摘要/Memory 存储、Provider 参数或 Action。
+- 扩充 `test-v8.13-frozen-worldline-prefix.js`，验证不同 NPC 共用块逐字相同、姓名绑定及非白名单变量回退；GLM 专项、V8.13 冻结前缀与完整发布门禁均通过（329/329，398 文件分类）。尚无修改后的真实 GLM/CK3/打包窗口测试；Provider 对相同前缀返回 0 cached tokens 仍可能发生，不能承诺固定命中率。实机应分别比较新 NPC 首轮和同 NPC 后续轮的原始 cached tokens，并核对角色回答质量。
+
+<a id="source-bd3947cca735--第一百三十一阶段v814-三大-mod-人物称谓兼容补丁ck3-实机待验收"></a>
+## 第一百三十一阶段：V8.14 三大 Mod 人物称谓兼容补丁（CK3 实机待验收）
+
+- 新增独立本地补丁，依赖东方王朝、汉番礼制与天家宗仪三个当前 Mod 描述符；不改三款 Workshop 文件。统一人物主名、短名、提示名、头衔历史及相关姓名提示键，主分派沿用天家宗仪既有 `SanGong_*` 规则；普通回退调用东方王朝庙号/谥号选择和 `OE_GetUINameNotMeNoTooltip`。
+- 保持 VOCT 的 `log_character` 本地化输出与解析器不变。核对 `t_1/t_2/t_3/t_18/t_26` 的现有 getter，协议文件 SHA-256 前后相同。补丁已复制到 CK3 本地 Mod 目录；未修改当前 `dlc_load.json`，需用户在启动器启用。
+- 本地静态检查通过：依赖名、9 个本地化覆盖键、UTF-8 BOM、启动器描述符相对路径与安装拷贝完整性。没有 CK3/东方王朝/汉番礼制/天家宗仪/VOCT 实机渲染验收；应逐项检查三方专属称谓、普通无头衔 NPC 和 `VOTC:IN` 原始字段。若普通人物仍命中太上皇帝显示，应核验游戏中的 `shanghuang` 特质及主头衔，而不是由补丁掩盖状态。详见[兼容补丁报告](V8.14.md#source-2bbe9e3f7f15)。
+
+<a id="source-bd3947cca735--第一百三十二阶段v814-campaign-标记与-durable-上限修复实机待验收"></a>
+## 第一百三十二阶段：V8.14 Campaign 标记与 Durable 上限修复（实机待验收）
+
+- 活动 Workshop VOTC 的 Campaign 身份 initializer 原先仅有定义，三条 `log_gamedata_v3/v3s/v3l` logger 未调用且未输出标记。现三条 effect 各初始化一次，并在 `VOTC:IN/init` 后输出由 12 个持久化数字字段构成的 `VOTC:CAMPAIGN/votc8c-...`；App parser、摘要 Campaign 过滤和跨战役隔离未放宽。Workshop 本地文件可能被 Steam 更新覆盖。
+- 新生成继续启用 V8.14 `finalizationVisibilityV1`，不回退到 V8.13.2.1 author-only 生成；旧摘要 Legacy Bridge/存储字段/召回合同不改。Durable 单批最多 128 片段，固定 `maxTokens=4096`；不完整批次递归拆分，8 条/Owner、来源与实体校验、Owner 失败隔离保持。
+- 验证：Durable P0 9 项、Finalization Visibility 28 项、Memory4 Core 26 项、Sol Review 10 项、B Profile 15 项、Hotfix Finalization、V8.1 Campaign Identity 与 Shadow Integration 通过；完整 `node scripts/test-release.js` **333/333 组通过**。Workshop 三个 logger 的 BOM、单次 initializer/marker、12 字段、init-before-marker 顺序及括号平衡静态检查通过。未执行 CK3/Provider 实机 Gate；A/B 仍 HOLD，不据此宣布 Campaign 标记实机成功或摘要事故关闭。详见 [V8.14-B Hotfix 事故修复报告](V8.14.md#source-e536a9481ce6)。
+
+<a id="source-bd3947cca735--第一百三十三阶段v814-摘要单篇模型整理按钮实机待验收"></a>
+## 第一百三十三阶段：V8.14 摘要单篇模型整理按钮（实机待验收）
+
+- 摘要管理器为每篇普通已保存摘要提供“模型整理”按钮，使用当前保存的摘要正文发起纯文本 `summary_rewrite` 请求；不强制 JSON，使用摘要输出上限，并校验 Provider 的结束原因及最终文本。
+- 成功后只更新当前 Owner 目录中选中的摘要，并复用 `updateSummaryProjection` 更新相应记忆投影；原有 Campaign、日期、绑定与其他元数据保留，官方 CK3 追忆不提供此操作。该路径不能恢复终局成功后未保留的原始逐轮对话，也不重跑 Durable 或为其他参与者重新生成投影。模型失败、截断、空/无变化输出、摘要并发编辑或同一时刻已有整理任务时，不覆盖原文。
+- 新增并登记 `test-v8.14-summary-manual-regeneration.js`，覆盖 Owner 范围、Campaign/日期保留、官方追忆排除、纯文本请求、错误/截断、无变化、并发修改与防并行写入；摘要可靠性和 Memory UI 定向测试通过，完整 `node scripts/test-release.js` **334/334 组通过**。JS 语法与 `git diff --check` 通过。以上是静态/夹具验证；真实 Provider 润色质量、付费确认流程与打包窗口按钮仍需用户实机验收。
+
+<a id="source-bd3947cca735--第一百三十四阶段v814-二人多人摘要生成与失败恢复可靠性修复实机待验收"></a>
+## 第一百三十四阶段：V8.14 二人/多人摘要生成与失败恢复可靠性修复（实机待验收）
+
+- 对比 `49c6ade`（V8.13.2.1）与 `93edc91`（V8.14-B）后确认，V8.14 增加的可见性源文修复后强制重新生成 Narrative，是本次失败的直接原因：程序已从真实消息重建私密/公开段落并可通过质量校验，却额外把结果标为失败，再次调用模型；恢复链路又会丢弃已经保存、且可通过相同确定性修复的模型输出，重复进入不稳定请求。只读检查的两条运行时失败快照分别来自二人、三人场景，均为 `request / QUALITY` 且保存有 Provider 输出；这证明有具体代码故障，但不足以推算总体“80%”失败率。
+- 修复后，Narrative 仍严格检查结构、消息来源、说话者、在场窗口、公开/私密/耳语受众与投影覆盖。确定性源文修复后若这些校验和质量检查通过，不再强制多发一次模型请求；失败恢复在修复后仍通过完整校验时直接复用存档输出。重复失败熔断仅对自动重试生效，手动“重试失败记忆任务”仍可发起请求。修复可能保留源消息原有措辞；已保存普通摘要仍可用第一百三十三阶段的单篇模型整理功能润色。
+- 更新 A 可见性与 B Hotfix 回归夹具：二人/三人生成均验证一次模型调用可通过边界修复完成；二人/三人失败恢复均验证复用已存输出、零额外模型调用且不向第三人泄露私密/耳语内容；另验证自动重复失败保护和人工重试分流。实现保留 V8.14 `finalizationVisibilityV1`，不退回 author-only，也不改旧摘要字段、Campaign 过滤或 Legacy Bridge。
+- 验证命令：`node scripts/test-v8.14-a-finalization-visibility.js`（28 项）、`node scripts/test-v8.14-hotfix-finalization.js`、`node scripts/test-v8.14-a-p0-memory-closeout.js`、`node scripts/test-release.js`（334/334 发布组）、`node --check resources/app/out/main/memory-system/memory-engine.js`、相关测试脚本语法检查及 `git diff --check`。以上为本地自动化，不代表实际服务商生成、摘要目录写入或恢复按钮已在 CK3/打包应用中验收；A/B Gate 仍 HOLD。
+
+<a id="source-bd3947cca735--第一百三十五阶段v814-信件到期重同步与-campaign-标记修复实机待验收"></a>
+## 第一百三十五阶段：V8.14 信件到期重同步与 Campaign 标记修复（实机待验收）
+
+- 实机现象“游戏时间已过一年，信件仍显示 30 天后投递”的根因是后台 `letters_runner.gui` 只轮询 `letters.txt`，而应用把日期生产器恢复命令排入 `votc.txt`；对话窗口关闭后该载体无人消费，应用收不到新的 `VOTC:DATE`，投递判断便一直停在旧日期。VOTC Workshop 本体 `D:\SteamLibrary\steamapps\workshop\content\1158310\3346777360\gui\custom_gui\letters_runner.gui` 已在无 `talk_scene` 时加入 `votc.txt` 后台轮询。
+- 为适配后台重复轮询，RunFileManager 的非 Action 命令现在也带单次执行保护，使用独立 `votc_last_run_command` 标记；既有 Action 防重标记保持不变。信件若只进入 FIFO、尚未真正写入活动载体，会继续显示 `PENDING_DELIVERY`，待被调度后再转为 `EFFECT_FILE_WRITTEN`，避免虚报及重复入队。信件普通摘要与 `letter` 记忆均保存原生 Campaign token/binding；Campaign 不可用时显式标记 unresolved 并保持 fail-closed。
+- 验证：信件到期/串行队列/Campaign/防重复专项、日期生产器、Letter Artifact Parity、RC6 最终信件 Gate、RC2 信件诊断及 V8.8.4 Action 回归通过；`node scripts/test-release.js` **334/334 组通过**，相关 JS 语法和 `git diff --check` 通过。Workshop Mod 文件仅做静态结构核对，未启动 CK3 实测；请验证日期恢复能产生新鲜 `VOTC:DATE`、一年后到期信件自动投递并在宝物栏生成遗物，摘要带当前 Campaign 标记。实机通过前不宣称事故关闭。
+
+<a id="source-bd3947cca735--第一百三十六阶段信件日期轮询与旧等待锁复查实机待验收"></a>
+## 第一百三十六阶段：信件日期轮询与旧等待锁复查（实机待验收）
+
+- 用户复测仍卡住后，只读核对实际 CK3 日志与待投递记录：关闭对话时日期只输出一次，随后没有连续轮询；三个待投递记录均已超过到期日，其中一个仍占据 `awaitingAcceptanceLetterId`，但其状态/流水没有投递步骤，也没有命令 ID、写入字段或对应命令记录。未修改玩家的日志、信件正文或待投递数据文件。
+- 上阶段 Mod 修改未解决循环本身：`letters_runner_counter` 的递归计时器使用 `trigger_when`，未像正常工作的对话计时器一样在创建时启动；新增 `votc_runner_counter` 又位于递归创建范围之外，只能执行一次。直接修正 Workshop 本体 `gui/custom_gui/letters_runner.gui`，把日期载体和 RunFileManager 载体的执行都放入每两秒重新创建的同一个计时器；计时器明确 `trigger_on_create`，遇到 `talk_scene` 时停止后台执行，关闭对话后由既有事件重建。
+- `letter-manager.js` 在到期检查前恢复符合明确待投递流水、且不存在投递步骤/命令/载体写入证据的孤立等待锁；存在近期 ACK、已排队命令、写入记录、载体正文或流水不完整时保留等待锁，不重放未知效果。重复收到同一未完成信件的相同载荷复用现有回信；同 ID 不同载荷拒绝覆盖，保护原命令 ID 和投递状态。官方 Artifact 配方、发送日期加 delay、Campaign 摘要绑定及串行接收保持现有合同。
+- 专项覆盖持久化重启后恢复孤立锁、载体/排队/已 ACK/写入/流水证据保留、缺流水保护、重复及冲突载荷零模型调用；日期生产器、Artifact Parity 与 RC6 Final Letter Gate 通过。Mod 完成结构核对，实际 GUI 循环与宝物生成仍需重启 CK3/VOTC 后复测，不能把模拟回读认定为实机修复验收。
+- 最终完整 `node scripts/test-release.js` **334/334 发布组通过**；相关 JS 语法检查与 `git diff --check` 通过。没有重启玩家正在运行的程序，也没有手动重发待投递信件。
+
+<a id="source-bd3947cca735--第一百三十七阶段信件接收失联与时间召回事故修复2026-10-01实机待验收"></a>
+## 第一百三十七阶段：信件接收失联与时间召回事故修复（2026-10-01，实机待验收）
+
+- 用户报告：离开 NPC 对话场景后发送信件，推进约一个月仍无回信，应用列表也没有该信件；“20年前”“第一次见到你”等问法不能有效召回旧摘要。当前可读 CK3 日志没有完整信件载荷，应用日志也没有信件接收触发；记忆日志仅有汇总计数，不能重建当时的具体查询。因此以下结论区分代码/夹具复现与该次游戏现场，不推算事故发生率。
+- 信件入口的可确认缺陷：`message_event.361` 在打开写信窗口的 immediate 中安排一天后通知，与发送动作脱节；应用只有剪贴板接收入口，已有日志载荷本身不会触发处理。HEAD 模块的隔离回放确认：完整载荷存在、剪贴板通知缺失时，模型调用与待投递记录均为 0。Workshop 本体 `events/message_events.txt` 已将通知移到“发送”选项，在正文日志之后立即触发；`letters/letter-manager.js` 通过现有日志 Tail 接收完整信件标记，并串行处理双重通知，复用已有待投递结果，避免重复生成。
+- `game-data/log-parser.js` 仅匹配 `VOTC:LETTER/;/`，不再让 `LETTER_TRANSPORT` / `LETTER_DIAG` 覆盖信件载荷；沿现有多行解析方式收集完整正文，保留换行、ID、发送日与 delay。专项验证日志直连接收、多行正文、诊断标记隔离、剪贴板/日志双触发只有一次回信与摘要请求，以及重复通知后的可见流水仍绑定原信件。未改动已有 Artifact 配方、到期规则、ACK 防重或未知效果恢复边界。
+- 时间召回回归：带“记得”的时间查询先触发 direct 的文本相关度重排，把旧摘要选进 direct，随后 `selectedFolderKeys` 又将它从时间 Extra 排除；V8.13 实际复用的 direct Prompt 已冻结，旧摘要因此未进入当前请求。集成夹具先冻结 Recent2，再提问“你还记得20年前第一次见到你吗”，复现 direct 被改选及 Extra 缺失。`memory-system/memory-engine.js` 现在让时间请求保留 Recent2，由动态时间 Extra 注入目标摘要，继续保持年份范围、预算、Owner、人物对、Campaign 与已注入历史门禁。
+- 首次相识：`fuzzy-temporal-resolver.js` / `temporal-anchor-extractor.js` 识别“第一次见到你”等线索；`summary-date-index.js` 仅从当前提问者与回应 NPC 的获准对话摘要中，选正文明确提及初次相识的最早一篇，排除明显否定、未来计划及无关旧摘要。该篇已冻结或保留在历史中时，不漂移到较晚记录；提示明确它是最早可用档案线索，不证明人生首次相识，未新增时仍可引用先前注入的对应证据。旧摘要、存储 schema、缓存锚点和正式 Memory4 Recall 状态不变。
+- 验证：信件 Payload Race、Delivery Recovery、Date Producer、Artifact Parity、Final Letter Gate，双时间记忆与 Memory Engine 3.0 专项通过；完整 `node scripts/test-release.js` **334/334 发布组通过**，相关 JS 语法与 `git diff --check` 通过。`node scripts/v8.8-electron-startup-smoke.js` 的隔离打包窗口启动/导航通过，无 Renderer 异常；不代表信件与真实时间问题已实机验收。旧 `test-action-system.js` 因依赖退役 `action-system` 模块失败，属于历史归档；当前 `test-v7.10-official-action-system.js` 通过，未恢复旧生产链。
+- 剩余实机 Gate：重启 CK3 与 VOTC 后，在无对话场景发送新信件，确认列表出现生成/待投递或明确失败记录，推进至到期并核对回信遗物；在具有当前 Campaign 绑定旧摘要的 NPC 上，先普通对话再问“记得20年前吗”和“第一次见到你”，核对动态时间块及实际回复。Workshop 事件仅验证 BOM、结构与通知位置，未执行游戏脚本。没有自动重发失联信件，也没有修改玩家旧摘要、日志、凭据或当前队列。A/B Gate 仍为 HOLD。
+
+<a id="source-bd3947cca735--第一百三十八阶段日期轮询重复启动排查实机待验收"></a>
+## 第一百三十八阶段：日期轮询重复启动排查（实机待验收）
+
+- 用户报告日期进程启动后游戏推进 2–3 日便可能停滞，并持续看到空 `votc.txt` 执行提示。源码确认 `letters_runner` 每轮会执行 `run votc.txt`；空载体对应 `Effect is empty` 提示，单独看是空文件轮询警告，不足以证明它导致停日。
+- 发现 `mcc_event_v2.9998` 的同一次窗口创建会从 `votc_invisible_event.gui` 与 `event_window_widget_message.gui` 两处发出完整 `letters_runner` 创建指令；若 CK3 对同名 widget 保留多个实例，便会叠加后台计时器与载体执行。Workshop 本体移除附属 widget 上的冗余启动点，保留隐形事件窗口的启动路径，以降低重复轮询风险。
+- 验证：修改前两处启动调用均为 1；修改后静态断言两文件合计恰有 1 个完整 runner 启动入口，并检查 GUI 文件结构与 `git diff --check`。这降低重复轮询风险，但尚不能把 2–3 日停滞归因于此，也不能代替重启 CK3 后的日期推进/长时间实机 Gate；若仍停滞，需用同一局的 debug.log 和 error.log 继续定位每日事件是否重复开启。
+
+<a id="source-bd3947cca735--第一百三十九阶段后台轮询原生状态循环与启动清理2026-10-03实机待验收"></a>
+## 第一百三十九阶段：后台轮询原生状态循环与启动清理（2026-10-03，实机待验收）
+
+- 用户反馈上一轮修改后卡顿由约 30 秒降为约 10 秒，但每推进 3–5 日仍可能出现日期和点击不响应、人物动画继续播放。该现象可能来自逻辑阻塞或界面事件，不能只根据动画判断具体线程故障。实际 CK3 目录为 `E:\Documents\Paradox Interactive\Crusader Kings III`；当前日志来自后续重启，没有 VOTC 标记，无法对齐这次卡顿。旧应用日志中两条日期恢复命令的 dispatch 至 ACK 分别约 25.3 秒和 10 秒，仅说明执行/回读延迟，并不证明这些时间全部是游戏阻塞。
+- 载体核对纠正此前的递归推测：当前 `run/letters.txt` 为 55 字节的旧 Transport Diagnostic `debug_log`，没有日期事件触发，也没有信件遗物 Effect；不能据此认定每轮 `run letters.txt` 都会重开 9998。仍可确认的开销是旧 `letters_runner_counter` 每两秒调用一次 `gui.createwidget`，以及日期进程再次启动前没有清除原 runner。
+- Workshop 本体 `gui/custom_gui/letters_runner.gui` 改用游戏原生 `next` 状态循环：同一 widget 在 0.1 秒与 1.9 秒两个状态间循环，每两秒分别检查 `letters.txt` 和 `votc.txt`，不再每轮创建 widget。任一轮检测到 `talk_scene` 时清除完整 runner 与旧 counter，停止后台载体执行。`gui/event_windows/votc_invisible_event.gui` 在重新启动前先清除同名 runner/counter，再建立一份新 runner，减少重复启动留下计时器的风险。
+- 验证：源码状态转换检查在旧实现上因每轮创建 widget 失败，修改后模拟 500 轮通过，验证两秒间隔、两载体错开 0.1 秒、对话时清理与启动前清理。Date Producer、Letter Date Tracker、Artifact Parity、Letter Delivery Recovery 四项专项通过；完整 `node scripts/test-release.js` 为 334/334 发布组通过。以上仍不能证明实际 CK3 GUI 生命周期或卡顿已修复；需重启游戏验证日期推进、对话接管/关闭恢复和信件到期投递，控制台不应再周期打印 `gui.createwidget ... letters_runner_counter`。
+
+<a id="source-bd3947cca735--第一百四十阶段日期载体缺失与旧诊断残留恢复2026-10-03日期推进实机通过"></a>
+## 第一百四十阶段：日期载体缺失与旧诊断残留恢复（2026-10-03，日期推进实机通过）
+
+- 继续排查剩余周期卡顿时，确认日期恢复流程只把 `mcc_event_v2.9998` 排入 `votc.txt`，没有确保后台轮询的 `letters.txt` 包含日期查询。已知现场文件只有旧 A1 Transport Diagnostic 标记；这种文件即使被执行也不会持续产生 `VOTC:DATE`。缺少新鲜日期时监督器可能再次安排启动事件，但尚无同一局卡顿时间段的日志证明它就是剩余约 10 秒卡顿的直接原因。
+- `letters/letter-effect-transport.js` 新增安全日期载体恢复，沿用既有 `debug_log = "[Localize('talk_event.9999.desc')]"` 查询；仅接管缺失、空白、原日期查询或严格匹配的残留 A1 单条诊断。UTF-8 BOM 临时文件原子替换，已健康的文件不重复写入；未知 Effect（包括诊断后追加的 Effect）保留。`letters/letter-manager.js` 在恢复命令入队前检查载体，活动 Legacy 诊断或写入失败返回 BLOCKED，不继续安排新启动事件。正式信件仍由共享 `votc.txt` ACK 队列负责，没有重放未知效果或调整到期规则。
+- 修改前 Date Producer 新用例因诊断残留未被替换而失败；修改后覆盖缺失/空载体、BOM、残留诊断、活动诊断保护、未知效果零覆盖/零入队、原子替换失败保留与临时文件清理、重复恢复不增加命令，以及新鲜日期心跳不重复启动。扩展现有 Date Producer 与 Letter Transport 发布组，未新增测试文件或更改清单数量。
+- 验证：Date Producer、Letter Transport、Diagnostic 2.3、Artifact Parity、Delivery Recovery 与 Run Command Recovery 专项通过；完整 `node scripts/test-release.js` **334/334 发布组通过**（403 个测试文件分类、68 个历史归档）。两份实现文件 `node --check` 与 `git diff --check` 通过。隔离 `v8.8-electron-startup-smoke.js` 沙箱首轮因 GPU 子进程不可用失败，受批准的正常环境复测通过，Renderer 异常为 0；使用临时配置，无模型生成请求，不连接玩家 CK3 目录。
+- 本轮没有手动修改真实载体、玩家日志、信件、存档或队列，也没有改变尚未证实滞留的隐形事件关闭行为。需要完全重启 CK3/VOTC，连续推进至少 20 个游戏日，核对持续新鲜 DATE、启动事件不反复重排、对话结束后的轮询恢复及信件到期投递。自动化通过不等于周期卡顿或真实信件事故已验收关闭。
+- 后续用户实机验收：修复后连续推进约两个月，确认游戏已正常，仍有停顿但约 3–5 秒恢复；随后禁用所有 Mod，仅运行原版与全 DLC，也观察到同类短暂停顿。按用户反馈，本轮日期推进和此前长时间周期阻塞修复收口，剩余短暂停顿暂无证据归因于 VOTC，暂不继续修改。新 DLC 是用户推测，未确认为根因或已获官方确认；用户选择等待官方修复。此验收不扩展为信件遗物投递、时间召回、DATE/ACK 逐条回读或全部长期 Gate 已通过。
+
+<a id="source-bd3947cca735--第一百四十一阶段v814-c-recall-planner2026-10-03本地实现独立与实机-gate-待验收"></a>
+## 第一百四十一阶段：V8.14-C Recall Planner（2026-10-03，本地实现，独立与实机 Gate 待验收）
+
+- 用户提供全阶段 Dual Model 施工方案，并明确确认 A/B 已收口、授权开始 C。本轮核对实际 A 的可见片段/存储/恢复、B 的认知画像/当前关系/回读依赖及旧 Recall 路径；此前缺少正式 Memory4 Planner，Year/Life 派生仍为空。原 HOLD 报告保留为历史证据，新增 [C 进度分析及施工报告](V8.14.md#source-28911e136bde)并更新 README/CHANGELOG/摘要合同当前入口。
+- 新增 `memory4-recall-planner.js`，实现 Axis×Granularity、Owner/Campaign/Knowledge/Visibility/Revision/状态硬门禁、事件/对话双时间、明确年日及相对年、最早有正文依据的相识、第三人/多实体共用 2+1、整包 1200 上限与实际 Provider 安全余量。Canonical 先索引预筛、最多物化 32 篇正文；1101 条 fixture 的特定年份查询只读取 1 篇正文。未来才获知的内容不进入较早日期，无关名字不由玩家记忆填位。
+- C 只替换生产动态 Extra，`Conversation` 显式开启，保留现有 Memory3/Temporal 开关、Frozen Recent2/官方追忆、缓存锚点和 `memory-temporal-extra` ID。完整 Prompt 的最终预算循环再次拟合；整条舍弃而不截断承诺条件。现有运行时 Memory Engine 3.0 常量与兼容 2.5 存储不变，未改 bundled UI 标签。
+- 修正生产保留函数缺少成功注入 evidence 导致 Seen 未提交的接线问题。回复验证成功且实际 block/ID/token 齐全才提交 responder-private 历史与 Focus；失败不提交，跨 NPC 不共享。压缩移出、来源编辑/删除、Campaign 切换或时间倒退撤销旧块/释放对应键；FOLLOW_UP 限同实体、话题及来源/明确支持链，不取日历下一条。
+- 新来源 proof 仅进入 Memory4 sidecar 与索引；Legacy 保持只读兼容。只有完整独立事实及当前来源 hash 可验证时才拆分与抑制，部分覆盖保留其他事件，未知叙事不猜测。墓碑保留独立覆盖事实抑制映射，来源更新使旧转换失效。没有强制迁移、改写旧摘要或玩家配置，也未继续改信件/CK3 Mod。
+- 验证：C 专项 **34 组**（含 24 种 Axis×Granularity 组合）通过；A Durable Core 26 项、B Profile 15 项、事故 Recall、Memory3 原生追忆与所有 Provider Frozen Prefix 专项通过。完整发布回归 **335/335 组**，404 个测试文件分类、68 个历史归档；新专项已登记唯一清单。隔离打包 Electron 启动/导航通过，Renderer 异常为 0，未连接玩家 CK3 或发起模型生成请求。旧 Action 测试因退役模块缺失失败，保持历史归档；正式 Official Action 专项通过。
+- 证据边界：本轮辅助映射与本地回归不冒充 Sol 独立审查；C 的真实 CK3/Provider、编辑/删除后失忆、多人知情、缓存遥测及长期行为仍待验收。D 的 Year/Life 构建和 E 的 UI/迁移未施工，不宣称 C Acceptance、D 开工或 Full Freeze。
+
+<a id="source-bd3947cca735--第一百四十二阶段v814-玩家身份知情修复2026-10-03输入合同及独立反例通过实机待验收"></a>
+## 第一百四十二阶段：V8.14 玩家身份知情修复（2026-10-03，输入合同及独立反例通过，实机待验收）
+
+- 用户要求先修复陌生人初见却直接知道玩家身份的问题。实际默认描述脚本将玩家姓名、全名、家族、头衔和官职作为后台资料放入 Prompt，场景与说话者前缀也带姓名；这些数据此前未被区分为系统定位标签与 NPC 已知信息。
+- `prompts/prompt-builder.js` 在现有动态 `responder-game-facts` 中加入身份知情边界。同场、当前回合开始交谈、SHARED_SCENE、本次相遇的直接交谈次数及好感不能单独授权身份；当前明确关系、实际血亲、获准记忆、公开事实和正文介绍仍可提供各自明确的信息。化名不解锁真名，一项介绍不解锁整包后台资料，缺少记忆也不强制判为从未相识。
+- 独立 QA 发现描述性的关系字符串被误作相识证据；局部修复采用精确中英文正式关系标签及现有中文亲属 Relation Intent，不从“陌生人”“无明确关系”“好感：90”、`No relationship` 等负向/描述文字授权。没有改 Profile 合同、Action 绑定、Cache Anchor 或 Prompt Block ID。
+- 验证：身份专项先复现 missing guard 及关系描述错误，再通过 **13 组**；覆盖五种布局、真实中英文脚本、自定义模板、旧缓存、正文介绍、当前关系和血亲。独立反例复验、角色事实、V8.9 布局/运行时画像、V8.13 所有 Provider Frozen Prefix 与语法/局部差异检查通过。以上只证明实际 Provider 输入合同，真实 CK3/Provider 输出行为仍待验收。
+- 用户要求后续开发统一使用 GPT-6.1 Sol，将原 Astra/Sol 的施工与审查职责合并；根目录 `AGENTS.md` 已持久化该规则，独立 QA 仍保留不同 Agent 与自有反例。主 Agent 模型仍由用户客户端选择，不宣称已被仓库规则自动切换。详见 [本轮施工记录](V8.14.md#source-892fd023196f)。
+
+<a id="source-bd3947cca735--第一百四十三阶段v814-d-yearlife-派生生命周期2026-10-03本地发布与独立-qa-通过实机待验收"></a>
+## 第一百四十三阶段：V8.14-D Year/Life 派生生命周期（2026-10-03，本地发布与独立 QA 通过，实机待验收）
+
+- `memory-system/memory4-derived.js`、Coordinator、Store、Profile 与 Planner 接入按 Campaign × Owner 管理的 Year/Life。事件年度只使用已知事件时间，Life 保留分时期的来源引用；派生视图不替代 Canonical Detail，dirty/来源失效不进入有效召回。
+- Canonical 编辑、删除与来源变化传播 dirty/revision；后台构建按 Owner 串行、支持取消，并在发布前重验来源和目标文件。手工编辑进入 `manual_override`，底层变化后保留文本并提示冲突，自动任务不能覆盖；保留手工版本仍受来源有效性门禁。
+- 有效 Year/Life 仅提供本轮相关片段，继续服从 C 的 Owner/知情/时间、共用 2+1、整包预算及 V8.13 动态边界。压缩走摘要 Provider，并校验完整来源 ID、条件、否定和传闻限定；失败或截断不发布新视图。
+- D 专项 **17 项**、A Core 26 项、B Profile 15 项、C Planner 34 项及 Temporal Anchors 12 项通过；D/E 独立 QA **37 PASS、0 FAIL**，覆盖来源/可见性变化、手工冲突、异步旧结果、取消、跨战役、未来才获知事实、传闻限定与部分 Legacy 覆盖。本轮 1000 条夹具实际 Recall 读取 25 篇正文（≤32），单次 Recall 275ms、Owner Data 121ms；不是生产时延保证。
+- 完整 `node scripts/test-release.js` **339/339 发布组通过**，408 个测试文件分类、68 个历史归档；Manifest、16 个 D/E 主要 JS 语法与全局 `git diff --check` 通过。真实 Provider 压缩、CK3、缓存与长期 Gate 尚未执行，不宣称 D Acceptance。详见 [D/E 施工记录](V8.14.md#source-892fd023196f)。
+
+<a id="source-bd3947cca735--第一百四十四阶段v814-e-长期记忆管理与-legacy-收口2026-10-03本地发布与独立-qa隔离-ui-通过实机待验收"></a>
+## 第一百四十四阶段：V8.14-E 长期记忆管理与 Legacy 收口（2026-10-03，本地发布与独立 QA/隔离 UI 通过，实机待验收）
+
+- `summaries/summaries-manager.js`、IPC/Preload 与 `renderer/memory4-manager.js` / CSS 将人物认知、Official、Life、Year、Detail、Legacy 接入原摘要页。列表元数据分页，Detail/来源按需打开；主进程复核当前会话、Campaign、Owner 和 expected revision，旧页或旧版本不能覆盖当前内容。
+- 支持 Detail 编辑/删除及派生失效、Year/Life 手工编辑/冲突/来源/重建和后台取消。Official 保持只读；模型重建与覆盖手工版本显式确认，Legacy 单篇重压缩核验当前 source hash 并保留原摘要，来源证据不足继续走 Legacy。原有 Bulk Binding 的 Preview→确认与真实存档 Gate 保留。
+- 三主题内部键 `parchment`、`knight`、`ink` 与玩家名称“游牧”“骑士”“水墨”保持一致；冻结 Recent2、官方追忆、Cache Anchor、3.0 可见标签和 2.5 存储兼容不变。没有全量强制迁移旧摘要、修改玩家配置或调用真实 Provider 验收。
+- E 管理专项与 D/E 独立 QA **37 PASS、0 FAIL**；隔离打包 UI Smoke 经真实 Preload→IPC→Manager→Store 通过，三主题 `1280×1000` 与窄窗口 `540×900` 产生 **27 张截图**，覆盖六层导航、Official 只读、来源、dirty 手工冲突保留、Year 编辑、Detail 删除取消/确认和既有绑定预览取消。未发生模型请求、按钮重叠或横向溢出；截图与结果留在临时隔离配置，未复制进仓库。
+- 旧 `test-v8.12-memory-engine-3.0.js` 与 `test-v8.12.1-part3-closure.js` 中 Official 可编辑预期更新为拒绝编辑/删除和原文零写入，普通摘要仍可编辑；没有放松生产只读合同。隔离启动/导航冒烟首次受沙箱 GPU 限制失败，正常环境复测 exit 0，Provider 设置、摘要恢复/诊断、Worldline Archive 与 Memory 控件通过，Renderer 异常为空；无模型生成请求。
+- 完整发布 **339/339 组通过**，408 个测试文件分类、68 个历史归档，相关语法及全局差异检查通过。新 UI 自动化不等于玩家配置、真实 CK3/Provider、Bulk Binding 存档提交、缓存或 Soak，不能宣称 RC 或 Full Freeze。详见 [D/E 施工记录](V8.14.md#source-892fd023196f)。
+
+<a id="source-bd3947cca735--第一百四十五阶段v8141-traitprofile-与-memory4-生产链收口2026-10-03-实施2026-10-04-本地发布门禁通过实机待验收"></a>
+## 第一百四十五阶段：V8.14.1 Trait/Profile 与 Memory4 生产链收口（2026-10-03 实施、2026-10-04 本地发布门禁通过；实机待验收）
+
+- 开场 Frozen Worldline 的 `activeParticipantIds` / Runtime Context 改用真实 `presentCharacterIds`；被选择但未入场的 NPC 不再成为虚构提及或参与者。Late Join 进入动态尾部但不回写开场冻结基线。
+- Memory4 终局 Snapshot 从通过可见性校验的实际对话推导 direct `counterpartIds`，共场和第三方提及不会升级为直接对话对象。原生 Presence、Visibility、Finalization 的已验证证据可以完整记录；空或缺失完整来源的旧 Known Entity 保留为 `legacy_partial`，不抹为“从未认识”。Owner sidecar 依 Owner ID 定址，冲突 Legacy 目录 fail-closed。只记录可见、字面第三方提及，不虚构 Presence。
+- 承诺持久状态收敛为 `active`、`fulfilled`、`cancelled`、`superseded`；履行/取消/替代须绑定正确的原承诺、具体来源证据、游戏日期和 revision。沉默、否定、疑问、计划、传闻、错误说话者、重复承诺和模糊绑定不能转移状态；事务失败回滚，来源变化会撤销陈旧召回并使 Year/Life 失效。
+- 信件知识 Prompt 只召回收信者本人在当前 Campaign、Owner、日期与 `knownBy` 范围内可用的历史。发送者私人目录、未绑定旧摘要、未来或未知获得日期、陈旧 ACL 不会进入信件 Prompt；构建过程只读，不提交 Memory Seen、Knowledge 或 Mention Tracker 状态。
+- 新增 `prompts/trait-profile-selector.js` 并投影所有生产 Prompt 入口。Self 保留全部原始 Traits；Observed 只允许已登记 V1 的 canonical IDs/本地化标签，私密类别全量隐藏，未知 Mod Trait 对陌生观察者默认隐藏。Known 仅由当前 Owner/Campaign/Date/ACL、witnessed/game-fact 来源、正向具体 Trait 断言和可重验引用逐项恢复。否定、未来、谣言、转述、自称、引用及玩笑不会授权隐藏 Trait；不改原始 CK3 Trait 数组。
+- 玩家身份边界继续生效，旧画像缓存夹具更新为当前知识门禁；非运行时画像的缓存使用 `v8.14.1` 命名空间和他人 Trait scope 指纹。这不是 GLM Provider 缓存调优，不改变 Cache Anchor、Prompt Block ID 或布局。GLM / DeepSeek 真实前缀 A/B 延期至 V8.14.2。
+- 专项：Opening Presence PASS；Letter Knowledge PASS；Memory closeout **18 项**；Trait Profile Routing **14 项**；玩家身份 **13 项**；修复后的 production pipeline **16 PASS / 0 FAIL**，独立 QA 确认。Manifest 当前统计 **344 发布组 / 413 分类测试文件 / 68 历史归档**。以上离线夹具不等于真实 Provider、CK3 信件往返、Mod Trait 可观察性或 Soak 验收。
+- 最终独立 GPT-6 Luna Max 复核发现承诺绑定 P1：完成话语“已归还玉印”即使引用原承诺“把玉印封入国库”的完整核心文本，也曾被宽泛语义匹配错误履约。修复要求履行标记直接绑定原义务完整核心与条件；错配、同名物件、重述旧义务及后置否定均拒绝转移，原承诺保持 `active`。修复后负例由独立 QA 复测通过。P2 空/缺失来源的旧 Known Entity 继续标记 `legacy_partial` 并保留识别计数。旧信件 fixture 由 `scripts/letter-pipeline-test-helper.js` 按真实 PromptBuilder 调用适配，payload-race PASS；最终 `node scripts/test-release.js` **344/344 发布组通过**，manifest 为 413 个测试文件、344 个发布组、68 个历史归档。当前本地离线门禁通过；真实 CK3/Provider、完整信件往返及 Soak 仍待人工 Gate，GLM A/B 延至 V8.14.2，不宣称 Freeze。当前文档收口由 GPT-6 Luna Max 执行，早期 Sol 实现仍按各历史报告记录。
+- 本轮仓库卫生：两份“恢复统治阶段特质”决策/本地化源文件分类到 `compatibility-patches/tianjia-benji-repair/`，新增 README 明确手动兼容资料、非自动部署；2 个补丁源、2 个部署备份及原 `dlc_load.json` 备份均与原 Git HEAD blob SHA-1 相同。三份部署前原始备份保存在仓库外临时归档；根 `.gitignore` 忽略 `/.codex-staging/`。未删除旧阶段证据或用户运行时数据。
+- 详见 [V8.14.1 改进与收口实施报告](V8.14.md#source-86a81c2ffe9d)。本阶段尚不签发 Acceptance / Release Candidate / Full Freeze；真实 CK3/Provider、完整信件流程、GLM 缓存实测及至少一小时 Soak 仍待人工 Gate。
+
+<a id="source-bd3947cca735--第一百四十六阶段v8141-实机事故热修2026-10-04本地回归与隔离窗口通过新修复待用户复测"></a>
+## 第一百四十六阶段：V8.14.1 实机事故热修（2026-10-04，本地回归与隔离窗口通过，新修复待用户复测）
+
+- 用户确认陌生人首次对话身份边界与本次人物特质展示 PASS；信件忘记测试，保持 NOT TESTED，不扩大为所有 Trait/Provider/信件 Gate 通过。本次实现、独立 QA 与隔离窗口子代理均为 GPT-6 Luna Max，根模型不变。
+- 兼容 Mod 1.0.1 已部署至原 E: 文档目录：以新版汉番 HUD 去掉东方王朝重新引入的重复日期文本；特质描述缺失定位到已启用的 More Personality Depth 旧 `Faith.Self` 参数，局部模板采用 CK3 1.20 的 `Character.GetRite.Self`，保留其性格特质经验条规则。四个部署文件哈希与源码一致；descriptor 有备份，未改上游 Workshop、加载顺序、存档或运行中的游戏。
+- Memory4 侧车实际已有双方认知，原管理器在读取前要求 Owner 属于活动角色表，导致已保存档案不可见。读取上下文独立后，同明确 Campaign 的既有侧车须经 Owner/索引/metadata 哈希/revision 证明才开放只读档案；原活动 getter 和所有写操作门禁保留。
+- 实际结束对话前另存最小 ID/姓名、Campaign、规范日期与 Context 快照，不保留消息、完整 Conversation 或私密人物字段。新对话优先；非法新上下文结束清旧快照，跨战役不回退。归档认知按加载日期/源版本过滤，不把旧关系当当前状态。
+- 真实 Manager/FinalizationCoordinator 生命周期独立回归及根复跑 **10/10**；D/E 独立 QA **37/0**，兼容专项及 E 管理通过。最终完整发布 **346/346 组通过**，Manifest **415 分类测试文件 / 68 历史归档**，相关 12 个 JS 语法检查通过。
+- 最新隔离打包 UI **30 张截图**通过，覆盖三主题、桌面/窄窗、实际 detach 只读快照与写入零修改；根复看三张归档/来源截图。原版启动/导航冒烟通过且 Renderer 错误为空；UI 禁止 fetch I/O，startup 仅尝试固定 localhost 健康探测，没有模型或外部 API 请求，未触碰用户正在运行的配置或 CK3。
+- 两个 Owner 的长期抽取为 `NO_DURABLE_CONTENT`，另有一次 source mismatch 被拒；缺 Detail 时不伪造年度/人生记忆，Official 无 CK3 导出也不补造。截图 Owner 与当前存档是否一致尚无可靠证据，不跨战役重绑。新兼容/记忆热修、真实 Provider、完整信件及 Soak 交用户实测，GLM 缓存仍延至 V8.14.2，不签发 Freeze。详见[事故热修报告](V8.14.md#source-0261667a1a6a)。
+
+<a id="source-bd3947cca735--第一百四十七阶段v8141-前端显示内容同步2026-10-04本地发布与隔离窗口通过"></a>
+## 第一百四十七阶段：V8.14.1 前端显示内容同步（2026-10-04，本地发布与隔离窗口通过）
+
+- 按用户要求更新前端旧版本和阶段说明：底部区分功能版本 V8.14.1 与 App 2.0.4，记忆总览展示 Memory Engine 4.0，摘要管理、优化、世界书、官方追忆和 Provider 诊断改为当前内容。旧动作实验明确标记已退役，完整信件实机验收仍待完成，GLM 缓存调优仍延至 V8.14.2。
+- 总览准确区分六层记忆、只读档案、摘要计数、Recent2 冻结、动态 Overview/Detail/Life 上限及来源/知情边界；不把无长期事实或缺 CK3 官方导出描述为必须生成。世界记忆旧阶段徽标改为“当前分支”。中英文主要文案同步，不改持久设置键、IPC、Prompt Block ID、Cache Anchor、协议 3.0 或存储 2.5 兼容合同。
+- 最小 CSS 调整使底部版本标签在 Flex 正常流中占位，避免绝对定位覆盖正文。三主题内部键和导航保留，没有重打包 bundled 资源、迁移玩家摘要或修改游戏 Mod。
+- 独立 GPT-6 Luna Max 内容回归先复现 25 项旧内容红例，实现后通过；旧发布测试仅更新显示文案和渲染夹具常量，安全/行为断言保留。最终完整发布 **347/347 组通过**，Manifest **416 分类文件 / 68 历史归档**，17 个相关 JS 语法及全局差异检查通过。
+- 最新隔离打包 UI 覆盖三主题、桌面 1280×1000 与窄窗 540×900，共 **36 张截图 / 36 项布局检查通过**，Renderer 异常为 0。根复看记忆总览、信件待验收说明及官方只读追忆；仅使用无凭据和 CK3 路径的临时配置，无模型或外部 API 请求，未触碰运行中的玩家实例。沙箱 GPU/DLL 首轮失败后正常环境复测通过。
+- 本轮显示同步不扩展既有实机 Gate：陌生人首次对话及本次特质展示沿用用户 PASS，信件仍 NOT TESTED，新兼容/记忆热修、真实 Provider 与 Soak 待用户验收。详见[前端内容同步报告](V8.14.md#source-7129c540f640)，不宣称 Freeze。
+
+<a id="source-bd3947cca735--第一百四十八阶段v8142-owner-scoped-disclosure"></a>
+## 第一百四十八阶段：V8.14.2 Owner-scoped Disclosure
+
+- 新增 `memory-system/memory4-disclosure.js`，将明确说出的现存头衔/特质作为 Owner × Campaign × Entity × Fact 级 evidence 写入 `known-entities.json` 的 `disclosedFacts`。只扫描有合法 Owner 可见性、来源消息/片段与 source revision 的 spoken fragment；目标及当前事实必须可唯一绑定，否定、问句、假设、传闻与歧义 alias 均 fail-closed。未知 Mod Trait 默认不可观察，但可在当前候选与有效披露证据匹配后进入 Known。Finalization 重跑幂等，过期 source revision 不复活。
+- 对话 `finalization_validated_segment` 必须有 `sourceTextVerified` 对应原始源文逐字段落；摘要改写或仅语义相近不会自动披露。保守校验可能漏标，可由用户手工设为 `MANUAL_KNOWN`；不保证每条正常格式的模型输出都会触发。
+- Memory4 Profile 合并当前 Owner 的披露证据；Current Truth 重验当前 GameData，旧头衔不会升级为新头衔，已消失 Trait 不作为当前属性。`AUTO_DISCLOSED`、`MANUAL_KNOWN`、`MANUAL_HIDDEN` 支持 revision 检查与隐藏 tombstone；摘要管理器人物认知页可查看当前候选、来源/日期并逐项手动标记，归档保持只读。
+- 开场冻结各 responder 的 Owner Disclosure Profile，新披露下一场生效。Nickname 默认可见，不授予 canonical name 或精确官职；姓名继续经过身份识别边界。Self/Observed/Known 三通道、Memory Engine 4.0 显示标签、`engineVersion: 3.0`、摘要 2.5 存储合同、Recent2/Recall 顺序、Cache Anchor、Prompt Block ID 和 GLM 静态布局未变。
+- Letter Gate 分为两向：收到的游戏原信在 valid payload 校验后、Provider 回复生成前记录玩家 → 收件 NPC 的 recipient-only 事实；NPC→玩家回信仅在 `LETTER_ACCEPTED` 对应 effect 确已写出，接受回调清理载体并重新 parseLog、同 Campaign/双方 ID/原 payload/日期及投递日复核后记录给玩家 Owner。Letter 专项 **7/7 PASS**（含收件 Owner 目录尚不存在）；用户已确认 V8.14.1 完整信件往返实机 PASS。V8.14.1 历史报告中的 `NOT TESTED` 保留为当时证据，不回写。
+- 根复核以红例发现嵌套亲属 Profile 拷贝时精确头衔可绕过 Owner 过滤；生产递归画像投影已修复，独立 QA 复测通过。另两项 P1 也已修复并独立验证：第三方归属/引号转述（如“钟馗说赵祯是明王”）此前会错误披露目标头衔；明确直接肯定陈述可来自本人或唯一第三方，自身递送 cue 允许，第三方转述、未知说话归属及引号复述拒绝。“我是不诚实的”“我不太诚实”曾因事实词子串误命中，现对目标与事实间的 `不/未/没/非/无` 否定词 fail-closed。最终独立 adversarial QA **31 PASS / 0 FAIL**，离线范围内无剩余 P0/P1。
+- 最终 `node scripts/test-release.js` **352/352 发布组通过，exit 0**；Manifest **421 个测试文件 / 352 个发布组 / 68 个历史归档**。隔离打包 UI 最终 Smoke **34 张截图通过**，证据 `C:/Users/97330/AppData/Local/Temp/votc-e-packaged-ui-weD1Po/ui-evidence/result.json`（无 Provider 请求、固定 localhost 健康探测被拦截、归档 hash 前后不变）；独立 startup smoke **36/36 PASS**，证据 `C:/Users/97330/AppData/Local/Temp/votc-v88-startup-ISkhRd/ui-evidence`，无通用 fetch 拦截器，仅确认无 Provider 请求。24 个相关 JavaScript 语法检查及 `git diff --check` 均通过。当前自动化结果不替代 Disclosure 二人/多人 CK3 知情、耳语、Late Join/Leave、头衔变化/Trait 移除、真实 Provider、GLM/DeepSeek cache telemetry A/B 及 Soak；这些仍交用户实测，不签发 Acceptance、Release Candidate 或 Full Freeze。详见 [V8.14.2 Owner-scoped Disclosure 实施报告](V8.14.md#source-a897e1bc802c)。
+
+<a id="source-bd3947cca735--第一百四十九阶段v8142-摘要编辑与长期抽取事故热修2026-10-04实机复测交用户"></a>
+## 第一百四十九阶段：V8.14.2 摘要编辑与长期抽取事故热修（2026-10-04，实机复测交用户）
+
+- 普通 Legacy 摘要被 Memory4 归档只读包装递归禁用，已移除此错误包装；对话结束后可编辑/删除，Official 后端保护及 Memory4 活动上下文写入门禁保留。
+- 只读日志确认长期抽取有实际请求及重复 `unknown_entity` 拒绝，Owner 95735 六次空归档、零 Detail；没有原始候选证据，不能确定具体错 ID。已证明知情的当前 Owner 可作为相关实体，Prompt 明确分开实体白名单与在场证据并保留旧字段；不扩展其他在场者授权。
+- 全候选实体校验失败且无其他有效结果不再冒充 `NO_DURABLE_CONTENT`，保留失败恢复快照；Legacy 重压缩同样区分失败与真空结果。混合有效条目/承诺转移保留，真正无长期事实不补造。原摘要和历史空记录未自动重写。
+- 新事故专项 10 项、独立 GPT-6 Luna Max QA 8 项、实际 Detail→Year→Life 隔离落盘、生产管线 16 项及归档生命周期 10 项通过。三项新测试已登记，当前 Manifest 355 发布组 / 424 分类文件 / 68 历史归档；完整发布 **355/355**、10 个变更 JavaScript 语法、文档链接与全局差异检查通过。见[事故热修报告](V8.14.md#source-b5ea8c3668b9)。
+- 最新隔离打包 UI 36 张截图通过，包含结束对话后普通摘要真实 Preload/IPC 保存；Provider 请求 0、Memory4 归档写入仍拒绝，根复看两张新截图。首次沙箱 GPU/DLL 限制及测试的中英文按钮/隐藏控件识别问题按真实复测记录，不回写为产品错误。
+- Memory Engine 4.0 可见标签、协议 3.0、摘要 2.5 存储、Recent2、Cache Anchor、Prompt Block ID、Disclosure 源文/知情/时间门禁未变。根模型不变，所有本轮子代理 GPT-6 Luna Max。真实 Provider/CK3 新生成及 Soak 交用户，未宣称 Acceptance 或 Freeze。
+
+<a id="source-bd3947cca735--第一百五十阶段v8142-姓名关系上下文与人物披露热修2026-10-05"></a>
+## 第一百五十阶段：V8.14.2 姓名、关系上下文与人物披露热修（2026-10-05）
+
+- 用户确认详细长期记忆已正常生成，记为该问题实机 PASS；只读核对确认 NPC 正文仍存在“主人”“天师（师父）”泛称，相关披露事实确为空。本轮不自动重写旧记录或调用真实 Provider 回填。
+- Finalization 复用已有关系系统，按 Owner/Campaign/片段/日期给长期抽取提供姓名与关系证据。Owner 明确为记忆持有人；唯一来源姓名与已确认直接关系可帮助归档写出赵太初、张道素及有证据的张道正，短名不扩全名，同名及泛称不猜人物。当前关系不制造历史变化，不将 B-C 关系交给不知情的第三人；恢复保存原关系证据。
+- 原生 `finalizationVisibilityV1` 增加已校验逐字原话片段，避免摘要改写使真实头衔/特质披露失效。已有 annotation 的空隙不扩权，私语/小组及消息 0 保留，伪造摘要、assistant 旁白及旧未标注上下文不会自动公开；撤回证据仍可使直接交谈降为共场。
+- AGE 只接受与当时 CK3 年龄一致的本人当前年龄明示，最小 facts 投影可合法往返。人物认知显示披露时年龄与获知日期，始终为历史 `current:false`，变龄不重算，不提供手工当前年龄按钮。显示 4.0、协议 3.0、存储 2.5、IPC、Recent2、Recall、Cache Anchor 与 Prompt Block ID 不变；内部新证据纳入 source revision。
+- 四个新发布测试已登记；当前 Manifest **359 发布组 / 428 分类文件 / 68 历史归档**。独立 GPT-6 Luna Max 完整链 QA **14/14**，既有 Disclosure QA **31/31**、D/E QA **37/37**、生产管线 **16/16**、Core 26 和旧 A review 10 通过；完整发布 **359/359、exit 0**，相关 25 个 JS 语法通过。首轮完整回归发现旧无 native flag 上下文被原话桥接扩权，已收紧 native 门禁并用独立负例验证，而非放宽旧测试。
+- 隔离打包 UI **38 张截图**覆盖三主题、1280×1000 与 540×900、年龄历史/日期、普通 Legacy 真实保存及归档禁止写入；Provider 请求 0，归档 hash 未改变。沙箱 GPU/DLL 首轮失败后正常环境通过；窄窗截图辅助程序保留年龄行位置，避免滚回顶部漏拍。真实新姓名/Disclosure/Provider/Soak 继续交用户，未宣称 Freeze。详见[姓名与披露热修报告](V8.14.md#source-d9164572f606)。
+
+<a id="source-bd3947cca735--第一百五十一阶段v8142-信件调度与记忆重试热修2026-10-05"></a>
+## 第一百五十一阶段：V8.14.2 信件调度与记忆重试热修（2026-10-05）
+
+- 用户确认等待超过 30 游戏日、可能一年，保存日期却仍停在发送日。读档 on_game_start 未创建日期 runner，应用恢复命令无人读取；Workshop 加入 every_player 延迟一天启动既有 9998，保持对话清理和固定名 runner，不提高轮询频率。官方 Artifact/弹窗配方不变。
+- 旧 LETTER_ACCEPTED 不再消费仅 queued 的回信。接受后重验原信、Campaign、双方 ID 和到期日，先冻结任务，再后台写双向 Legacy、typed letter、episode marker 和逐 Owner Canonical/Year/Life；捕获失败保留 SENT 载荷，只补归档，绝不重投 Effect。
+- 统一记忆重试支持已结束对话的可信 Campaign；模型整理联动 Detail/Year/Life，提取或派生失败进入已有 recovery。同 Owner/Campaign 的来源哈希与 committed proof 在异步期间重验，已提交 Owner/Canonical 不重复抽取；手工版本保留，无长期事实和未知事件日不补造。
+- 真正的 letter ID/正文哈希支撑姓名与时间来源，不伪造消息 ID/同场景；相对日锚定原信日期，精确日不能扩成年。前端增加信件恢复计数和分阶段结果，生产使用现有摘要设置 API。
+- 当前 Manifest **363 发布组 / 432 分类文件 / 68 历史归档**；完整发布 **363/363**、四项新专项及独立 GPT-6 Luna Max 对抗 QA 通过。隔离打包 UI **38 张截图**、三主题/桌面窄窗通过，Provider 请求 0、归档 hash 不变；语法与差异检查通过。Mod 仅静态校验及独立只读审查，不等于 CK3 执行。
+- 完全重启 CK3/VOTC 后读档推进至少一天，验收日期回传、超期信/新信宝物和弹窗、真实摘要；补测对话中存档读档的 talk_scene 生命周期。未更改真实 pending、存档、载体、日志或凭据；历史用户 PASS 保留，本次实机 Gate 尚未签发。详见[实施报告](V8.14.md#source-321423efddc5)。
+
+<a id="source-bd3947cca735--第一百五十二阶段v8142-收口修复2026-10-05"></a>
+## 第一百五十二阶段：V8.14.2 收口修复（2026-10-05）
+
+- 对照用户收口方案及 Review 基线 `469de1c` 修复，主代理集成，普通实现/发布依赖与独立 QA 分别使用 GPT-6 Luna Max。第三人 Assistant 头衔/特质披露仅采信共享直接对白区间；旁白、内心、转述、嵌套引语与 mixed 不授权，原 Owner/可见性/来源校验不变。唯一昵称参与目标绑定，不授予后端真名，昵称/姓名碰撞 fail-closed。
+- Known Entity 旁路记录 Fact Epoch 与快照日期高水位；同事实消失再出现递增编号，旧 AUTO/MANUAL_KNOWN 不复活，MANUAL_HIDDEN 继续有效。首段旧无编号记录兼容迁入 1，一旦观察过消失不再迁入；缺角色/类型字段不视为消失，旧日期与恢复同日冲突不回退状态。
+- 明确 CK3 回读、开场、Finalization、已验证信件及当前手工刷新入口；普通 getter/归档纯读取。快照/恢复冻结逐 Owner epoch，来源哈希包含该证据，新知情仍下一场生效。独立 QA 发现拒绝来源前推进状态风险，现先校验已提交的来源 revision 再刷新。
+- 用户确认方案 B：App/Workshop Mod 独立发布，[外部运行依赖](../../EXTERNAL_RUNTIME_DEPENDENCIES.md)记录必需 Date Runner 补丁、descriptor 与五文件指纹/复核方法；不改外部 Mod，不虚构最低版本或握手。真名物理遮蔽保留技术债；GLM 缓存结构、协议 3.0、摘要 2.5、Recent2、Recall、Anchor/Prompt Block ID 均未改造。
+- 四项新专项取得红例/绿例，独立对抗 QA 通过；生产链 Disclosure QA **32 PASS / 0 FAIL**，包含真实 Conversation -> Finalization -> 下一场 Prompt 的 epoch 传递。完整门禁最终 **367/367 发布组通过**，manifest **436 分类文件 / 367 发布组 / 68 历史归档**，语法/差异检查通过。
+- 隔离实际 VOTC.exe/preload/IPC UI **38 张截图**，三主题与桌面/窄窗通过，Provider 请求 0，归档 hash 不变；沙箱 GPU 首轮失败后隔离目录复跑通过。真实 CK3 信件 L1-L4、多人披露/耳语/迟到离场、GLM/DeepSeek 20-30 轮 telemetry 和 Soak 交用户验收，不签发 Full Freeze。详见[收口实施报告](V8.14.md#source-0a754c11f63b)。
+
+<a id="source-bd3947cca735--第一百五十三阶段v8142-修复3定点收敛2026-10-05回归待执行"></a>
+## 第一百五十三阶段：V8.14.2 修复3定点收敛（2026-10-05，回归待执行）
+
+- 修复第三人 Assistant 引号归属漏判：引号前有说话/引述结构时，按完整角色表中的姓名与昵称解析唯一角色 ID，再与 fragment speaker 比较；指向其他角色或身份歧义时 fail-closed。Disclosure 与 Memory4 实体姓名提取共用该身份校验，不扩充 attribution 动词表；原 nested quote、hearsay、thought、written source 门禁保持。
+- Owner 刷新从每次 CK3 回读时枚举角色表改为只刷新当前 Campaign 下已有且带 Memory4 entry/known-entity 证据的持久 Owner；开场 baseline 限于玩家与本场预选 roster。纯 baseline 空 sidecar 不纳入后台刷新，也不删除旧数据。完整 `gameData.characters` 仍作为事实来源，不裁剪。
+- 复核当前 Workshop 导出脚本后，确认其角色流来自本场 `mcc_characters_selected`、当前对话目标与玩家，不是 CK3 全世界角色全集；修复只收紧 Owner 边界，不按文档假设改写世界数据合同。逐消息 `participantPresence` 已将未入场角色排除在此前对白及 disclosure recipient 外，中途入场后仅后续消息进入其窗口；该可见性逻辑本轮未改动。
+- 本轮只完成源码路径审查与实现记录；自动回归、发布门禁、隔离窗口和 CK3 实机 Gate 尚未执行，不据此宣称修复验收通过或 Full Freeze。
+
+<a id="source-bd3947cca735--第一百五十四阶段v8142-修复4收口"></a>
+## 第一百五十四阶段：V8.14.2 修复4收口
+
+- 修复动作型直接引语归属绕过：不再要求冒号或标准 speech verb 才解析说话者。引号前最近 clause 先按完整角色表进行最长唯一姓名/昵称匹配，再与 fragment speaker ID 比较；其他人物、歧义 alias、复合主语、随从/下属归属 fail-closed。冒号、逗号、破折号、无分隔符与长动作描述统一经过 identity-first 判断，纯直接引语保留原行为。
+- 对独立 QA 暴露的后置 attribution 缺口补上引号后说话者检查，并继续拒绝后置心想、书写来源与传闻。没有新增动作词白名单。Fact Epoch、Owner、Presence、Worldline、Disclosure 存储和 App/Mod 合同均未改。
+- 专项与独立回归：第三人披露、昵称目标、Fact Epoch、Closeout QA、开场/Presence、信件披露 7 组、摘要重试/重建、Letter Retry QA 全部通过；修复4独立 adversarial QA 未发现剩余 P1。完整 `node scripts/test-release.js` **367/367 发布组通过，exit 0**；manifest **436 分类文件 / 367 发布组 / 68 历史归档**。变更文件语法及 `git diff --check` 通过。
+- 隔离打包 UI `node scripts/v8.14-memory-ui-smoke.js` **38 张截图通过**，三主题、桌面/窄窗、Provider 请求 0、归档 hash 不变。沙箱 GPU 子进程首轮因系统 DLL 限制失败，临时隔离目录正常环境复跑通过，证据 `C:/Users/97330/AppData/Local/Temp/votc-e-packaged-ui-TFo6r5/ui-evidence/result.json`。
+- 保留既有 `听到` 转述防护可能误拒正常环境声后的对白这一低优先级 false negative；本版按设计不为提高召回而扩大披露面。真实 CK3 L1-L4、Provider、GLM/DeepSeek telemetry 与 Soak 未执行；不签发 Full Freeze。详见[修复4实施报告](V8.14.md#source-8bd3818fa020)。
+
+<a id="source-bd3947cca735--第一百五十五阶段v8142-p0-第三人记忆召回热修2026-10-05"></a>
+## 第一百五十五阶段：V8.14.2 P0 第三人记忆召回热修（2026-10-05）
+
+- 修复两个连续漏召回点：`MentionTracker` 只把最新玩家一句当作本轮，未纳入可见的 NPC 发言；Memory4 又优先选取 `queryEntityIds`，会丢掉只在 NPC 发言中出现的 D。现在当前轮实体按最后一条玩家消息起的回应者可见历史提取；玩家问题保留代词解析，NPC 发言只贡献明确姓名，不会用过期代词猜人。Memory4 合并玩家查询实体和当前轮提及实体，旧轮次提及不触发。
+- 修复 Legacy 候选预筛遗漏：D 不一定存在于群聊摘要的参与者字段，Memory4 现按本轮解析的唯一实体名匹配 Owner 自有 Legacy 正文。文本匹配复用 MentionTracker 最长 alias 重叠消歧，避免短名“张三”命中长名“张三丰”。Owner、Campaign、`knownBy`、删除/未解析绑定和未来日期门禁均未放宽，不读取 D 的私人目录。
+- 新增红绿回归覆盖 NPC 发言提及、旧轮次隔离、查询与本轮实体合并、B/C 各自摘要及短名/长名重叠反例。Recall Planner 专项 **40/40**，V8.7 当前轮/代词 TTL/历史重置/Conversation 路由 **4/4**，相关运行时代码和测试 `node --check`、`git diff --check` 通过。Windows 沙箱下专项夹具使用仅限测试进程的 EPERM 临时文件替代后通过；普通完整发布门禁在首组 `v8.14-e-memory-ui` 因沙箱原子重命名 EPERM 退出，不能记作完整门禁通过。
+- 未修改存档、用户摘要、CK3/Provider 状态，也未放宽时间或知识 ACL。真实 CK3 多人对话验收仍待用户实测；离线回归不等于实机结果。详见[P0 第三人记忆召回热修报告](V8.14.md#source-05f11f3feb6b)。
+
+<a id="source-bd3947cca735--第一百五十六阶段v8142-天朝制低级头衔任命兼容热修2026-10-05"></a>
+## 第一百五十六阶段：V8.14.2 天朝制低级头衔任命兼容热修（2026-10-05）
+
+- 对照原版 appointment schema 与汉番覆盖，确认 `lower_or_equal` 仍有法理上级例外，汉番同级/降级原罚分只有 100。采用用户授权的 -10000 方案，不添加引擎未列出的硬性候选过滤字段。
+- Three-Mod 1.0.2 仅接管文官、武官总督两份任命定义，保留汉番原有配置，在评分末尾增加独立值：有领主且最高头衔至少王国级、严格高于待任命头衔时扣 10000。原有姓名、日期、特质提示框不改；同步汉番依赖名 `oe ver.0.55`。
+- 扩展既有专项：规则解析、13 等级边界、两条评分链与 UI 兼容通过。独立 GPT-6 Luna Max 13 反例及上游结构对照通过；完整门禁首轮沙箱 EPERM，正常环境复跑 **367/367、exit 0**，清单 **436 分类文件 / 367 发布组 / 68 历史归档** 不变，语法与差异检查通过。
+- 五文件已部署到 E: 本地 Mod，并核验源/安装哈希一致、其余旧文件未变；旧描述符备份在系统 Temp。补丁仍为当前 Playset 最后项，未改启用顺序、Workshop、游戏本体或运行时数据。
+- 扣分不是硬移除候选，不回滚已继承头衔。汉番重复 civic/缺 military 值属于既有上游异常，本轮不擅自重写；真实 CK3 文武候选评分及最终继承待用户验收。详见[实施报告](V8.14.md#source-923846b25ae2)。
+
+<a id="source-bd3947cca735--第一百五十七阶段10-月征召兵减少只读排查2026-10-06"></a>
+## 第一百五十七阶段：10 月征召兵减少只读排查（2026-10-06）
+
+- 按 45 项启用记录核对 Workshop ACF 与目录创建时间，优先排查 7 个 10 月新目录及 13 个 10 月更新旧 Mod；检查全局 defines、普通政体/地产/征兵契约覆盖和局部减兵来源。
+- More Lifestyles 围城地产修正可到 -100%，征服者县修正可到 -90%，但来源与持有范围并非无条件全局。复用现有存档结构解析 API 只读核对：宋、神罗各仅 1 县带 WC 减兵修正；新 Mod 前旧战役也存在低 levy 缓存。不同日期/战役不能充当受控 A/B。
+- 独立 GPT-6 Luna Max 源码因果复核未找到 7 新 Mod 的统一全球减兵路径，当前不能唯一认定元凶。尚需军队面板兵源分项及同书签实机对照；未更改 Playset、Workshop、游戏本体、App 代码或运行时数据。没有发布补丁，也没有将排查当成修复通过。详见[调查报告](V8.14.md#source-7cc06018e7c8)。
+- 第二轮按用户全部加载顺序，分派三位 GPT-6 Luna Max 核查 45 项描述符、覆盖链、裸 levy/基础标量、政体契约及开档脚本。用户自行确认仅东方王朝 1032 仍低兵、1066 宋征召兵 11111/11111 正常；其他 44 项不是本场景复现的必要条件，未推断完整组合或所有年代均通过。
+- 1032 会落入原版早于 1066 的较低建筑填槽/升级基值，旧存档也有绝大多数城堡一级的证据；这支持初始建设偏低，但没有旧版同书签对照，不能宣布新回归已定因。复核并纠正 WLTDJ 王国补位日期为 882-1200，不能将它与截至 1033 的公爵补位混为同一窗口；地域/独立伯爵门禁不支持其剥离既有神罗封臣。局部 nommad_holding 拼写错仅记录，不冒充全球元凶。只更新文档，未实施游戏修复。
+
+<a id="source-bd3947cca735--第一百五十八阶段v815-memory4-召回与删除一致性2026-10-06"></a>
+## 第一百五十八阶段：V8.15 Memory4 召回与删除一致性（2026-10-06）
+
+- 按用户 V8.15 方案，以 `cdd1632` 为代码基线；实现与独立 QA 子代理均为 GPT-6 Luna Max。显式人物目标和在场人物分离，双人、三人、四人询问同一 C 搜索回应者自己的完整摘要；不将所有在场者自动提升为目标，不放宽 Owner/Campaign/knownBy/时间与身份门禁。
+- 新增稳定人物对 projection lineage 和持久忘记账本，接入现有 mutation journal。摘要删除联动 Base、Canonical、Year/Life 正文、Disclosure、Recovery 与冻结 Prefix，重启和迟到恢复不能复活；共享片段保留其他人物对的证据、真实 Presence 和原 source revision。信件精确映射 letter 来源，删除收件人投影不影响发件人，重试不重新授权被删除接收者。
+- 保留未完整迁移、未知标题和过时哈希的 Legacy Narrative；超长摘要提取相关中段，历史承诺不等于当前有效。新增仅含有限 ID/计数的召回与删除诊断，前端功能版本更新为 V8.15；显示 4.0、协议 3.0、存储 2.5、App 2.0.4、Prompt Block IDs 和 Cache Anchor 不变。
+- 新增 5 个登记发布组，清单为 441 分类文件 / 372 发布组 / 68 历史归档。独立生产合同 QA 5/5、持久遗忘专项、Legacy 13/13、实际信件归档删除/重启/重试和隔离打包窗口 38 张截图通过；最终完整发布门禁 **372/372、exit 0**，32 个变更 JavaScript 语法与差异检查通过，进入 Freeze Candidate。详见[实施报告](V8.15.md#source-5de6a96d9370)。测试夹具按新合同更新缓存失效断言，不降低来源或可见性验证。
+- 收口补测并修复删除前的披露读取快照与信件 Projection PENDING 重试：批量披露零额外读盘合同保留；信件重写可见摘要前检查持久遗忘，已删收件人摘要与认知不复活，发件人保留。独立只读复审未发现剩余 P1。
+- 未修改真实 CK3、Workshop、用户运行时摘要或凭据。相关旧 proof 无精确来源时 fail-closed，失败回滚且不伪报成功；此前已删除并丢失来源的数据不凭空回填。真实 L1-L7、四人、Provider/缓存遥测和 Soak 仍交用户，不签发 Full Freeze。
+
+<a id="source-bd3947cca735--第一百五十九阶段v815-修复12026-10-06"></a>
+## 第一百五十九阶段：V8.15 修复1（2026-10-06）
+
+- 按用户修复1方案收口，主代理沿用客户端模型，实现与独立 QA 子代理均为 GPT-6 Luna Max。最终 Detail 选择只用显式目标 Legacy 替换最低分非目标，不互相淘汰显式目标；Canonical/Legacy/Derived 预算统一优先保留目标。超长目标在无关条目移除后再次提取相关中段，Detail 上限、1200 token cap 和无显式目标路径保持。
+- 不确定 Durable Forget 在 Base 和可见摘要修改前抛出 `MEMORY4_FORGET_INCOMPLETE`，现有 journal 完整回滚；computed folder-summary ID 不建立持久 lineage。仅正向证明 scope 不存在、无来源、无相关 Recovery 时 safe skip，损坏/未知路径不作零 footprint。编辑不把解析器计算 ID 注入原始持久来源，旧 fallback 撤销仍保留。
+- 新增只读 Orphan Audit 和逐条明确确认 Forget 的 preload/IPC 诊断入口；DTO 不包含正文，没有启动时清理。执行重验文件指纹 token 与当前 Owner/Campaign/context，归档只读不绕过写门禁。缺失人物对、共享正文覆盖不足、仍可见摘要引用共享 Legacy ID 均 UNKNOWN；可证明独立的 A 投影遗忘后 C 保留，重启不复活。
+- 实际 Conversation -> Planner -> Packet/temporalExtraText -> PromptBuilder 请求消息验证显式 C sentinel；Orphan 专项验证跨层遗忘/重启、字节级只读、共享 C 与过期确认。旧回归夹具补齐真实 Campaign/Owner/人物对/source，不修改原始断言迎合失败，不放宽生产门禁。
+- 最终验证结果见[修复1实施报告](V8.15.md#source-e81d08fa2765)。七组 V8.15 专项 7/7，独立对抗 QA 15/15，最终完整发布 **374/374、exit 0**；清单 443 分类文件 / 374 发布组 / 68 历史归档。20 个变更 JavaScript 语法与差异检查通过，收口为 Freeze Candidate。零 footprint 专项另覆盖异常 Owner 普通文件路径，拒绝并保留原字节。
+- 隔离实际 VOTC.exe/preload/IPC 验收通过，三主题/桌面窄窗 38 张截图、Provider 请求 0、归档 hash 不变，普通摘要真实编辑保存和归档写保护保留。未修改 Fact Epoch、Presence、Worldline、Speaker Provenance、Owner/Campaign 授权、信件运行时或 Three-Mod，未读写真实用户摘要、存档或凭据。真实 L5-L8、Provider/cache telemetry 与 Soak 交用户，不签发 Full Freeze。
+
+<a id="source-bd3947cca735--第一百六十阶段v815-修复112026-10-06"></a>
+## 第一百六十阶段：V8.15 修复1.1（2026-10-06）
+
+- 按用户小修方案，核对基线 `69dbfe0b617e00da7a55e73783233c514af34d8c` 与干净工作区；主代理沿用客户端模型，独立 QA 使用 GPT-6 Luna Max。只修改 Legacy Overview 一个入选条件：显式未拆分 Narrative 可替换非目标 Derived，两个显式目标之间不强制覆盖，普通 Legacy/通用查询保持旧行为。
+- 删除被跟踪的零字节 `__invalid__`，没有修改 Three-Mod、Workshop、Fact Epoch、Presence、Worldline、授权、Disclosure、信件或 Orphan/持久遗忘运行时。协议 3.0、存储 2.5、显示 4.0、App 2.0.4、Detail 上限及 1200 token cap 保持。
+- 新红绿测试验证未拆分目标/目标 Derived/普通 Legacy/通用查询与超长中段；真实 Year/Life + 当前 NPC 提及场外 D 构成合法非目标 Overview 竞争，Conversation -> Packet -> temporalExtraText -> PromptBuilder messages 均保留 C sentinel。Legacy 15/15、生产 QA 8/8、七组专项 7/7 已通过；完整发布及最终验收结果见[小型收口报告](V8.15.md#source-aa9fc7d0c608)。
+- 独立对抗 QA 18/18、最终完整发布 **374/374、exit 0**，四个变更 JavaScript 语法与差异检查通过；隔离实际打包窗口三主题/桌面窄窗 38 张截图通过，Provider 请求 0、归档 hash 不变。清单保持 443 分类文件 / 374 发布组 / 68 历史归档，收口为 Freeze Candidate。
+- 真实 CK3 L5-L8 与新增 L9、Provider 输入/缓存遥测、Soak 仍交用户，不宣称 Full Freeze；不再扩大 Memory4 架构范围。
+
+<a id="source-bd3947cca735--第一百六十一阶段v815-世界线与记忆逐链路审查2026-10-06"></a>
+## 第一百六十一阶段：V8.15 世界线与记忆逐链路审查（2026-10-06）
+
+- 按用户要求只读审查，三条独立支线使用 GPT-6 Luna Max；不修改生产逻辑、测试或真实用户数据，保留修复1.1的未提交改动。实际源存档重解析与 checkpoint 日期/指纹一致，112,156 人物、20,835 头衔、129 战争与 67,085 唯一身份绑定可读，但新 rite/faith 链未接入、文化 runtime ID 直接进入 Prompt；关系 0 sentinel 存在条件性兼容缺口。
+- 确认合法快照阶段瞬态失败无持久重试任务、重启恢复已提交 Detail 不补派生调度、canonical-only sidecar 被 Legacy 目录门禁挡住，以及同 Owner 刷新后旧正文请求可回填。报告按真实数据、生产合成夹具与待实机边界分别列证据，没有用测试全绿推断无故障。
+- 当前 8 Scope、100 条 active Detail 的 index/body hash 和 revision 均一致；事件时间全 unknown，现行合同下没有 Year/Life 派生资格。34 条人物认知没有披露事实，另查姓名不在 TITLE/TRAIT/AGE 合同、Owner 方向和终局依赖。标准自报头衔合成扫描/成功终局通过，提取失败时披露延后；关闭游戏无会话上下文时页面不可读不等于文件被删。实机原话、Owner 与终局状态待补证。
+- 本轮原始完整发布 **374/374、exit 0**，独立 QA 原始命令额外 **18/18**；不采用任何绕过 rename 的结果。当前 live probe 不连通，仅 CHECKPOINT_ONLY；历史与官方追忆 Prompt 注入开关为关闭。未重做 CK3、Provider、隔离窗口或 Soak，不签发 Full Freeze。详见[逐链路审查报告](V8.15.md#source-5383d5f6538d)。
+
+<a id="source-bd3947cca735--第一百六十二阶段v8151-世界线恢复与披露一致性修复2026-10-06"></a>
+## 第一百六十二阶段：V8.15.1 世界线、恢复与披露一致性修复（2026-10-06）
+
+- 按用户要求修复逐链路审查的 W1-W3 与 M1-M4。主代理沿用客户端模型，实现及独立 QA 使用 GPT-6 Luna Max；保留既有未提交修复，不迁移真实用户数据。
+- 新存档 rite/faith/culture_manager 映射进入生产世界线、Current Truth 和 Prompt；关系 0 只按引用字段归一，枚举 0 仍有效。实际 autosave 只读重解析：44,210 名存活角色信仰全部解析，已有文化映射 32,326 个，数字身份输出及未解析映射为 0，源文件 stat 不变；没有启动 CK3 或写 checkpoint。
+- 叙事提交后的恢复材料保留到逐 Owner 可靠交接；快照/遗忘过滤瞬态失败可重试，已提交 Detail 恢复补建 dirty Year/Life，不重复抽取、不覆盖手工版本。canonical-only 召回使用共享 Store 合同，前端详情/错误绑定列表请求世代，拒绝刷新后的迟到旧响应。
+- 人物姓名保留主体绑定，不新增 NAME 类型。投影保留 sourceRole，严格 NPC 自报与可信他人对白可公开当前 TITLE/TRAIT/AGE，披露在来源验证后独立于长期抽取保存；补充关系修饰误授权负例。Presence、Owner/Campaign、Fact Epoch、手工隐藏、持久遗忘及下一场生效保持。
+- 新增 5 个发布组；清单 448 分类文件 / 379 发布组 / 68 历史归档。独立对抗 QA 9 组及恢复故障注入 19 检查通过；最终完整发布 **379/379、exit 0**，24 个变更/新增 JavaScript 语法与差异检查通过。隔离实际 VOTC.exe/preload/IPC 三主题、桌面窄窗 38 张截图通过，Provider 请求 0、归档 hash 不变。复跑时序失败与最终证据见[实施报告](V8.15.md#source-128387404a77)。
+- 功能标签 V8.15.1，显示 4.0、协议 3.0、存储 2.5、App 2.0.4、Prompt Block IDs、Cache Anchor、信件 Gate 和 App/Mod 独立发布关系不变。未知事件日期不自动补年，旧错误正文不自动重写；独立离线档案浏览及未确认字段/性能风险不扩大实现。真实 CK3/Provider/Soak 交用户，不签发 Full Freeze。
+- 用户随后明确新开存档并清空旧摘要；本版不再增加旧摘要迁移、回填或额外兼容功能，以新档生成、披露与失败重试验收为主，既有共享接口不拆除。
+
+<a id="source-bd3947cca735--第一百六十三阶段v8151-三主题阅读与布局优化2026-10-06"></a>
+## 第一百六十三阶段：V8.15.1 三主题阅读与布局优化（2026-10-06）
+
+- 按用户阅读舒适、低刺激、信息清楚与主题契合要求，新增独立 `ui-comfort.css`，在既有主题/Memory4 CSS 后加载，不重生成 bundled JS。Windows 中文字体用于正文和控件，水墨标题保留楷体，字距归零，用户对话字号仍有效。
+- 保留 `parchment=游牧`、`knight=骑士`、`ink=水墨` 的背景和图标。正文区加强遮罩、减少模糊阴影，提升说明文字与浅主题图标对比；导航、Memory4/世界书标签换行，人物认知/世界书表单按面板容器宽度排列，危险色、焦点与系统减少动态偏好保留。
+- 补齐语言菜单名称/徽章/选中/悬停对比及左右边界定位；真实鼠标验收修复窄窗拖动层遮挡工具按钮。提示词区块与预设字段换行，去除横向溢出，不改变语言设置或提示词内容。
+- 隔离真实窗口最终 102 图通过，覆盖语言打开、未选及已选悬停三状态；名称最低 6.77:1、代码徽章最低 4.63:1，布局/Renderer 错误及隔离 Memory Provider 调用 0。原始记忆编辑/来源/归档流程另复跑 38 图通过，归档 hash 不变；独立 GPT-6 Luna Max 最终只读 QA 通过。
+- 扩展既有主题专项，增加加载顺序、阅读设置、容器断点及纯色 4.5:1 对比断言；完整发布 379/379，通过清单仍为 448 分类文件 / 379 发布组 / 68 历史归档。独立 GPT-6 Luna Max 实际窗口与最终截图结果见[界面实施报告](V8.15.md#source-c4175279e2ff)。非发布组的视觉 smoke 不增加 test-manifest 计数。
+- 不改 IPC、记忆、信件、Provider、存储协议、窗口拖动/缩放合同或真实用户数据。静态主题预览同步，但不冒充真实 Renderer；CK3 实际叠加、用户显示缩放及长时体验仍待用户，不签发 Full Freeze。
+
+<a id="source-bd3947cca735--第一百六十四阶段v8152-可观察特质与人物披露收口2026-10-07"></a>
+## 第一百六十四阶段：V8.15.2 可观察特质与人物披露收口（2026-10-07）
+
+- 按用户设计和补充要求，从 `f15c385ddb29504ca4d025805808ddad8d8387e1` 实施；主代理沿用客户端模型，实现及独立 QA 均使用 GPT-6 Luna Max。统一 canonical Trait Visibility Policy，保留原 38 项白名单，参照用户百科与本机原版补入伤疤、瞳孔浑浊、麻疹及独立 `weak` 虚弱，共 42 项；不把整个身体/健康类别或未知特质公开。NPC Self 保留完整可见、隐藏及未知 Mod 特质。
+- 首次 Provider 前、入场/返回、实时刷新执行真实 Presence 两两观察；保存独立 DIRECT_OBSERVATION 证明，离场关闭当前标记但保留历史。当前观察拒绝手工伪造未知；动态伤势消失后退出当前 Profile，日期回退排除未来观察、保留首次/最后真实日期，变化刷新既有稳定 Profile 和前缀缓存。
+- 拒绝“勇敢地/勤勉地”和未来身份误披露，来源弹窗各返回路径校验列表请求世代。修复“你今年多少岁”→“今年13岁”省主语年龄问答，以及“我今年16岁比你大三岁”比较后缀漏记；问答均进入来源证据，Owner 可见、同场、无插话且数值匹配当前 CK3 才接受，不从年龄差推算。按用户追加要求，合法披露后授权该 Owner 读取 CK3 当前年龄，UI/Prompt 随数据刷新更新；历史披露时年龄与日期保留，不伪造新披露。归档、未授权、未来和已遗忘来源不获得实时年龄。
+- App 解析新旧 Trait 日志，独立 Workshop `3346777360` 的角色/子女/兄弟姐妹三个输出流加入 canonical ID；沿用方案 B，必需外部文件和 SHA-256 记录在依赖文档。未改 Three-Mod、日期/信件载体、Recall/Forget/Recovery 主结构、Fact Epoch/Presence 语义、Prompt Block IDs、Cache Anchor、协议 3.0、存储 2.5 或 App 包 2.0.4。前端功能标签为 V8.15.2。
+- 新增并登记七个发布组；最终原始完整发布 **386/386、exit 0**，清单 **455 分类文件 / 386 发布组 / 68 历史归档**。24 个新改 JavaScript 语法与差异检查通过。独立 QA 真实走 Conversation→MemoryEngine/Store→Selector→PromptBuilder→本地捕获 Provider，验证 Self/Other、42 项白名单、首轮、场外/加入/离场、动态事实、日期和缓存；年龄另走保存/重启/人物认知 DTO，最终只读复审未发现剩余 P0/P1。
+- 隔离真实 VOTC.exe/preload/IPC 三主题、桌面/窄窗 40 张截图通过，Provider 请求 0，归档哈希不变；观察标记、当前隐藏门禁、历史年龄及旧编辑流程保持。完整证据与百科查漏边界见[实施报告](V8.15.md#source-5db66c1da43a)。未读写真实用户摘要、存档、日志或凭据；真实 CK3 L10-L15、年龄原话、远端 Provider、缓存遥测和 Soak 待用户，不签发 Full Freeze。
+
+<a id="source-bd3947cca735--第一百六十五阶段v8152-修复1未来披露与多人年龄旁听2026-10-07"></a>
+## 第一百六十五阶段：V8.15.2 修复1：未来披露与多人年龄旁听（2026-10-07）
+
+- 按用户修复1文档，从干净基线 `3b894e78e66d2e46f5b51446eaf4a9ad343a0b5d` 实施；独立 QA 使用 GPT-6 Luna Max。生产仅改 `memory4-disclosure.js`，先复现“我将成为皇帝”错误当前授权，再补齐 Future Guard；玩家/NPC 自报及具名第三人未来 TITLE/TRAIT 不公开，当前肯定正例保持。
+- 多人具名年龄问答可由真实旁听 Owner 记录；唯一目标、回答者、CK3 数值、Question/Answer 双来源、双方听见与实际 Presence 同时验证。双人省主语不退化，多人无可靠目标、同名/多目标、插话及第三人转述拒绝；recipientIds 继续作为听众 ACL，不冒充当轮被问者。
+- 独立 QA 真实走 Conversation→Store→重启/UI DTO→PromptBuilder→本地捕获 Provider，验证两个 Owner 独立授权、历史 13 岁与当前 14 岁分离、听众 ACL 缺口以及 Forget 后 Provider Input 撤销。保留 NPC Self 全量、42 项观察白名单、Recall/Forget/Recovery/Derived、缓存锚点及 App/Mod 独立发布合同；可选 P2 Fingerprint 优化暂不实施。
+- 最终原始完整发布 **386/386、exit 0**；清单保持 **455 分类文件 / 386 发布组 / 68 历史归档**。五个变更 JavaScript 和主要入口语法、差异检查通过；此前预检的新 QA 跨战役错误预期已改为正确抛错断言，不放宽生产授权。详见[修复1实施报告](V8.15.md#source-821d328c40ad)。
+- 隔离真实 VOTC.exe/preload/IPC 三主题、桌面/窄窗 40 张截图通过；AGE 由三人问答真实扫描持久化后新进程读取，显示当前年龄及原历史年龄/日期，Provider 请求 0、归档哈希不变。未操作真实用户数据或 Workshop；CK3 L16-L20、跨年回读、远端 Provider/缓存遥测和 Soak 仍待用户，不签发 Full Freeze。
+
+<a id="source-bd3947cca735--第一百六十六阶段v8152-修复2未来事实与年龄问答边界2026-10-07"></a>
+## 第一百六十六阶段：V8.15.2 修复2：未来事实与年龄问答边界（2026-10-07）
+
+- 按用户修复2文档，从干净基线 `025a25010da9d41918cc57f5c6e008e569d4b633` 实施；独立 QA 使用 GPT-6 Luna Max。先复现“我将是皇帝”当前身份误授权、真实 user 玩家裸答被拒绝、完整注解私密插话未进入 withheld 而旧问句被复用，随后做最小生产修复。
+- Future Modal/Time 在当前谓词之前否决，覆盖将是/将为和主体前后日期型未来，保留当前肯定正例。年龄裸回答允许真实 user/assistant，仍核对唯一目标、回答者、CK3 数值、完整听见与 Presence，不伪装玩家角色标签。
+- 只在 visibility/coordinator 补 ID-only spokenMessageIds，收集应用注解及 validateSourceItem 验证后的发言边界，纳入 sourceRevision；与既有 withheld 一起中止问答间的不可验证发言，不泄露私密正文或改变 ACL。system/internal trace 和完整标注 witnessed/game_fact 不打断；完整自报独立，问答双证据、Owner 隔离、当前/历史年龄和来源 Forget 保持。
+- 独立 QA 经真实 Conversation→Store→重启/UI DTO→PromptBuilder→本地捕获 Provider，验证玩家历史 16/当前 17、两个 Owner 独立证明和遗忘撤权，含私密注解、未分类尾段及 Finalization 已分类隐藏发言的对抗夹具。无 lineage 合成旧 fallback 的跨会话本地 ID 重叠仍 fail-closed 并保留证明，单列限制，不扩大 Forget 改动。详见[修复2实施报告](V8.15.md#source-75ed2fb0892e)。
+- 最终原始完整发布 **386/386、exit 0**；清单保持 **455 分类文件 / 386 发布组 / 68 历史归档**，六个变更 JavaScript、主要入口语法与差异检查通过。隔离真实 VOTC.exe/preload/IPC 三主题、桌面/窄窗 40 张截图通过，真实 user 裸答 AGE 扫描保存并重启展示，窗口 Provider 请求 0、归档哈希不变。
+- 不改 Recall/Forget/Recovery/Derived/Direct Observation 主架构、特质白名单、Self 全量、世界线/动作/信件、Mod 发布结构或 Canonical Trait 外部部署；P2 Fingerprint 仍延期。未操作真实用户数据，实机 L21-L25、真实 Provider/来源 lineage/Soak 交用户，不签发 Full Freeze。
+
+<a id="source-bd3947cca735--第一百六十七阶段v8152-世界记忆保存与摘要日期排序热修2026-10-07"></a>
+## 第一百六十七阶段：V8.15.2 世界记忆保存与摘要日期排序热修（2026-10-07）
+
+- 按用户实机事故排查，主代理沿用客户端模型，实现支线及独立 QA 使用 GPT-6 Luna Max。真实隔离窗口复现 Canon 已存当前日期、后台 checkpoint 更新却使编辑器请求失效，结果和错误无反馈；忙期间暂存通知，操作结束重读当前分支，不重试写入。旧 token 跨分支拒绝及服务端真实日期核验保持。
+- 摘要默认最近日期在上，提供“按日期排序”切换；只排显示投影，保留原文件索引，重试后的刷新自动沿用模式。支持中文及数值日期，同日稳定、未知最后，不改 JSON、文件分组或 Recall/Forget/Recovery/Derived。
+- 新独立 QA 发布组及既有专项通过；最终完整发布 **387/387、exit 0**，清单 **456 分类文件 / 387 发布组 / 68 历史归档**。隔离实际 VOTC.exe/preload/IPC 三主题/桌面窄窗 44 图通过，排序后的真实编辑删除命中正确源索引，归档 hash 不变、模型调用 0；世界记忆另有 3 图及成功保存/跨分支拒绝的先红后绿证据。
+- 详细路径、测试和证据见[热修报告](V8.15.md#source-3d4ca8f09562)。版本与协议不升级，不修改 Workshop 或真实用户数据。真实 CK3 保存/摘要重试及长时体验交用户复测，不签发 Full Freeze。
+
+<a id="source-bd3947cca735--第一百六十八阶段v8152-陌生角色记忆越权排查与防护修复2026-10-08"></a>
+## 第一百六十八阶段：V8.15.2 陌生角色记忆越权排查与防护修复（2026-10-08）
+
+- 针对陌生 D 首句声称听过前场私聊的事故，主代理保持客户端模型，链路审计、实施与独立 QA 均按子代理策略使用 GPT-6 Luna Max。只读核对第一轮请求：唯一记忆块指纹与 D 自身 CK3 官方追忆完全一致，未证实 ABC 对话摘要注入或 GLM 缓存串场，不将合成漏洞当作实机根因。
+- 红测复现并封堵错误知情索引绕过原始 `knownBy` 的召回入口；Worldline 个人记忆元数据也复核。显式转述的源角色必须具备两份授权，阻止错误索引借转述扩权；正常 A 向 D 告知一条事实不授予其他私聊。
+- 短名文件兼容字段按准确玩家/NPC ID 及非空当前 Campaign 过滤同名异人与错战役；追加红测确认其他人物的首都字段无条件进入最终请求，最小化加入非本人私密字段过滤，Self 及原始 GameData 保留。现有动态身份知识规则禁止无来源“听说/传闻”与自动全球传播。不修改 Provider 配置、Prompt Block IDs、Cache Anchor、用户摘要或 Workshop。
+- 新 canonical ACL 与独立最终 Prompt QA 归入清单，旧合法正例补齐原始授权，错误索引负例保留。最终完整门禁 **389/389、exit 0**，清单 **458 分类文件 / 389 发布组 / 68 历史归档**；隔离打包窗口三主题及窄窗 44 图通过。用户确认 D 复述了 ABC 的私聊细节，具体输入来源仍未定案；实际 GLM 回答、CK3 与 Soak Gate 待用户，详见[排查与修复报告](V8.15.md#source-034e27525660)。
+
+<a id="source-bd3947cca735--第一百六十九阶段v8152-隐私信件日期与世界记忆后续修复2026-10-08"></a>
+## 第一百六十九阶段：V8.15.2 隐私、信件日期与世界记忆后续修复（2026-10-08）
+
+- 按用户继续审计及新实机反馈，根代理保持客户端模型，实现与独立 QA 使用 GPT-6 Luna Max。真实默认模板/脚本封堵皇帝头衔、地点控制者别名与远程收件人现场地点旁路；后续红测补上 playerName/aiName 带头衔标量与在场名单裸 fullName 旁路。Self、已披露头衔、姓名主体与信件正文地点保留，UI 名单与原始数据不改。玛蒂尔达复述细节的完整输入来源仍未定案。
+- 信件链只读发现 pending_delivery 未获 DATE 推进，多次 rearm 无 ACK；Mod runner 对话时保留循环、只暂停执行，bootstrap 移至原版玩家已确定的 on_game_start_after_lobby。LetterManager 按日志身份/物理载入偏移隔离日期，支持漏边界恢复、换日志/截断、重复 epoch 与同物理标记幂等，单 FD 与未变日志缓存；保留待投递状态、接受锁和官方接收后摘要门禁，不重发未知 Effect。
+- 世界记忆修复提交视口看不到错误的问题，保存操作区显示结果；搜索使用已验证全名，并提供当前 Checkpoint 玩家选择，不跨存档换人。隔离真实窗口五种范围/当前日期、范围及知情人、合法 live 日期优先、非法日期和秘密缺人可见拒绝通过。真实数据只读未复现全部后台失败，不把正常 fixture 当成用户事故定案。
+- 新增四个发布组，清单 462 分类文件 / 393 发布组 / 68 历史归档；专项、独立 QA 与最终完整发布 **393/393、exit 0** 通过，详见[后续报告](V8.15.md#source-d7355c018ce5)。App/Mod 方案 B 配套快照及最新指纹已记录，真实用户数据未改；CK3 Artifact/摘要、各范围实机保存、陌生人和 Soak 待用户，不签发 Full Freeze。
+
+<a id="source-bd3947cca735--第一百七十阶段v8152-实时日期解析与信件启动合并合同修复2026-10-08"></a>
+## 第一百七十阶段：V8.15.2 实时日期解析与信件启动合并合同修复（2026-10-08）
+
+- 用户实机确认本次陌生 NPC 未读到前场私聊，但信件仍停 30 天、当前日期世界记忆拒绝。只读正式日志证明 init 日期字段被误读为带头衔姓名，年份被误读为总日数；按固定九/十字段 payload 修复，当前日志正确读得 `1086年5月1日`、`396511`，不复制用户正文或改写运行数据。
+- 原版 on_action 明确禁止同名多个 effect；上轮 bootstrap 未覆盖此合并合同。两个父 hook 改为追加独立命名子钩子，保留 LOAD_SESSION 和 after-lobby 延迟一天启动。Mod/App 日期 producer 同时输出日数与完整日历，持续日期同步世界记忆；原 numeric-only 信件合同保留，未知载体不覆盖，已知旧 date-only 载体安全迁移。
+- 独立 QA 找到 LOAD 后 Canon 回退旧 checkpoint 的剩余问题；已禁止新会话等待日期时补写旧日，补齐同日同指纹的 changed/missing load 边界确认。旧离线存档和授权后的指定日期保留；真实 Worker 验证缺日期拒绝、不落盘、新 DATE 恢复。
+- 根代理保持客户端模型，独立 QA 使用 GPT-6 Luna Max；正式 init/rich DATE 真实 Worker、信件迁移/锁及既有分支专项通过。最终隔离 VOTC.exe 五范围/当前玩家、正式日期、持续日期与非法输入拒绝通过，证据目录 `votc-v8152-world-memory-scope-ClLa9m`。最终完整发布 **393/393 PASS、exit 0**，清单保持 462 分类文件 / 393 发布组 / 68 历史归档；中间执行及验证边界见[本轮报告](V8.15.md#source-d640b80d83cd)。现有测试组扩展而非新增，版本/协议/缓存锚点不升级。
+- 本机 `3346777360` 已同步命名 hook，仓库补丁快照与哈希一致；方案 B 独立发布依赖已更新。真实信件宝物、弹窗、已接收摘要与持续日期仍需用户完全重启 App/CK3 验收；没有清空队列或盲目重发，不签发 Full Freeze。
+
+<a id="source-bd3947cca735--第一百七十一阶段v8152-信件执行器生命周期热修2026-10-08"></a>
+## 第一百七十一阶段：V8.15.2 信件执行器生命周期热修（2026-10-08）
+
+- 用户确认世界记忆当前日期保存已成功，本轮保留为该场景实机 PASS；新信 `letter_4` 两个月仍无 Tracker/Reconciled，回复已生成、未到游戏侧投递。只读对照官方 App 2.0.3 与当前队列/日志，确认持续 DATE 未产出；日志主动清除后无 LOAD 不用于断言启动钩子失效。
+- `.9999` 父 widget 单独清理计时器与 `.9998` 子事件完整重建冲突，独立 QA 对实际快照的逆序回调模型先红；本机 Mod 最小移除父 widget 旧清理 state 后变绿。保留两秒轮询与对话暂停、宝物 Effect、ACK、接受锁和接收后摘要，未清空待投递信件或强制重发。
+- 独立 GPT-6 Luna Max QA 覆盖两种创建顺序、重复写信、多次暂停恢复及合成文件保存/恢复，到期只写一次包含官方宝物/接收事件的 Effect，未接收前不摘要。生命周期模型不是 CK3 引擎执行证明；专项及最终完整发布 **393/393 PASS、exit 0**，清单保持 462 分类文件 / 393 发布组 / 68 历史归档，没有跳过检查。详见[本轮报告](V8.15.md#source-dde4f47020cc)。
+- 修正后的 message_clear 与未改行为的 invisible_event 已纳入方案 B 快照，本机/快照哈希一致；没有修改官方 App、Three-Mod、真实队列/信件/载体或世界记忆。真实持续日期、宝物弹窗与接收后摘要仍待用户重启 CK3 后验收，不签发 Full Freeze。
+
+<a id="source-bd3947cca735--第一百七十二阶段v8152-独立日期桥与日志读取器热修2026-10-08"></a>
+## 第一百七十二阶段：V8.15.2 独立日期桥与日志读取器热修（2026-10-08）
+
+- 用户再次实机未通过：A2 阻断且 Tracker 为空。只读游戏日志已有 A2 执行标记，而 App 自 Restarting 后不再完成监听启动。真实旧 TailFile/Manager 背压夹具复现 quit 等待 flush 阻塞，前轮 GUI 生命周期补丁不足以解决完整事故。
+- 参考 V7 RC6 Final Rev2/Rev3，保留正式 votc.txt 持久队列、唯一执行标记、ACK 去重、未知效果禁止回放与接收后摘要；A1/A2 不依赖日期推进。新增专用完整行增量 reader，停止不等待排空，重启串行且退役回调隔离，文件轮转/截断清除半行与日期会话。
+- 本机 Mod 与配套快照新增 registry 全局透明桥和只读 scripted GUI，直接记录 CK3 rich DATE，独立于信件事件、对话窗口和 Run File 日期载体；非对话时仍轮询正式队列，对话时日期独立更新，文件留给原 consumer。旧 runner 在新桥注册后不重复执行，epoch 首次显式初始化。原生组合有本机机制依据，CK3 真正执行仍须验收。
+- 独立 GPT-6 Luna Max QA 覆盖真实 reader/Manager 背压重启、旧回调与截断 ACK、防回放、无日期 A2、同日心跳和接受门禁。完整发布 **394/394 PASS、exit 0**，清单 **463 分类文件 / 394 发布组 / 68 历史归档**；详见[本轮报告](V8.15.md#source-bcd9a4b621c7)。真实 pending/queue/载体前后哈希相同；世界记忆当前日期实机 PASS 保留，未修改该模块。
+- App/Mod 仍方案 B 独立发布，七文件快照及哈希同步。现有信件不清空重发；新档/旧档日期推进、宝物内容、接收摘要、跨存档和长时间运行继续交用户，不签发 Full Freeze。
+- 隔离真实 VOTC.exe/preload/IPC 四阶段 rich DATE/推进/同路径重启/重启后日期通过，状态面板实显 ACTIVE/LIVE/HEALTHY，合成游戏日 420003；证据目录 `votc-v8152-letter-clock-O1yOrf`。Provider 请求 0，仅拦截本机健康探测；断开调试连接后 App 正常 exit 0。未运行 CK3 引擎，原生 bridge 的新档/旧档及宝物/摘要门禁仍待用户。
+
+<a id="source-bd3947cca735--第一百七十三阶段v8152-信件投递后记忆归档热修2026-10-08"></a>
+## 第一百七十三阶段：V8.15.2 信件投递后记忆归档热修（2026-10-08）
+
+- 用户已实机确认日期恢复、信件宝物及完整正文正常，但摘要和人物目录缺失。只读记录显示接受/归档没有完成持久化；既有入口依赖剪贴板回调并重验当前日志，旧发信日期或后来的另一场对话会阻止归档。普通 ACK 不能替代宝物证明。
+- 新信保存原双方姓名与双方关系来源；官方宝物 Effect 创建后的有效 scope 输出带逐信随机 token、战役、双方身份和真实日期的日志回执。精确验证后接入既有 LetterMemoryFinalization，双向摘要与逐 Owner Detail/Year/Life 可独立重试；接受处理串行，错误或重复旧回执不消费下一封，不重新发信。可核对的回信披露与记忆归档分别处理，不从旧来源快照扩权。
+- 独立 GPT-6 Luna Max QA 通过真实 Manager/RunFile/Memory4/GameData/Derived 验证双方目录、长期及年度/人生视图、摘要失败恢复零重发、错误/重复回执和切换当前 NPC；内存 HEAD 负向对照证明旧代码不处理新回执，不冒充完整实机事故复现。维护工具专项验证明确授权、停机、来源快照、备份与幂等；最终安全工具变更后原始完整发布 **396/396 PASS、exit 0**。清单 **465 分类文件 / 396 发布组 / 68 历史归档**，主要入口语法及差异检查通过。
+- 已按用户明确授权仅补建收到的 letter_5 本地归档任务，原记录有备份，其他信件/失败记录保留；无 Provider 请求、RunFile 写入或第二件宝物。复核任务 Narrative 为 PENDING、尝试次数 0，不宣称真实摘要已生成。隔离实际窗口四阶段日期通过、Provider 请求 0、正常 exit 0，证据目录 `votc-v8152-letter-clock-WbBhsy`。
+- 详见[本轮报告](V8.15.md#source-8990505464cc)。本轮未改 Workshop、官方 App、协议/存储、IPC 或缓存锚点；重新启动后的已授权任务生成、新回执实际执行、Provider 和 Soak 仍待用户，不签发 Full Freeze。
+
+<a id="source-bd3947cca735--第一百七十四阶段v8152-旧信件计时管道退役2026-10-08"></a>
+## 第一百七十四阶段：V8.15.2 旧信件计时管道退役（2026-10-08）
+
+- 用户反馈鼠标移动轻微卡顿，要求关闭旧管道。源码确认新桥仍运行 `letters.txt`、旧 runner 仍有空命令计时循环/blur 设置，App stale/start/close ACK 仍能写旧日期载体和排队 rearm。只读 CPU 采样有后台占用，但未形成卡顿调用栈或帧时间证据，不把冗余直接写成实机根因。
+- 旧 runner 改为透明无行为兼容窗口；不可见事件不创建 runner，after-lobby 不调旧启动事件；新桥只执行只读 DATE 和正式 `votc.txt`，App 恢复入口仅等待 native bridge，payload 不再写旧载体，同日心跳仅减少重复日志。旧 A1 禁用，A2 独立起步，正式 ACK/可见结果与记忆回执门禁保持。
+- 独立 GPT-6 Luna Max QA 验证启动/重复 stale/close ACK 无旧 rearm 或载体写入、实时日期到期一次投递、重复回执不重发/归档；旧 HEAD 内存负对照确切复现未知载体覆写 RED。既有日期/会话/接受专项按新合同更新；最终完整发布 **397/397 PASS、exit 0**，清单 **466 分类文件 / 397 发布组 / 68 历史归档**，无跳过发布组。
+- 隔离真实窗口 DATE 四阶段、A1 disabled/A2 enabled、异常 0、Provider 请求 0、正常 exit 0；证据目录 `votc-v8152-letter-clock-Kil2xS`。本机 Mod 与七文件快照哈希匹配，方案 B 依赖已更新；没有修改真实信件/队列/摘要、官方 App 或 Three-Mod。须完全重启 App/CK3 停止旧内存循环；鼠标流畅度、实际收信摘要和 Soak 待用户，详见[退役报告](V8.15.md#source-a266cec81f47)。
+
+<a id="source-bd3947cca735--第一百七十五阶段v8152-用户实机验收更新2026-10-09"></a>
+## 第一百七十五阶段：V8.15.2 用户实机验收更新（2026-10-09）
+
+- 用户确认信件归档验收通过，对应[信件记忆归档热修](V8.15.md#source-8990505464cc)；此前单封补建的待生成记录保留为操作时快照，不推断具体信件编号或逐项异常场景结果。
+- 用户确认旧计时管道退役后卡顿改善、日期和信件持续正常，对应[退役报告](V8.15.md#source-a266cec81f47)。记录改善，不改写为所有卡顿完全消除或已确定唯一根因。
+- 用户确认年龄刷新、多人披露验收通过，对应[人物披露实施报告](V8.15.md#source-5db66c1da43a)及后续修复1/修复2；不将概括确认转换成 L10-L25 全部用例逐项通过。
+- 本次只同步文档中的用户实机确认，没有修改生产代码或运行时数据，没有重跑测试或调用 Provider。上一轮 397/397 发布组与隔离窗口证据保留原日期；跨 Provider、缓存遥测、跨存档异常场景及长时间 Soak 仍需独立证据，不签发 Full Freeze。
+
+<a id="source-bd3947cca735--第一百七十六阶段v8152-用户实机验收补记2026-10-09"></a>
+## 第一百七十六阶段：V8.15.2 用户实机验收补记（2026-10-09）
+
+- 用户确认跨 Provider、缓存遥测和长时间运行均已验收通过；此前第一百七十五阶段将这三项列为待验收，现由本阶段更新状态。
+- 用户补充确认跨 NPC 对话不会出现内容泄露，作为本轮实机验收结果记录。
+- 连同第一百七十五阶段确认的信件归档、退役后卡顿改善、日期与信件持续正常、年龄刷新及多人披露，以上项目均为用户实机验收通过。此前实施报告里的待验收清单保留为当时快照。
+- 本次为文档状态补记，不重跑自动化测试，也不额外推断未提及的边界场景结果。
+
+<a id="source-bd3947cca735--第一百七十七阶段v8152-年度与人生获知日期归档热修2026-10-09"></a>
+## 第一百七十七阶段：V8.15.2 年度与人生获知日期归档热修（2026-10-09）
+
+- 用户反馈摘要和 Detail 正常、Year/Life 自动与手动均无法生成。只读发现 6 个非空 Owner 共 172 条 Detail 的事件日期均未知，但获知日期有效；旧派生仅取事件年份，全部过滤后仍返回 COMPLETE。这是本次直接根因，其他抽取恢复错误单列，详见[审查与修复报告](V8.15.md#source-51d86bdb7169)。
+- 用户明确确认按获知年份归档并标注；事件日期明确者保留发生年，未知者显示“本年获知，事件日期未知”，原始 Detail 不改写。计划排除，压缩丢标或混合两种来源拒绝发布；召回区分 event/acquired/mixed，指定事件窗口不能以获知日期证明事件发生。
+- 根代理完成生产修复，独立 GPT-6 Luna Max QA 10/10 通过；生命周期红测转绿 17/17，D/E 独立 QA 37/37，恢复专项 19/19 与 UI 专项通过。信件专项旧未知日期断言按新合同改为验证获知年、标注及保留原始未知日期后通过；最终原始完整门禁 **398/398 PASS、exit 0**。新独立 QA 登记唯一清单，当前 467 分类文件 / 398 发布组 / 68 历史归档；语法与差异检查通过。
+- 隔离真实 VOTC.exe 中实际点击年度生成并接受确认，获知年份年度和人生片段均生成；三主题/窄窗共 48 图通过，年度/人生展开图已目视复核。Provider 请求 0，证据目录 `votc-e-packaged-ui-YT9X1r/ui-evidence`。没有修改真实运行时记忆、Provider 设置、Workshop、IPC 或缓存锚点；显示 4.0、协议 3.0 和存储 2.5 保持兼容。
+- 已有真实来源需完全退出并重开 VOTC 后，在年度页重建；不需删除或重新抽取长期记忆，本轮真实生成待用户验收。第一百七十五/七十六阶段的既有实机验收继续保留。
+
+<a id="source-bd3947cca735--第一百七十八阶段v8152-修复5可靠性与性能收口2026-10-09"></a>
+## 第一百七十八阶段：V8.15.2 修复5可靠性与性能收口（2026-10-09）
+
+- 按修复5设计，仅处理 EOF 跳过停机回执、DATE 同步历史回扫及年度预算。停机/reader 暂停红测转绿，新增发送时物理日志/LOAD/EOF 锚点证明，启动恢复只扫描原范围完整回执；普通 ACK、错误身份/日期、新 LOAD、半行 LOAD、轮转/截断、无证明或超限均保留 pending，不重寄。
+- 接收证明先以 version 4 兼容字段原子落盘，再捕获既有归档任务。独立 GPT-6 Luna Max 22/22 对抗测试覆盖证明后崩溃、实时/恢复竞争、前封迟到回执、原双方来源及 DATE 边界；投递前扫描失效立即停止 Effect 写入。派生日期 scanner 冷启动按 64 KiB 分块让出事件循环，常规 DATE 只读新增字节及 256 字节锚点，UTF-8 与同 token 新物理 LOAD 保持。
+- Year 硬限 1500/目标 1200；Life 片段仍硬限 1000/目标 700。输入免压缩、模型输出与来源标注后校验统一按 kind；Recall 400、生成 maxTokens 4096、Source ID、事件/获知年份、Forget、手工覆盖与缓存保护保持。预算专项 8/8；四个新组登记清单，471 分类文件 / 402 发布组 / 68 历史归档。最终原始完整门禁 **402/402 PASS、exit 0**，语法/差异与文档链接检查通过，详见[实施报告](V8.15.md#source-258f035c9060)。
+- 最终生产变更后隔离真实 VOTC.exe 的日期四阶段及回执恢复第五阶段通过（Main 内真实 Manager/reader/finalization 合成夹具绑定既有 Preload/IPC）；Effect 一次、摘要一次、双方两份、SENT 且锁空，Provider 请求 0、异常 0、正常退出。证据目录 `votc-v8152-letter-clock-8VkNSH`。年度生成实际按钮及三主题/窄窗 48 图通过，年度/人生展开图已目视核对，证据目录 `votc-e-packaged-ui-D2cec1/ui-evidence`。
+- 未改真实信件/队列/记忆、CK3 日志、Provider 凭据、Workshop、官方 App 或 Three-Mod；协议 3.0、存储 2.5、显示 4.0 与既有 IPC 保持。第一百七十五/七十六阶段 USER_CONFIRMED 继续保留；用户已有 Detail→Year、Year→Life 与真实压缩仍 NOT_TESTED，本轮新增真实崩溃/跨旧存档及大日志实机验证单列，不签发 Full Freeze。
+
+<a id="source-bd3947cca735--第一百七十九阶段v8152-密集年度压缩中断修复2026-10-09"></a>
+## 第一百七十九阶段：V8.15.2 密集年度压缩中断修复（2026-10-09）
+
+- 用户反馈只生成到 1084 年且出现质量错误。只读确认截图 Owner 后续有 56 条 Detail（1085 年 23、1086 年 25、1087 年 8）；58 篇摘要最晚到 1087，无 1088 年来源。1085 是首个超过年度硬限的年份，模型质量失败直接中断旧批次，后续年度/人生未执行；旧日志不区分预算、条件原文或日期标注具体失败项，不推断原始响应。
+- 压缩输入补齐逐来源原文要求和本地日期标注预算，质量失败可带明确反馈修正一次；来源集合、完成状态、取消及硬限保持。年度批次中某年压缩失败后仍继续其他年份，整体保留 FAILED 和失败年；年度缺失不生成不完整 Life。失败后 Renderer 重读最终状态，移除过时 RUNNING/停止按钮；诊断仅记录失败年份与计数。
+- 红测转绿预算 10/10，独立 GPT-6 Luna Max 对抗 QA 10/10，既有生命周期 17/17、获知 QA 10/10、D/E QA 37/37 与 UI 合同通过。最终原始完整发布 **403/403 PASS、exit 0**，未跳过组；新组登记清单，472 分类文件 / 403 发布组 / 68 历史归档，语法/文档链接/差异检查通过，详见[本轮报告](V8.15.md#source-c9c263e92ee8)。
+- 隔离实际 VOTC.exe/preload/IPC 49 图通过，失败画面已目视复核，明确 FAILED 年份且无正在生成/停止任务；后续实际按钮用合格响应恢复 Year/Life。合成模型调用 3 次、真实 Provider 请求 0，证据 `votc-e-packaged-ui-KEFQpH/ui-evidence`。首次视口断言失败后保留断言并补充画面诊断，原命令重跑通过。
+- 未修改真实摘要/Detail/Year/Life、队列、CK3 日志、凭据或 Workshop。显示 4.0、协议 3.0、存储 2.5、IPC、缓存锚点、Recall 400 与单次 maxTokens 4096 保持；软目标可为必要原文让步，Year 1500/Life 1000 硬限不放宽。此前 USER_CONFIRMED 保留；真实密集年度与人生压缩仍待用户重启 App 后重建验收，无需删除原始来源。
+
+<a id="source-bd3947cca735--第一百八十阶段v8152-空闲载体后台消费与流官交接修复2026-10-10"></a>
+## 第一百八十阶段：V8.15.2 空闲载体、后台消费与流官交接修复（2026-10-10）
+
+- 控制台重复空 Effect 来自正式轮询遇到零字节载体。空闲状态改写带 BOM 的恒假空操作；实时／启动 ACK 仅清除当前已确认自有命令，外来载体与损坏队列保留。独立 QA 另复现并修复 `clear()` 覆盖外来正文；FIFO、原子替换与未知效果不重放保持，普通 run 回显仍可能存在，详见[空闲载体报告](V8.15.md#source-fa33f3faf77a)。
+- 用户确认苏轼旧信通过应用手动操作已收到。留存正式队列证明首次写出后长期无 ACK，手动重试 0.937 秒后获 ACK；历史日志缺失，不认定唯一实机根因。可复现残留 talk_scene、对话 counter 已销毁时全局消费者停转；Workshop 与快照仅取消该场景条件，玩家有效时持续消费，DATE／周期／游戏侧同 ID 去重保留。当前另一封未到期信不改排期、不重发，详见[后台消费报告](V8.15.md#source-77f182135b2f)。
+- 本机东方王朝归位脚本缺少官区法理检查，且旧公国未释放时目标仍为升任者，能够构造跨区公国被拉入的路径；汉番定期决议不能即时兜底，天家宗仪未发现同类拉入证据。Three-Mod 1.0.3 仅对中国天朝限制法理归位，任命升迁移交全部旧低级流官头衔，县带男爵、合法世袭及原生／自定义世族保留。旧档一次纠正可确认的异区自持官职和直属封臣；交接结算后再次检查新增异区直属关系，非中国 OE 过滤保持，详见[兼容修复报告](V8.15.md#source-88ebeeb51430)。
+- 六个新发布组登记唯一清单，最终收口后原始完整发布 **409/409 PASS、exit 0**，清单 **478 分类文件 / 409 发布组 / 68 历史归档**；专项、独立 AST／文件 QA 与八个主要入口语法检查通过。隔离实际 VOTC.exe/preload/IPC 四阶段 DATE 及停机回执恢复通过：Effect 一次、摘要一次、双方两份、锁空，Provider 请求 0、正常 exit 0，截图已目视核对，证据 `votc-v8152-letter-clock-HIYJYV`。新增交接后关系测试明确注入合成副作用，不冒充 CK3 原生行为证明。
+- 兼容 Mod 1.0.3 已按原启用路径安装，部署仅两个描述文件与四个脚本，六份哈希与源码一致，其他原文件逐字节保留；旧版备份 `votc-three-mod-1.0.2-backup-012c992a6d0548a4bd9324e4c5242fbf`。VOTC Workshop bridge 与快照哈希一致，三个原 Mod、加载清单、存档、真实信件／队列／载体／摘要／日志和凭据未改。需完全重启 App／CK3 后验收空 Effect 警告、当前新信自动投递、广东旧档异区归属与一次实际升迁；此前 USER_CONFIRMED 继续保留。
+
+<a id="source-bd3947cca735--第一百八十一阶段three-mod-104-流官继任与层级后续修复2026-10-10"></a>
+## 第一百八十一阶段：Three-Mod 1.0.4 流官继任与层级后续修复（2026-10-10）
+
+- 用户补充中国天朝流官升迁边界，要求检查释放旧公国后的继任及非升迁机制。去掉旧公国候任者现任官区限制，仍以旧头衔自身 current_heir、存活／同帝国／低阶资格为准，没有合格者交回皇帝；无 employer 的同帝国无地候任者可接任。原触发器地域拒绝先红测再修复。
+- 三 Mod 源码审查确认 OE 替换官员用 granted 整批改隶、退休交接用 stepped_down 延续旧封臣、帝国危机按运动／邻接重组，汉番人类重整计数门槛可漏一个主王国加一个外区公国。OE 开局分封可形成异地自持头衔，但最后归中国皇帝，不作为直接广东王国封臣因果。汉番主动规划政区与宗藩世袭保留，具体用户旧档未逐项归因。
+- 增加获得／失去头衔、平级主头衔切换、封臣改隶／新增的局部次日检查，分离候任者排队与实际行政政体回读；修复时领主和封臣均须通过完整中国天朝资格。合法任命、世袭及宗藩副王国均可提供地域依据，原生／自定义世族与租借／无地头衔不提供副官区依据；仅外区低阶任命官职与合格行政封臣被校正。旧候任者挂在另一王国下的关系也检查，独立 pending 防重入，新版旧档标记只扫描一次。
+- 流官专项 11 组升迁／10 组头衔边界与生命周期通过，独立 GPT-6 Luna Max AST／合成交易 QA 通过，原姓名／日历／官称／任命评分 13 组通过。其余新增覆盖在实施后落盘，不宣称全部旧版红测。最终完整原始发布 **409/409 PASS、exit 0**，清单保持 **478 分类文件 / 409 发布组 / 68 历史归档**；语法与差异检查通过。
+- 1.0.4 已部署当前 E 盘启用路径，两个描述文件与四个脚本六份哈希一致，另外七份原兼容文件逐字节保留。完整持久备份 `votc-three-mod-1.0.3-backup-608383b6eaca49bc8c6e7da2ed878d2a`，指纹及规则见[后续层级报告](V8.15.md#source-4fa9423ff065)。原三 Mod、加载顺序及真实运行数据未改；本次未改 App，也未重新做窗口冒烟。需完全重启 CK3 后验证具体旧档与实际交接；此前 USER_CONFIRMED 不降级。
+
+<a id="source-bd3947cca735--第一百八十二阶段three-mod-105-王国平级调任与候任等级复查2026-10-10"></a>
+## 第一百八十二阶段：Three-Mod 1.0.5 王国平级调任与候任等级复查（2026-10-10）
+
+- 用户确认平级调任后旧王国交旧职候任者、调任者只任新职。旧兼容层严格升阶门禁不处理 K→K；旧任命 K 仍持有时，其旧辖区仍被当作合法副官区，独立代理 AST 红测复现旧 K/D/公爵均未交接。正常汉番／三公／OE 替换代码另有辞旧职步骤，不把这个反例作为用户具体存档的唯一成因。
+- 仅以实际 on_title_gain、新任命 K 与四类已知授官类型记录目标，次日复核中国天朝和本人天朝政府；旧任命 K 按自己的合法 current_heir 交接，同阶候任允许，更高阶拒绝，无合格者交回帝君，随后复查外区官职与公爵。多新 K 歧义及失效目标拒绝执行，交接回调不递归排队；世袭／宗藩／世族／租赁／无地保护和军镇合法兼任保留。
+- 补上两个原生政府变化局部回调，排队不依赖尚未更新的主头衔法律，次日才按完整政府／任命法执行；没有周期全体扫描或自动改法理。现有两天朝 governor 的 lower_or_equal/cooldown 保持，分别增加 7 个等级政策用例；评分惩罚不冒充资格禁令。OE 共享类型旧键和汉番 courtier/guest 缺等级重复筛选记为待实机项，未全局改动其他政体。
+- 独立代理完成红测及部分解释器／政府回归后因额度限制停止，主代理完成真实 title_gain、主头衔已变／未变、同阶继任、受保护边界及防重入验证；不冒称完整第二代理绿测评审。三项专项、八个主要入口语法、清单覆盖和差异检查通过，原始完整发布 **409/409 PASS、exit 0**；清单保持 **478 分类文件 / 409 发布组 / 68 历史归档**。
+- 1.0.5 已安装当前 E 盘路径，六更新文件与源码哈希一致，另外七份已安装原文件逐字节保留。完整 1.0.4 备份 `votc-three-mod-1.0.4-backup-1cba03986eb4484fb5133d5fb8179a0b`，指纹和审查边界见[平级调任报告](V8.15.md#source-aa22ab5627d8)。未改 App、原三 Mod、加载顺序或真实数据；实际 CK3 平级交接及旧辖区公爵归属仍待完全重启后验收。
+
+
+<a id="source-bd3947cca735--第一百八十三阶段three-mod-106-同级流官官职唯一持有2026-10-10"></a>
+## 第一百八十三阶段：Three-Mod 1.0.6 同级流官官职唯一持有（2026-10-10）
+
+- 用户进一步明确任意新同级官职都必须卸任旧同级官职。1.0.5 王国专用入口扩展至伯爵／公爵／国王／帝国，四级分别保存最后实际获授目标；旧任命官职逐一按自己的合法 current_heir 交接，县携男爵领，低级目标不降低角色主头衔。继任者已有同级职位时继续排队，继任等级上限、世袭／宗藩／世族／租赁／无地和其他政府保护保持。
+- 独立 QA 在改动前复现县／公爵未处理与延期 A→B→C→A 候任环。交接路径随头衔传递，同级多个目标合并路径、不同等级隔离；已访问候任者拒绝并回交皇帝，无合格候任者同样交皇帝。真实重复回调红测再现路径被清空，补待处理目标保护；另一个独立只读审查指出过期源事件与不合格重复回调两处清理竞态，补两项红测后分别以当前持有人及共享待处理目标检查修复，最终绿测和源码复核通过。
+- 升迁 11 组／头衔边界 10 组、真实四文件 AST 对抗 QA、原兼容 UI／姓名／日历和两个官职类型等级政策专项通过。首轮完整门禁在重复回调红测失败，修复并最终收口后原始完整门禁 **409/409 PASS、exit 0**；10 个主要入口／脚本语法、文档链接和差异检查通过。清单保持 **478 分类文件 / 409 发布组 / 68 历史归档**，未新增测试文件。
+- 1.0.6 已部署当前 E 盘启用路径，六更新文件与源码哈希一致，另外七文件逐字节保留；完整 1.0.5 持久备份 `votc-three-mod-1.0.5-backup-c426795cb8ee49a4886b4bf9993a234f`，指纹见[同级官职报告](V8.15.md#source-eaae57dc4b7a)。未改 App、原三 Mod、加载顺序或真实数据。普通交接次日检查、长链逐日继续，需完全重启 CK3 验证原生交接／回调与标题宿主变量列表，政府或法律在检查后多日才补齐仍是边界；不把静态通过写成实机验收。
+
+<!-- chapter:source-bd3947cca735:end -->
+

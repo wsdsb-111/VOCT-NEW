@@ -176,6 +176,7 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "version-document-preservation", script: "test-version-documents.js" },
   { group: "v9.7-ci-baseline", script: "test-v9.7-ci-baseline.js" },
   { group: "v9.7-production-reference-audit", script: "test-v9.7-production-reference-audit.js" },
   { group: "v9.7-provider-compat", script: "test-v9.7-provider-compat.js" },

@@ -1,6 +1,6 @@
 # 对话摘要与人物记忆：Legacy Summary（3.0 协议、2.5 存储兼容）
 
-当前 Core／App／UI 为 V9.3.9 代码候选。Workshop 2.0.5、Official Action 2.0.3、Legacy Summary、协议 3.0、存储 2.5／schema 2 与目录格式保持。实际代码验证与外部边界见 [V9.3.9 实施报告](current/v9/V9_3_9_IMPLEMENTATION_REPORT.md)；[V9.3.8 实施报告](current/v9/V9_3_8_IMPLEMENTATION_REPORT.md)保留该版本当时的回归与视觉证据。
+当前 Core／App／UI 为 V9.3.9 代码候选。Workshop 2.0.5、Official Action 2.0.3、Legacy Summary、协议 3.0、存储 2.5／schema 2 与目录格式保持。实际代码验证与外部边界见 [V9.3.9 实施报告](versions/v9/V9.3.md#source-54622d0bdbec)；[V9.3.8 实施报告](versions/v9/V9.3.md#source-2ea38b4cd8b9)保留该版本当时的回归与视觉证据。
 
 每位回应 NPC 的固定历史只包含当前玩家 Pair 的完整 Recent2、合法官方追忆与完整合法事项簿，首次构造后冻结。L0 仅提名；L1 每目标最多 16 条事项且不读取摘要全文。授权历史分句可选择动态来源：2／3 人全场累计时间最多 5 篇、第三人跨目标累计最多 3 篇；4+ 人保持 3+3。
 
@@ -16,23 +16,23 @@ V9.3.9.2 玩家界面只显示一行本场上下文：容量在场内按配置�
 
 旧 `archiveSidecar` 是惰性归档，运行时不得扫描、读取或写入，原始字节保持不变。Legacy Forget ledger 存放于现有 index，并与摘要 mutation 一起事务提交或回滚。目录改名合并若会包含 Sidecar，则跳过该次合并；纯 Legacy 摘要目录仍可正常读写。Year/Life 历史迁移脚本只可通过 `scripts/archive/v933-year-life` 的显式维护导入使用，不进入 Runtime，V9.3.6 不执行该迁移。
 
-修复前 V9.3.6 基线状态见[实施报告](current/v9/V9_3_6_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_VERIFICATION_REPORT.md)、[Token 与缓存对比](current/v9/V9_3_6_TOKEN_AND_CACHE_COMPARISON.md)、[兼容与退役审计](current/v9/V9_3_6_COMPATIBILITY_AND_RETIREMENT_AUDIT.md)；真实 CK3、Provider、Soak 与远端 CI 单列验收。
+修复前 V9.3.6 基线状态见[实施报告](versions/v9/V9.3.md#source-0422527c8360)、[验证报告](versions/v9/V9.3.md#source-90f5c906286b)、[Token 与缓存对比](versions/v9/V9.3.md#source-0af06f7e95b4)、[兼容与退役审计](versions/v9/V9.3.md#source-8e36e41b8c89)；真实 CK3、Provider、Soak 与远端 CI 单列验收。
 
-V9.3.6.1 修复见[实施报告](current/v9/V9_3_6_1_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_1_VERIFICATION_REPORT.md)与[Context兼容](current/v9/V9_3_6_1_CONTEXT_COMPATIBILITY.md)。当前／未来提醒不授予第三人历史权限；混合句只从明确历史分句解析人物、时间与相关性。Recent 去重要求同来源键、修订、事项序号和实际渲染的完整条目；截断／子串／其他序号保留正文。下述玩家锚点、人数冻结与记忆硬上限继续沿用。
+V9.3.6.1 修复见[实施报告](versions/v9/V9.3.md#source-8927f69f5009)、[验证报告](versions/v9/V9.3.md#source-0c0cac873b56)与[Context兼容](versions/v9/V9.3.md#source-61aee8f10d56)。当前／未来提醒不授予第三人历史权限；混合句只从明确历史分句解析人物、时间与相关性。Recent 去重要求同来源键、修订、事项序号和实际渲染的完整条目；截断／子串／其他序号保留正文。下述玩家锚点、人数冻结与记忆硬上限继续沿用。
 
 ## 历史版本合同与验收快照（以下内容不覆盖 V9.3.8 当前合同）
 
 ### 历史 V9.3.3 来源规划与派生退役（2026-10-14）
 
-[实施](current/v9/V9_3_3_IMPLEMENTATION_REPORT.md)与[验证](current/v9/V9_3_3_VERIFICATION_REPORT.md)：全部 Owner 授权片段保留，优先评估各时间区间的重要来源，寒暄仅降序；本地浏览不计作模型理解，8 条配额仍针对整场 Owner。新 Coverage proof 区分实际评估与未评估，历史缺项保持未知；Legacy 来源对应不代表语义等价，也不自动回填正文。Year/Life 的服务、展示、编辑和磁盘召回退役；LIFE/YEAR 问句及 Detail 年份索引继续有效。旧派生文件仅按明确确认的清单事务删除，提交后销毁临时副本，玩家外部备份不动。
+[实施](versions/v9/V9.3.md#source-d9cd1f716754)与[验证](versions/v9/V9.3.md#source-cbe4d33325da)：全部 Owner 授权片段保留，优先评估各时间区间的重要来源，寒暄仅降序；本地浏览不计作模型理解，8 条配额仍针对整场 Owner。新 Coverage proof 区分实际评估与未评估，历史缺项保持未知；Legacy 来源对应不代表语义等价，也不自动回填正文。Year/Life 的服务、展示、编辑和磁盘召回退役；LIFE/YEAR 问句及 Detail 年份索引继续有效。旧派生文件仅按明确确认的清单事务删除，提交后销毁临时副本，玩家外部备份不动。
 
 ### 历史 V9.3.2 Durable 抽取与恢复（2026-10-13）
 
-[实施](current/v9/V9_3_2_IMPLEMENTATION_REPORT.md)与[验证](current/v9/V9_3_2_VERIFICATION_REPORT.md)：固定 Policy v9.3.2 明确严格输出合同，Owner 授权的人名/关系目录去重，活动承诺只提供来源中可核验的相关项。普通请求按输入预算与 128 片段上限分块；原文不截断。坏候选隔离并允许一次有限修正，成功分块通过现有 Recovery writer 保存 checkpoint，恢复前重新验证来源、Forget、手改及 scope；同版本同来源的确定性失败不自动反复付费。Provider STOP 与 canonical Durable commit 分开记录。中途入场的双人投影、人物认知及 Year/Life 退役保持，不放宽知情范围。
+[实施](versions/v9/V9.3.md#source-0cff32f793a3)与[验证](versions/v9/V9.3.md#source-2c1e86935dbb)：固定 Policy v9.3.2 明确严格输出合同，Owner 授权的人名/关系目录去重，活动承诺只提供来源中可核验的相关项。普通请求按输入预算与 128 片段上限分块；原文不截断。坏候选隔离并允许一次有限修正，成功分块通过现有 Recovery writer 保存 checkpoint，恢复前重新验证来源、Forget、手改及 scope；同版本同来源的确定性失败不自动反复付费。Provider STOP 与 canonical Durable commit 分开记录。中途入场的双人投影、人物认知及 Year/Life 退役保持，不放宽知情范围。
 
 ### 历史 V9.2 改名目录合并（2026-10-11；已由 V9.3.5 候选合同取代）
 
-V9.2.3候选补充：[实施](current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验证](current/v9/V9_2_3_VERIFICATION_REPORT.md)。Year/Life自动生成、后台重建与模型压缩已退役；合法旧档可查看和手改，dirty、Forget与来源校验保留，不会自动清成“已生成”。Durable、Detail/Legacy、Commitment与协议3.0/存储2.5保持。下列年度压缩／重建过程是历史记录，候选中不再执行；宏观生平概览损失按方案接受，跨年代原始事实召回仍需实机验收。
+V9.2.3候选补充：[实施](versions/v9/V9.2.md#source-ee239da3ae34)、[验证](versions/v9/V9.2.md#source-f4752750bd9b)。Year/Life自动生成、后台重建与模型压缩已退役；合法旧档可查看和手改，dirty、Forget与来源校验保留，不会自动清成“已生成”。Durable、Detail/Legacy、Commitment与协议3.0/存储2.5保持。下列年度压缩／重建过程是历史记录，候选中不再执行；宏观生平概览损失按方案接受，跨年代原始事实召回仍需实机验收。
 
 打开摘要列表或保存／读取人物对话时，系统按数字 ID 检测并合并多个改名目录；唯一目录继续复用，不因改名另建目录。合并目标采用当前可确认的姓名；没有当前人物资料时，以最近有效日期的姓名确定目录。同 ID 对话文件归并后按游戏日期从新到旧排列，年度条目与人生阶段合并时按时间先后排序。不同 ID 的同名人物、不同 Campaign 的记录保持隔离，未绑定 Legacy 记录保留原绑定 ID。长期正文、官方追忆、手动披露、Forget 与 tombstone 均保留；共享 Memory4 sidecar 的正文或手动版本冲突时阻止自动合并，不挑选一份覆盖另一份。
 
@@ -40,73 +40,73 @@ V9.2.3候选补充：[实施](current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验
 
 ## V8.15.2 密集年度压缩与失败状态（2026-10-09）
 
-[后续报告](v8.15.2-derived-compression-followup-report.md)：逐来源明确条件/否定原文约束和日期标注预算，质量失败带反馈修正一次；JSON、来源集合、完成状态与硬限继续校验。批量重建单年失败后继续其他年度，整体失败并显示年份，不从缺少年份的集合生成新人生记忆。失败后页面刷新最终状态。Year 1500/目标 1200、Life 1000/目标 700、Recall 400、协议 3.0/存储 2.5 与 IPC 保持；必要原文可超过软目标，不能超过硬限。原始来源保留，真实密集年度/人生压缩待用户重启 App 后重建验证。
+[后续报告](versions/v8/V8.15.md#source-c9c263e92ee8)：逐来源明确条件/否定原文约束和日期标注预算，质量失败带反馈修正一次；JSON、来源集合、完成状态与硬限继续校验。批量重建单年失败后继续其他年度，整体失败并显示年份，不从缺少年份的集合生成新人生记忆。失败后页面刷新最终状态。Year 1500/目标 1200、Life 1000/目标 700、Recall 400、协议 3.0/存储 2.5 与 IPC 保持；必要原文可超过软目标，不能超过硬限。原始来源保留，真实密集年度/人生压缩待用户重启 App 后重建验证。
 
 ## V8.15.2 修复5：恢复证明与派生预算（2026-10-09）
 
-[本轮报告](v8.15.2-fix5-implementation-report.md)：停机回执仅凭原发送日志身份、最新物理 LOAD 和冻结双方来源恢复，证明先原子落盘、再捕获既有归档任务；不以 ACK 或 DATE 猜测收信、不重寄。缺发送证明的旧 pending 保留，原实时接受仍支持。Year 硬限 1500/目标 1200，Life 片段硬限 1000/目标 700，免压缩与输出/来源标注后校验一致；Recall 400 和压缩 maxTokens 4096 保持。事件发生/获知时间、Owner/Campaign、来源和手工覆盖保护不变。已有真实来源重建与真实 Provider 压缩仍待用户验收，此前正常信件等实机通过继续保留。
+[本轮报告](versions/v8/V8.15.md#source-258f035c9060)：停机回执仅凭原发送日志身份、最新物理 LOAD 和冻结双方来源恢复，证明先原子落盘、再捕获既有归档任务；不以 ACK 或 DATE 猜测收信、不重寄。缺发送证明的旧 pending 保留，原实时接受仍支持。Year 硬限 1500/目标 1200，Life 片段硬限 1000/目标 700，免压缩与输出/来源标注后校验一致；Recall 400 和压缩 maxTokens 4096 保持。事件发生/获知时间、Owner/Campaign、来源和手工覆盖保护不变。已有真实来源重建与真实 Provider 压缩仍待用户验收，此前正常信件等实机通过继续保留。
 
 ## V8.15.2 年度与人生获知日期归档（2026-10-09）
 
-[本轮审查与修复](v8.15.2-derived-acquisition-hotfix-report.md)：事件日期明确的 Detail 继续按发生年份归档；事件日期未知且有有效获知日期时，按用户确认的获知年份归档并显示“本年获知，事件日期未知”。原始事件日期保持未知，计划不做回退。Year/Life 压缩保留该标注；召回区分 event/acquired/mixed，不能把获知年用于证明未知事件发生在指定窗口。无合格来源时显示原因，原有授权、遗忘、修订及手工覆盖保护保留；4.0 显示、3.0 协议与 2.5 存储保持兼容。隔离按钮验证通过，已有真实记忆重建仍待本轮用户验收。
+[本轮审查与修复](versions/v8/V8.15.md#source-51d86bdb7169)：事件日期明确的 Detail 继续按发生年份归档；事件日期未知且有有效获知日期时，按用户确认的获知年份归档并显示“本年获知，事件日期未知”。原始事件日期保持未知，计划不做回退。Year/Life 压缩保留该标注；召回区分 event/acquired/mixed，不能把获知年用于证明未知事件发生在指定窗口。无合格来源时显示原因，原有授权、遗忘、修订及手工覆盖保护保留；4.0 显示、3.0 协议与 2.5 存储保持兼容。隔离按钮验证通过，已有真实记忆重建仍待本轮用户验收。
 
 ## V8.15.2 旧信件计时管道退役（2026-10-08）
 
-[本轮报告](v8.15.2-letter-timer-retirement-report.md)：旧 runner、`letters.txt` 主动执行与 stale/close ACK 日期 rearm 停用，原生 DATE 与正式 RunFile/收信回执仍负责投递和归档。关闭旧路线不清理待投递、未知 Effect、恢复任务或摘要；双方归档、逐 Owner 隔离、协议 3.0/存储 2.5 保持。需要完全重启 App/CK3，真实收信摘要与流畅度仍须验收。
+[本轮报告](versions/v8/V8.15.md#source-a266cec81f47)：旧 runner、`letters.txt` 主动执行与 stale/close ACK 日期 rearm 停用，原生 DATE 与正式 RunFile/收信回执仍负责投递和归档。关闭旧路线不清理待投递、未知 Effect、恢复任务或摘要；双方归档、逐 Owner 隔离、协议 3.0/存储 2.5 保持。需要完全重启 App/CK3，真实收信摘要与流畅度仍须验收。
 
 ## V8.15.2 信件投递后归档热修（2026-10-08）
 
-[本轮报告](v8.15.2-letter-memory-receipt-hotfix-report.md)：新信使用游戏创建宝物后的精准日志回执，逐信件 token、Campaign、双方 ID、日期与到期日共同校验。归档读取发信时保存的姓名/双方关系来源，不要求当前日志仍为原收件人；双方摘要、Detail、Year/Life 保持既有幂等恢复链。普通 ACK 或裸剪贴板不能启动新信归档，摘要失败不重新发信；可核对的回信披露与摘要归档分别处理。旧信件仅在明确实机确认和授权下单封补建，真实模型生成待验收；4.0 显示、3.0 协议与 2.5 存储不升级。
+[本轮报告](versions/v8/V8.15.md#source-8990505464cc)：新信使用游戏创建宝物后的精准日志回执，逐信件 token、Campaign、双方 ID、日期与到期日共同校验。归档读取发信时保存的姓名/双方关系来源，不要求当前日志仍为原收件人；双方摘要、Detail、Year/Life 保持既有幂等恢复链。普通 ACK 或裸剪贴板不能启动新信归档，摘要失败不重新发信；可核对的回信披露与摘要归档分别处理。旧信件仅在明确实机确认和授权下单封补建，真实模型生成待验收；4.0 显示、3.0 协议与 2.5 存储不升级。
 
 ## V8.15.2 实时日期链路修复（2026-10-08）
 
-[本轮报告](v8.15.2-live-date-producer-hotfix-report.md)：正式 init 的日期/日数读取固定字段；持续 DATE 可选日历字段供世界记忆 CURRENT_DATE 使用，信件原数字字段保持。LOAD 前旧日期不沿用，非法非空 live 日期仍拒绝；不按 Gregorian serial 猜测 CK3 totalDays。Mod 使用独立命名子钩子追加，日期推进不撤销信件接受/摘要门禁，不重发未知 Effect。用户确认本次陌生 NPC 没有先前私聊内容，完整隐私/Provider/Soak 仍按各报告边界验收。
+[本轮报告](versions/v8/V8.15.md#source-d640b80d83cd)：正式 init 的日期/日数读取固定字段；持续 DATE 可选日历字段供世界记忆 CURRENT_DATE 使用，信件原数字字段保持。LOAD 前旧日期不沿用，非法非空 live 日期仍拒绝；不按 Gregorian serial 猜测 CK3 totalDays。Mod 使用独立命名子钩子追加，日期推进不撤销信件接受/摘要门禁，不重发未知 Effect。用户确认本次陌生 NPC 没有先前私聊内容，完整隐私/Provider/Soak 仍按各报告边界验收。
 
 ## V8.15.2 隐私与信件日期后续修复（2026-10-08）
 
-[后续报告](v8.15.2-privacy-letter-world-memory-followup-report.md)：人物的头衔/控制者字符串别名从唯一已投影角色重建，无源和歧义 fail-closed；远程 Letter 不读取发送方现场地点，正文明确披露的地点与收件人 Self 完整资料保留。信件日期按日志身份及物理 LOAD_SESSION 边界隔离，重复 epoch 不能沿用旧日；Mod runner 不在对话时自毁，自举移至玩家已确定的 after-lobby 入口。待发队列不清空、不盲重发，官方接收确认后才生成摘要。世界记忆保存就地反馈、全名查询/当前玩家选择与各范围 ACL 单列验证，不改人物记忆协议、生命周期或缓存锚点。
+[后续报告](versions/v8/V8.15.md#source-d7355c018ce5)：人物的头衔/控制者字符串别名从唯一已投影角色重建，无源和歧义 fail-closed；远程 Letter 不读取发送方现场地点，正文明确披露的地点与收件人 Self 完整资料保留。信件日期按日志身份及物理 LOAD_SESSION 边界隔离，重复 epoch 不能沿用旧日；Mod runner 不在对话时自毁，自举移至玩家已确定的 after-lobby 入口。待发队列不清空、不盲重发，官方接收确认后才生成摘要。世界记忆保存就地反馈、全名查询/当前玩家选择与各范围 ACL 单列验证，不改人物记忆协议、生命周期或缓存锚点。
 
 ## V8.15.2 陌生角色记忆授权防护（2026-10-08）
 
-[排查与修复报告](v8.15.2-stranger-memory-isolation-report.md)：人物范围内部召回同时要求知情索引与原始 `knownBy` 授权，Worldline 个人记忆适配器同样复核。显式转述必须由两份证据均授权的来源角色发起；只写错误索引不能读内容或转授。旧摘要兼容字段按准确玩家/NPC ID 与非空当前 Campaign 过滤，防止同名异人或跨战役加载。正常授权、逐条转述及全球维护查询保留。
+[排查与修复报告](versions/v8/V8.15.md#source-034e27525660)：人物范围内部召回同时要求知情索引与原始 `knownBy` 授权，Worldline 个人记忆适配器同样复核。显式转述必须由两份证据均授权的来源角色发起；只写错误索引不能读内容或转授。旧摘要兼容字段按准确玩家/NPC ID 与非空当前 Campaign 过滤，防止同名异人或跨战役加载。正常授权、逐条转述及全球维护查询保留。
 
 非本人 Prompt 资料不再无条件注入 `capitalLocation`，Self 仍完整，原始 GameData 与 Worldline 的 LOCATION 授权不变，不把首都等同于当前行踪。现有动态身份知识提示明确私聊/信件不会自动成为全球传闻，`public` 不自动授予未听见的陌生人；无来源不能编造传播渠道。事故首轮指纹只匹配 D 自身官方追忆，未证实 ABC 摘要注入或缓存串场。生成层约束与确定性 ACL 分开验证，真实 Provider / CK3 Gate 待用户。不改 4.0 显示、3.0 协议、2.5 存储、IPC、Block IDs、Cache Anchor 或 GLM 配置。
 
 ## V8.15.2 摘要日期显示热修（2026-10-07）
 
-[热修报告](v8.15.2-world-memory-summary-date-hotfix-report.md)：每个对话文件的摘要默认按游戏日期降序显示，最近在上；“按日期排序”可切换回原文件顺序，失败摘要重试后刷新沿用所选模式。同日稳定，无日期/非法日期在最后。只排序显示投影，编辑、删除和模型整理传原文件索引；不重排持久化 JSON，不改变召回、遗忘、恢复或 Derived 的合同。世界记忆同期修复后台更新吞掉保存结果的竞态，分支 token 与服务端日期核验保持。
+[热修报告](versions/v8/V8.15.md#source-3d4ca8f09562)：每个对话文件的摘要默认按游戏日期降序显示，最近在上；“按日期排序”可切换回原文件顺序，失败摘要重试后刷新沿用所选模式。同日稳定，无日期/非法日期在最后。只排序显示投影，编辑、删除和模型整理传原文件索引；不重排持久化 JSON，不改变召回、遗忘、恢复或 Derived 的合同。世界记忆同期修复后台更新吞掉保存结果的竞态，分支 token 与服务端日期核验保持。
 
 ## V8.15.2 修复2（2026-10-07）
 
-[实施报告](v8.15.2-fix2-implementation-report.md)：Future Modal 与 Future Time 在当前谓词之前否决，包含主体前的“明天我是”及将是/将为。合法裸年龄回答允许真实 user/assistant，不改变目标、CK3 数值、听众与 Presence 验证。投影附带仅消息 ID 的 spokenMessageIds，覆盖完整私密注解和已验证 Finalization 来源；与 withheldMessageIds 一起拒绝问答中间的发言或未验证来源，不暴露隐藏正文。系统 trace 及已标注非 spoken 来源不打断，完整自报不依赖 prior question。sourceRevision 纳入 ID 边界；问答双证明、per-owner knownBy、Forget、当前/历史年龄及协议合同保持，不改观察白名单或主架构。
+[实施报告](versions/v8/V8.15.md#source-75ed2fb0892e)：Future Modal 与 Future Time 在当前谓词之前否决，包含主体前的“明天我是”及将是/将为。合法裸年龄回答允许真实 user/assistant，不改变目标、CK3 数值、听众与 Presence 验证。投影附带仅消息 ID 的 spokenMessageIds，覆盖完整私密注解和已验证 Finalization 来源；与 withheldMessageIds 一起拒绝问答中间的发言或未验证来源，不暴露隐藏正文。系统 trace 及已标注非 spoken 来源不打断，完整自报不依赖 prior question。sourceRevision 纳入 ID 边界；问答双证明、per-owner knownBy、Forget、当前/历史年龄及协议合同保持，不改观察白名单或主架构。
 
 ## V8.15.2 修复1（2026-10-07）
 
-[实施报告](v8.15.2-fix1-implementation-report.md)：未来/意图先于当前谓词拥有否决权，即使后台头衔或特质相同也不授权。年龄省主语问答不再要求 Owner 本人提问；听见完整问答且被问者也听见问题的 Owner，可获得唯一目标的 AGE。具名优先，双人无名按唯一另一在场者绑定；多人无可靠被问者归属时 fail-closed，不把 recipientIds 听众集合当作当轮目标。沿用紧邻有效 spoken 消息、问答双证据和 per-owner knownBy；遗忘来源撤销授权，当前 CK3 年龄与历史值/日期分离。未改变 Recall/Forget/Recovery/Derived、Fact Epoch/Presence、42 项白名单、协议 3.0、存储 2.5、App 2.0.4 或 Mod 发布结构。
+[实施报告](versions/v8/V8.15.md#source-821d328c40ad)：未来/意图先于当前谓词拥有否决权，即使后台头衔或特质相同也不授权。年龄省主语问答不再要求 Owner 本人提问；听见完整问答且被问者也听见问题的 Owner，可获得唯一目标的 AGE。具名优先，双人无名按唯一另一在场者绑定；多人无可靠被问者归属时 fail-closed，不把 recipientIds 听众集合当作当轮目标。沿用紧邻有效 spoken 消息、问答双证据和 per-owner knownBy；遗忘来源撤销授权，当前 CK3 年龄与历史值/日期分离。未改变 Recall/Forget/Recovery/Derived、Fact Epoch/Presence、42 项白名单、协议 3.0、存储 2.5、App 2.0.4 或 Mod 发布结构。
 
 ## V8.15.2（2026-10-07）
 
-[实施报告](v8.15.2-implementation-report.md)：42 项可观察特质在首次 Provider 前由实际在场人物两两观察，持久化为独立 DIRECT_OBSERVATION/VISIBLE_TRAIT，不依赖对白或长期抽取。Self 仍保留完整特质，性格/秘密/模糊健康类别不因同场自动公开。当前观察高于手工未知，离场恢复手工控制；动态特质消失即撤出当前 Profile，历史来源仍保留。观察按日期保留真实证明，回退不读未来来源；对白遗忘不删除独立观察。新变化清理对应冻结/前缀快照，未变化保持缓存。其他对白新知情的下一场生效、Fact Epoch、Presence、Owner/Campaign、协议 3.0/存储 2.5 和 App 2.0.4 保持。年龄问答省主语与比较后缀漏记已修复；年龄合法披露后，为对应 Owner 授权当前 CK3 真实年龄的 UI/Prompt 投射，数据刷新自动更新，但不改历史披露或生成新公开记录。未授权、来源已撤销、未来证明及只读归档均不提供实时年龄，Self 不受此门禁限制。
+[实施报告](versions/v8/V8.15.md#source-5db66c1da43a)：42 项可观察特质在首次 Provider 前由实际在场人物两两观察，持久化为独立 DIRECT_OBSERVATION/VISIBLE_TRAIT，不依赖对白或长期抽取。Self 仍保留完整特质，性格/秘密/模糊健康类别不因同场自动公开。当前观察高于手工未知，离场恢复手工控制；动态特质消失即撤出当前 Profile，历史来源仍保留。观察按日期保留真实证明，回退不读未来来源；对白遗忘不删除独立观察。新变化清理对应冻结/前缀快照，未变化保持缓存。其他对白新知情的下一场生效、Fact Epoch、Presence、Owner/Campaign、协议 3.0/存储 2.5 和 App 2.0.4 保持。年龄问答省主语与比较后缀漏记已修复；年龄合法披露后，为对应 Owner 授权当前 CK3 真实年龄的 UI/Prompt 投射，数据刷新自动更新，但不改历史披露或生成新公开记录。未授权、来源已撤销、未来证明及只读归档均不提供实时年龄，Self 不受此门禁限制。
 
 ## V8.15.1（2026-10-06）
 
-[实施报告](v8.15.1-implementation-report.md)：姓名继续作为角色绑定标识，由 Prompt 限制陌生人的身份认知，不新增 NAME 披露类型。当前身份使用现有 TITLE 的主要头衔、等级和职位候选，特质使用 TRAIT，年龄沿用披露时 AGE 与获知日期。保存真实 sourceRole，区分玩家原话、NPC 可绑定直接对白及严格第一人称肯定自报；他人直接公开也可记录，旁白/内心/传闻/否认/歧义与不在场片段不授权。已验证披露在叙事提交、遗忘过滤和来源校验后持久保存，不依赖长期抽取成功；新知情仍下一场生效，手工隐藏、Fact Epoch 与删除撤销保持优先。
+[实施报告](versions/v8/V8.15.md#source-128387404a77)：姓名继续作为角色绑定标识，由 Prompt 限制陌生人的身份认知，不新增 NAME 披露类型。当前身份使用现有 TITLE 的主要头衔、等级和职位候选，特质使用 TRAIT，年龄沿用披露时 AGE 与获知日期。保存真实 sourceRole，区分玩家原话、NPC 可绑定直接对白及严格第一人称肯定自报；他人直接公开也可记录，旁白/内心/传闻/否认/歧义与不在场片段不授权。已验证披露在叙事提交、遗忘过滤和来源校验后持久保存，不依赖长期抽取成功；新知情仍下一场生效，手工隐藏、Fact Epoch 与删除撤销保持优先。
 
 叙事 Recovery 保留到逐 Owner 的可验证终态或持久任务交接，提交过的 Detail 不重新抽取，dirty Year/Life 完成或保留可重试任务后才清理恢复材料。canonical-only 与 Legacy 目录共用 Store 解析合同；详情响应绑定列表请求世代，刷新后不接纳旧正文/错误。未知事件日期不借交谈日期补年，旧正文不自动改写。完全离线且无可信会话/Campaign 时的独立档案浏览仍未新增。显示 4.0、协议 3.0、存储 2.5、App 2.0.4、Prompt Block IDs、Cache Anchor 与 Owner/Campaign 授权保持兼容。
 
 ## V8.15 修复1.1（2026-10-06）
 
-[小修报告](v8.15-fix1.1-implementation-report.md)：没有 `legacyParentId` 的完整 Narrative 在命中显式目标时，可替换非目标 overview；已命中目标的 Derived/Legacy 不被另一个目标强制覆盖。无显式目标与普通 Legacy 保持原行为；超长正文仍走已有 excerpt，Packet ≤1200，协议/存储、授权、持久遗忘、Orphan 与缓存合同不变。真实 L5-L9、Provider/Soak 仍待用户验收。
+[小修报告](versions/v8/V8.15.md#source-aa9fc7d0c608)：没有 `legacyParentId` 的完整 Narrative 在命中显式目标时，可替换非目标 overview；已命中目标的 Derived/Legacy 不被另一个目标强制覆盖。无显式目标与普通 Legacy 保持原行为；超长正文仍走已有 excerpt，Packet ≤1200，协议/存储、授权、持久遗忘、Orphan 与缓存合同不变。真实 L5-L9、Provider/Soak 仍待用户验收。
 
 ## V8.15 修复1（2026-10-06）
 
-[实施报告](v8.15-fix1-implementation-report.md)：显式人物优先级延续至 Canonical/Legacy/Derived 的最终选择与预算裁剪，必要时只替换最低分非目标 Detail；清除无关预算后再次尝试超长目标 Legacy 片段。Detail 数量、1200 token 上限及无显式目标行为保持。
+[实施报告](versions/v8/V8.15.md#source-e81d08fa2765)：显式人物优先级延续至 Canonical/Legacy/Derived 的最终选择与预算裁剪，必要时只替换最低分非目标 Detail；清除无关预算后再次尝试超长目标 Legacy 片段。Detail 数量、1200 token 上限及无显式目标行为保持。
 
 持久遗忘不确定时返回 `MEMORY4_FORGET_INCOMPLETE` 并回滚；运行时计算的 folder-summary ID 不证明持久来源。只有明确 Campaign/Owner/人物对、无来源引用、合法 sidecar 均不存在且无相关 Recovery 时允许 `SKIPPED_SAFE_NO_FOOTPRINT`。旧残留只读审计返回 ID、来源和状态，不返回正文；来源不明、正在生成、共享正文无法分离或可见映射不确定均为 UNKNOWN。必须重新审计并核对 token、逐条明确确认后才复用既有遗忘链路；归档审计不绕过当前写门禁，没有自动启动清理。Owner/Campaign、知情、时间、协议和冻结前缀合同不放宽。
 
 ## V8.15 召回与删除一致性（2026-10-06）
 
-[实施报告](v8.15-memory-recall-forget-implementation-report.md)：明确查询人物时独立传递 `explicitTargetEntityIds`，不因其已在 `activeParticipantIds` 中而排除。搜索回应者自己的全部人物摘要，不读取目标的私人目录；Entity/Topic/Lexical 命中任一可建立候选，唯一完整姓名优先于相邻歧义称号。泛问不自动把所有在场者变成检索目标，Owner/Campaign/knownBy/未来日期门禁不放宽。
+[实施报告](versions/v8/V8.15.md#source-5de6a96d9370)：明确查询人物时独立传递 `explicitTargetEntityIds`，不因其已在 `activeParticipantIds` 中而排除。搜索回应者自己的全部人物摘要，不读取目标的私人目录；Entity/Topic/Lexical 命中任一可建立候选，唯一完整姓名优先于相邻歧义称号。泛问不自动把所有在场者变成检索目标，Owner/Campaign/knownBy/未来日期门禁不放宽。
 
 摘要编辑/删除按稳定 `projectionId` 在 Campaign/Owner 的 `forgotten-projections.json` 持久记录，与现有多文件 mutation journal 一同提交或回滚；联动 Base、Canonical、Year/Life 正文、Disclosure、Recovery 和实际 Frozen Prefix。多人同 finalization 的各人物对分别遗忘，共享来源仍保留未删除人物对的真实证据；信件也以可信来源定位并阻止迟到归档复活。无法精确映射的相关旧证据拒绝修改，不整场猜测删除，也不宣称已成功。
 
@@ -114,15 +114,15 @@ V9.2.3候选补充：[实施](current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验
 
 ## V8.14.2 收口修复（2026-10-05）
 
-[实施报告](v8.14.2-closeout-fix-implementation-report.md)：Assistant 第三人披露只采信安全直接对白；唯一昵称可绑定当前 Fact，但不授予真名。Owner/Campaign 的旁路 Fact Epoch 区分同头衔/特质连续存在与消失后再出现，旧 AUTO 与 MANUAL_KNOWN 不跨生命周期，MANUAL_HIDDEN 继续优先。旧无编号记录只在尚未观察到中断的首段兼容迁移；更早/同日冲突恢复快照不回退事实状态。显式刷新和冻结来源传递已接线，普通 getter/归档不写数据，新知情仍下一场生效。完整门禁 367/367、独立 QA、隔离 UI 38 张截图通过；协议 3.0、存储 2.5、Recent2、Recall 与 Cache Anchor 不变，真实 CK3/Provider/cache telemetry/Soak 待用户 Gate。
+[实施报告](versions/v8/V8.14.md#source-0a754c11f63b)：Assistant 第三人披露只采信安全直接对白；唯一昵称可绑定当前 Fact，但不授予真名。Owner/Campaign 的旁路 Fact Epoch 区分同头衔/特质连续存在与消失后再出现，旧 AUTO 与 MANUAL_KNOWN 不跨生命周期，MANUAL_HIDDEN 继续优先。旧无编号记录只在尚未观察到中断的首段兼容迁移；更早/同日冲突恢复快照不回退事实状态。显式刷新和冻结来源传递已接线，普通 getter/归档不写数据，新知情仍下一场生效。完整门禁 367/367、独立 QA、隔离 UI 38 张截图通过；协议 3.0、存储 2.5、Recent2、Recall 与 Cache Anchor 不变，真实 CK3/Provider/cache telemetry/Soak 待用户 Gate。
 
 ## V8.14.2 信件与摘要重试（2026-10-05）
 
-[实施报告](v8.14.2-letter-memory-retry-hotfix-report.md)：完整信件交换仅在可信游戏接受后归档，以冻结来源生成双向 Legacy 与逐 Owner Detail，再重建 Year/Life；失败只补未完成阶段，不重发 Effect。不虚构物理在场或消息 ID；明确时间词由真实 letter ID/正文哈希验证，相对时间使用原信日期。模型整理所选摘要也联动重建；失败进入已有恢复队列，手工版本保留，无长期事实/未知事件日期不补造。结束对话的可信 read snapshot 可用于恢复与来源证明重建，不开放任意归档写入。协议、存储与召回兼容合同未升级，下方为既有阶段记录。
+[实施报告](versions/v8/V8.14.md#source-321423efddc5)：完整信件交换仅在可信游戏接受后归档，以冻结来源生成双向 Legacy 与逐 Owner Detail，再重建 Year/Life；失败只补未完成阶段，不重发 Effect。不虚构物理在场或消息 ID；明确时间词由真实 letter ID/正文哈希验证，相对时间使用原信日期。模型整理所选摘要也联动重建；失败进入已有恢复队列，手工版本保留，无长期事实/未知事件日期不补造。结束对话的可信 read snapshot 可用于恢复与来源证明重建，不开放任意归档写入。协议、存储与召回兼容合同未升级，下方为既有阶段记录。
 
 ## V8.14.2 姓名、关系与披露热修（2026-10-05）
 
-[热修报告](v8.14.2-entity-naming-disclosure-hotfix-report.md)：长期抽取接入现有关系回读及来源姓名，按 Owner/Campaign/片段/日期限定；Owner 是记忆持有人，不是“主人”。明确原话中的唯一姓名或已确认直接关系可帮助归档区分人物，同名、泛称和未知真名不猜测。当前关系不制造历史关系变化，恢复沿用原始关系快照。用户已确认长期记忆正常生成 PASS；本次新姓名及披露规则仍待实机复测，旧错误正文不自动重写。
+[热修报告](versions/v8/V8.14.md#source-d9164572f606)：长期抽取接入现有关系回读及来源姓名，按 Owner/Campaign/片段/日期限定；Owner 是记忆持有人，不是“主人”。明确原话中的唯一姓名或已确认直接关系可帮助归档区分人物，同名、泛称和未知真名不猜测。当前关系不制造历史关系变化，恢复沿用原始关系快照。用户已确认长期记忆正常生成 PASS；本次新姓名及披露规则仍待实机复测，旧错误正文不自动重写。
 
 原生 Finalization 的 `finalization_source_paragraph` 保留可重验原话，不要求摘要整段逐字复述；已有 annotation、私语/小组边界与消息 0 保留。没有 native flag 的旧未标注消息不扩权，伪造摘要和 assistant 第三人称旁白不自动披露。`AGE` 只记录与当时 CK3 年龄相符的本人当前年龄明示，人物认知展示“披露时年龄 + 获知日期”，始终 `current:false`，以后变龄不重算，不开放手工当前年龄按钮。头衔/特质当前事实校验、手动覆盖、归档只读和信件 Gate 继续保留。
 
@@ -130,13 +130,13 @@ V9.2.3候选补充：[实施](current/v9/V9_2_3_IMPLEMENTATION_REPORT.md)、[验
 
 ## V8.14.2 摘要编辑与长期抽取事故热修（2026-10-04）
 
-[热修报告](v8.14.2-summary-memory-incident-hotfix-report.md)：普通 Legacy 摘要的手工编辑/删除不要求活动对话，也不受 Memory4 归档只读包装限制；Official 保护及 Memory4 的活动 Owner/Campaign/revision 写入门禁保留。下方历史“只读页禁止修改”范围应理解为 Memory4 操作，不再延伸至普通 Legacy 内容。
+[热修报告](versions/v8/V8.14.md#source-b5ea8c3668b9)：普通 Legacy 摘要的手工编辑/删除不要求活动对话，也不受 Memory4 归档只读包装限制；Official 保护及 Memory4 的活动 Owner/Campaign/revision 写入门禁保留。下方历史“只读页禁止修改”范围应理解为 Memory4 操作，不再延伸至普通 Legacy 内容。
 
 长期抽取以引用片段的 `knownBy` 证明 Owner 知情后，允许该 Owner 成为相关实体；`allowedEntityIds` 与出席 `participantIds` 分开，不向其他在场者授予未知实体信息。所有候选因实体引用非法被拒且没有其他有效结果时，记录抽取失败并保留恢复快照；真实空结果仍正常保留 Legacy。旧误记空归档不自动回填；有有效 Detail 才派生年度/人生。显示 4.0、协议 3.0、存储 2.5 及冻结/召回合同不变，真实 Provider 生成率待用户复测。
 
 ## V8.14.2 Owner-scoped Disclosure（本地回归与 UI 通过；实机 Gate 待验收）
 
-[实施报告](v8.14.2-owner-scoped-disclosure-implementation-report.md)将明确说出的当前头衔/特质作为 Owner × Campaign × Entity × Fact 范围的 Known Entity evidence。扫描只读取经过可见性与来源校验的 spoken fragments，限于当前结构化事实候选；不确定、否定、假设、传闻或歧义绑定均拒绝。手动已知/未知使用 revision 与 tombstone 管理，当前 Profile 仍从 CK3 GameData 校验事实是否存在。Nickname 默认可见，姓名继续走身份识别。
+[实施报告](versions/v8/V8.14.md#source-a897e1bc802c)将明确说出的当前头衔/特质作为 Owner × Campaign × Entity × Fact 范围的 Known Entity evidence。扫描只读取经过可见性与来源校验的 spoken fragments，限于当前结构化事实候选；不确定、否定、假设、传闻或歧义绑定均拒绝。手动已知/未知使用 revision 与 tombstone 管理，当前 Profile 仍从 CK3 GameData 校验事实是否存在。Nickname 默认可见，姓名继续走身份识别。
 
 披露在本场 Finalization 后对下一场生效。收到的游戏原信 payload 通过校验后、回复生成前记录为玩家 → 收件 NPC 的 recipient-only 事实；NPC 回信仅在 CK3 `LETTER_ACCEPTED` effect 已写、接受回调清理载体并复核原 payload 后写给玩家 Owner。用户已确认 V8.14.1 完整信件往返实机 PASS；该确认不改写历史报告形成时的 `NOT TESTED`。完整发布 `352/352`、Letter 专项 `7/7`、独立 adversarial QA `31 PASS/0 FAIL`；隔离 UI Smoke `34` 张截图、startup smoke `36/36` 通过。Disclosure CK3/Provider、cache telemetry 与 Soak 仍待用户实测。
 
@@ -144,11 +144,11 @@ Memory Engine 4.0 是当前可见标签，不升级 `engineVersion: 3.0` 或摘�
 
 ## V8.14.1 前端显示同步（2026-10-04）
 
-[前端内容同步报告](v8.14.1-frontend-content-update-implementation-report.md)区分当前 Memory4 可见名称、协议 `engineVersion: 3.0`、旧摘要 2.5 兼容及 App 包版本。摘要/优化/世界书展示现行分层、Recent2、动态召回与归档只读说明；没有改召回顺序、Prompt 块或持久键。信件实机验收与 GLM V8.14.2 延期状态保留，既有旧版本报告不回写为新测试结果。
+[前端内容同步报告](versions/v8/V8.14.md#source-7129c540f640)区分当前 Memory4 可见名称、协议 `engineVersion: 3.0`、旧摘要 2.5 兼容及 App 包版本。摘要/优化/世界书展示现行分层、Recent2、动态召回与归档只读说明；没有改召回顺序、Prompt 块或持久键。信件实机验收与 GLM V8.14.2 延期状态保留，既有旧版本报告不回写为新测试结果。
 
 ## V8.14.1 归档读取热修（2026-10-04，本地通过，新热修实机待验收）
 
-[事故热修报告](v8.14.1-runtime-incident-hotfix-report.md)记录已保存人物认知被活动对话角色表错误拦截的问题。读取与写入上下文已分开：真实结束对话前只保留最小 Owner 标签、Campaign、规范日期与 Context 快照；活动 getter 仍清空。明确战役内的既有侧车经 Owner、索引、metadata 哈希及 revision 核验后可只读查看，不从其他战役回退；新对话优先，非法新上下文结束时清除旧快照。归档认知按已加载日期与来源版本过滤，不宣称当前 CK3 人物状态。
+[事故热修报告](versions/v8/V8.14.md#source-0261667a1a6a)记录已保存人物认知被活动对话角色表错误拦截的问题。读取与写入上下文已分开：真实结束对话前只保留最小 Owner 标签、Campaign、规范日期与 Context 快照；活动 getter 仍清空。明确战役内的既有侧车经 Owner、索引、metadata 哈希及 revision 核验后可只读查看，不从其他战役回退；新对话优先，非法新上下文结束时清除旧快照。归档认知按已加载日期与来源版本过滤，不宣称当前 CK3 人物状态。
 
 只读页保留导航、刷新与来源查看，禁止编辑、删除、绑定、重压缩及派生重建；服务端继续要求活动上下文与预期版本。没有长期内容的抽取不会强制生成 Detail/Year/Life，Official 必须来自 CK3 导出。实际结束对话与跨战役等独立回归 10/10，完整发布门禁 346/346；415 个分类测试文件、68 个历史归档。用户确认首次身份边界与本次特质展示 PASS，信件 NOT TESTED；Provider 生成和新热修待实机复测。
 
@@ -160,11 +160,11 @@ Known Profile 只能以当前 Owner、Campaign、实体、游戏日期、获得�
 
 Known Entity 中来源不完整的旧记录显式保留 `legacy_partial`，不会误判为“从未认识”，也不丢弃已有识别次数；完整 Presence/Visibility/Finalization 证据仍可标为 `complete`。
 
-Trait Routing 14 项、身份知识 13 项、Memory closeout 18 项及承诺绑定修复后的 production pipeline 16 PASS / 0 FAIL（独立 QA 确认）。旧信件 fixture 已由 `scripts/letter-pipeline-test-helper.js` 按真实 PromptBuilder 调用适配，payload-race PASS；完整 `test-release.js` 344/344 发布组通过。真实 CK3 / Provider、Mod Trait 可观察证据、完整信件流程与 Soak 仍待验收；GLM 缓存 A/B 已延期至 V8.14.2。详见 [V8.14.1 改进与收口报告](v8.14.1-improvement-closeout-implementation-report.md)。
+Trait Routing 14 项、身份知识 13 项、Memory closeout 18 项及承诺绑定修复后的 production pipeline 16 PASS / 0 FAIL（独立 QA 确认）。旧信件 fixture 已由 `scripts/letter-pipeline-test-helper.js` 按真实 PromptBuilder 调用适配，payload-race PASS；完整 `test-release.js` 344/344 发布组通过。真实 CK3 / Provider、Mod Trait 可观察证据、完整信件流程与 Soak 仍待验收；GLM 缓存 A/B 已延期至 V8.14.2。详见 [V8.14.1 改进与收口报告](versions/v8/V8.14.md#source-86a81c2ffe9d)。
 
 ## V8.14-D/E 派生与管理（本地发布与独立 QA/UI 通过，实机待验收）
 
-[D/E 施工记录](v8.14-de-year-life-management-implementation-report.md)说明 Year/Life 的来源版本、dirty/revision、异步重建、取消和 `manual_override` 保护，以及人物认知、Official、Life、Year、Detail、Legacy 分层管理。派生视图可重建，不能替代 Canonical Detail；dirty 或来源失效的片段不进入有效召回，手工保留不会把旧来源重新标为有效。编辑/删除需要当前 Campaign/Owner 和 expected revision，旧页面不能覆盖新版本；Legacy 重压缩按单篇来源核验，原摘要保留，不强制全量迁移。
+[D/E 施工记录](versions/v8/V8.14.md#source-892fd023196f)说明 Year/Life 的来源版本、dirty/revision、异步重建、取消和 `manual_override` 保护，以及人物认知、Official、Life、Year、Detail、Legacy 分层管理。派生视图可重建，不能替代 Canonical Detail；dirty 或来源失效的片段不进入有效召回，手工保留不会把旧来源重新标为有效。编辑/删除需要当前 Campaign/Owner 和 expected revision，旧页面不能覆盖新版本；Legacy 重压缩按单篇来源核验，原摘要保留，不强制全量迁移。
 
 本轮同时增加动态玩家身份知情边界：后台标签不等于 NPC 已知身份；同场、刚开始交谈与高好感不授予姓名或头衔。明确当前关系、实际血亲、本角色获准记忆、公开事实及正文介绍仍可提供具体知识；介绍一项身份不解锁整包玩家资料。身份专项 13 项、D 专项 17 项、E 管理专项、独立 QA 37 项以及三主题/窄窗口 27 张隔离打包截图通过。完整发布 **339/339** 组、408 分类文件、68 历史归档；真实 CK3/Provider/Cache/Soak 与 Bulk Binding 存档提交仍待验收。
 
@@ -172,13 +172,13 @@ Memory Engine 3.0 可见标签、2.5 存储兼容、Recent2、官方追忆、C �
 
 ## V8.14-C 正式动态召回（本地实现，独立及实机 Gate 待验收）
 
-2026-10-03 用户确认 A/B 收口并进入 C。[进度与施工报告](v8.14-c-recall-planner-implementation-report.md)记录正式 Memory4/Legacy 动态读取接线：四种 Axis、六种 Granularity；所有实体共用 Overview≤1、Detail≤2（LIFE 代表细节≤1，精确日期无概览），整包包含来源/认知说明并受 `min(1200, Memory 剩余额度, Provider 安全余量)` 限制。EVENT 不借用对话日期，明确年份不补错年，第三人只读回应者自己的知情空间。
+2026-10-03 用户确认 A/B 收口并进入 C。[进度与施工报告](versions/v8/V8.14.md#source-28911e136bde)记录正式 Memory4/Legacy 动态读取接线：四种 Axis、六种 Granularity；所有实体共用 Overview≤1、Detail≤2（LIFE 代表细节≤1，精确日期无概览），整包包含来源/认知说明并受 `min(1200, Memory 剩余额度, Provider 安全余量)` 限制。EVENT 不借用对话日期，明确年份不补错年，第三人只读回应者自己的知情空间。
 
 冻结 Recent2、官方追忆与缓存锚点不变。成功回复并验证实际动态 block/ID/token 后提交 responder-private 历史、Seen 和最多三轮的同实体/话题/事件链 Focus；失败不提交。压缩移出、来源变更、Campaign 切换或时间倒退撤销旧块。Legacy 只有能重验完整独立来源事实时才拆分/抑制，未知边界不猜测。Year/Life 生成仍属于 D，不在本轮强制迁移旧摘要。运行时版本常量与现有可见标签未更改，下方为前置阶段合同。
 
 V8.12 Part 3 将可见标签及 `MEMORY_ENGINE_VERSION` 更新为 3.0；底层 `schemaVersion: 2`、2.5 人物目录、字段和写入合同保持兼容，不迁移用户摘要。系统仍以人物摘要文件夹作为玩家可见、可搜索、可编辑的长期记忆层。旧 2.3/2.4/2.5 摘要继续读取。V8.6.2 的 2.6 可见标签属于下述历史阶段。
 
-2026-09-24，用户明确确认 **V8.12 Part 3 实机 Gates 验收通过（用户报告）**，并授权 V8.12.1 实施。未回填逐项实测指标，既有自动化与隔离冒烟仍保持原证据范围；该确认不代表 V8.12.1 已验收或全局 V8 Full Freeze。详见 [Part 3 验收记录](v8.12-part3-memory-engine-3.0-implementation-report.md)。
+2026-09-24，用户明确确认 **V8.12 Part 3 实机 Gates 验收通过（用户报告）**，并授权 V8.12.1 实施。未回填逐项实测指标，既有自动化与隔离冒烟仍保持原证据范围；该确认不代表 V8.12.1 已验收或全局 V8 Full Freeze。详见 [Part 3 验收记录](versions/v8/V8.12.md#source-1605e6d78e72)。
 
 ## V8.13 会话级 Prompt 缓存布局（本地发布组通过，实机待验收）
 
@@ -204,7 +204,7 @@ V8.12 Part 3 将可见标签及 `MEMORY_ENGINE_VERSION` 更新为 3.0；底层 `
 
 - 在 `schemaVersion: 2` 下增量增加摘要对象顶层 `temporalRefs`，从原始消息的 `messageIds` 确定性解析时间表达，按 Owner 可见 Segment 投影后映射到内部 `memory.provenance.temporalRefs`；区分对话记录日期与被谈及事件日期，不改写既有 `summary.date`，旧摘要缺少新字段仍兼容读取。
 - 相对时间查询继续以本场 CK3 当前游戏日期为锚点；双时间召回应区分“何时谈过”和“事件何时发生”，不能借用电脑时间或冻结摘要日期推算当前日期。时间引用仅随有权知情的 Owner 投影传递，保持 Campaign 隔离，不因同名或相同人物 ID 跨战役召回。
-- Event Time 与 Conversation Time 双索引依时间意图选择目标；精确时间查询只允许目标窗口命中的摘要进入 **Extra ≤3**，多轮时间焦点在成功回复后才提交。既有预算及动态尾部、Recent2 冻结、GLM Stable Prefix、Prompt Block ID 与 Cache Anchor 保持不变。314/314 自动发布组通过；真实 CK3/Provider 与缓存命中待验收，详见 [V8.12.1 实施记录](v8.12.1-dual-temporal-memory-implementation-report.md)。
+- Event Time 与 Conversation Time 双索引依时间意图选择目标；精确时间查询只允许目标窗口命中的摘要进入 **Extra ≤3**，多轮时间焦点在成功回复后才提交。既有预算及动态尾部、Recent2 冻结、GLM Stable Prefix、Prompt Block ID 与 Cache Anchor 保持不变。314/314 自动发布组通过；真实 CK3/Provider 与缓存命中待验收，详见 [V8.12.1 实施记录](versions/v8/V8.12.md#source-af916fa119a6)。
 
 ## V8.12 Part 3 已验收基线召回合同
 
@@ -213,7 +213,7 @@ V8.12 Part 3 将可见标签及 `MEMORY_ENGINE_VERSION` 更新为 3.0；底层 `
 - 明确年份/日期查询（如“五年前”）只允许该时间窗命中的直接关系或被提及场外人物的 Owner 目录摘要占用动态 Extra；不以 Topic/Important 的近年摘要补足空位。“五年前”按当前游戏年份减五，查询该目标游戏历年的 1 月 1 日至 12 月 31 日，不再采用 `5×365 天 ± 半年`；同日更新的摘要目录也会刷新时间索引。冻结的最近两篇与官方追忆仍保留以维护缓存，但不提供时间计算基准；动态尾部显示当前游戏日期与目标年份，无可引用摘要时不准拿其他年份代答。索引优先使用摘要落盘时由游戏提供的对话日期，不解析模型正文；摘要中转述的更早事件不会自动按事件日重建索引。
 - 主预算按本场首次生成时的实际在场人数（包含玩家）冻结：二人 **10% / 上限 3600 Token**，三人 **12.5% / 上限 4500**，四人及以上 **15% / 上限 5400**；取上下文比例与绝对上限的较小值。中途入离场不重算，本场所有回应者使用同一额度，各自只读取自己的记忆。冻结通道最多使用 65%，活跃直接关系/内部稳定通道按 55:15 分配；直接关系通道内官方追忆最多占三分之一，没有近期摘要时可使用该通道全部额度。未用额度回流给动态 Extra；所有入选内容合计受主预算约束，完整请求另受 Provider 输入/输出预留和安全余量校验。
 - 摘要分块上限统一为 **64 块**，而不是旧阶段的 12 或前置工程一度实现的 512；Provider 单次输出预算和失败恢复仍是独立限制。关闭 `v812MemoryEngine3Enabled` 可回退旧召回路由，不删除 3.0 所读的存储数据。
-- 每场新对话读取 CK3 原生 `log_memories` 导出的本地化追忆，在对应 NPC 目录覆盖同一份 `官方追忆摘要.json`；在摘要页可查看、编辑、删除，不显示生成时间，正文保留事件日期。无需剪贴板操作或模型生成；模组原生描述也可接入。存储继续采用 schemaVersion 2 的摘要数组，标记 `CK3_OFFICIAL_RECOLLECTION`，以 Owner ID、战役和捕获会话校验。完整文本落盘，Prompt 副本按完整事件裁剪；下场对话重新覆盖，当前场冻结。原存档解析保留为只读 Shadow 诊断（默认 800 / 上限 1000 Token），不再独立注入或额外计费。详见 [Part 3 施工记录](v8.12-part3-memory-engine-3.0-implementation-report.md)。
+- 每场新对话读取 CK3 原生 `log_memories` 导出的本地化追忆，在对应 NPC 目录覆盖同一份 `官方追忆摘要.json`；在摘要页可查看、编辑、删除，不显示生成时间，正文保留事件日期。无需剪贴板操作或模型生成；模组原生描述也可接入。存储继续采用 schemaVersion 2 的摘要数组，标记 `CK3_OFFICIAL_RECOLLECTION`，以 Owner ID、战役和捕获会话校验。完整文本落盘，Prompt 副本按完整事件裁剪；下场对话重新覆盖，当前场冻结。原存档解析保留为只读 Shadow 诊断（默认 800 / 上限 1000 Token），不再独立注入或额外计费。详见 [Part 3 施工记录](versions/v8/V8.12.md#source-1605e6d78e72)。
 - GLM 稳定块仍随请求发送相同内容，以复用缓存；“冻结”不表示无状态接口能自行记住未发送的内容。原有块 ID 与稳定前缀/动态尾部分界保留。Part 3 实机 Gate 已按用户确认记录通过，但未回填真实 `cached_tokens` 指标，不据此承诺具体缓存命中率。
 
 ## V8.12 Part 3 前置：对话上下文与摘要可靠性（待实机 Gate）
@@ -237,13 +237,13 @@ V8.12 Part 3 将可见标签及 `MEMORY_ENGINE_VERSION` 更新为 3.0；底层 `
 
 ### V8.12 第一部分 Pair 隔离与 Episode 清理
 
-Legacy fallback 必须同时匹配 Finalization、Owner 知情和 Counterpart 主题相关性；同一多人终局的另一配对不受影响。没有明确 projection Segment IDs 时，Segment 也须能证明 Pair 相关性；多人且元数据不足时失败关闭。删除/编辑后清理不存在的 Memory ID 和 `knownBy=[]` 的无用 Segment；活动 Finalization、Recovery、明确 Audit/Recovery 保留标记不清理。继续使用既有日志事务和 2.6 可见标签 / 2.5 存储合同，详见 [V8.12 第一部分实施报告](v8.12-part1-implementation-report.md)。
+Legacy fallback 必须同时匹配 Finalization、Owner 知情和 Counterpart 主题相关性；同一多人终局的另一配对不受影响。没有明确 projection Segment IDs 时，Segment 也须能证明 Pair 相关性；多人且元数据不足时失败关闭。删除/编辑后清理不存在的 Memory ID 和 `knownBy=[]` 的无用 Segment；活动 Finalization、Recovery、明确 Audit/Recovery 保留标记不清理。继续使用既有日志事务和 2.6 可见标签 / 2.5 存储合同，详见 [V8.12 第一部分实施报告](versions/v8/V8.12.md#source-5c6f1d29141b)。
 
 ### V8.11.1 编辑与遗忘一致性
 
 摘要编辑同步重建所选 Owner 的 Projection Memory、Episode Segment、Knowledge 和 Consolidation，并清除当前会话 Recall/Character 缓存；以编辑原文形成可召回记录，不调用模型重新推断事实。原共享记忆仍为其他知情者保留，其他配对的正文不自动改写。旧摘要缺少 perspectiveMemoryIds 时尝试通过 finalizationId 与 Episode 精确映射；不能证明映射时报告 `LEGACY_SUMMARY_MEMORY_MAPPING_INCOMPLETE`，不静默删除或扩大失忆范围。
 
-编辑和 UI 删除在受影响文件间使用可回滚日志 `memory/summary-mutation.json`；正常提交删除日志，中断后启动先回滚。正在最终保存或有未提交恢复快照的同一摘要暂不接受修改。全量遗忘清除 `source=memory` 的 owner-status，但保留游戏来源及旧版死亡标记，避免“清记忆”改变角色生死判定。Memory Engine 可见 2.6 / 底层 2.5 合同不变，详见 [V8.11.1 实施记录](v8.11.1-consistency-implementation-report.md)。
+编辑和 UI 删除在受影响文件间使用可回滚日志 `memory/summary-mutation.json`；正常提交删除日志，中断后启动先回滚。正在最终保存或有未提交恢复快照的同一摘要暂不接受修改。全量遗忘清除 `source=memory` 的 owner-status，但保留游戏来源及旧版死亡标记，避免“清记忆”改变角色生死判定。Memory Engine 可见 2.6 / 底层 2.5 合同不变，详见 [V8.11.1 实施记录](versions/v8/V8.11.md#source-60e632561bc2)。
 
 ```text
 %APPDATA%/VOTC/votc_data/
@@ -315,7 +315,7 @@ ABCD 同时参与并提到 E 时，每个实际回应者分别按自己的目录
 
 ## 会话结束写入
 
-V8.5.1 摘要事故热修及 V8.12 重试修正：正常成功路径一场一次结构化请求；请求失败最多两次整场调用。整场截断或质量重试失败后，可按实际入离场边界及消息数量分段生成，再合并为同一个 finalization。此处历史版本最多 12 个片段；**Part 3 当前统一上限为 64 块**。各请求仍使用用户设置的输出 Token 上限。所有片段、来源 ID、在场边界与有向投影通过校验后才提交，不保存残缺 JSON。Provider 异常或无效输出最终失败时，仅保留原始消息恢复快照，不生成本地转录式“摘要”，不提交 Episode。自动恢复由下一场对话初始化触发；摘要页“重试失败摘要”不依赖活动 CK3 对话，可越过自动重试上限重新调用当前摘要模型，使用同一精简正文、重点记忆、在场隔离与落盘校验流程。余额不足必须充值或配置可用摘要模型，重试本身不能修复账户状态。手动重试单航班、跳过正在进行的对话和终局，清空记忆后不能复活旧快照；已成功提交或手工编辑的摘要不自动覆盖。底层 2.5 存储合同不变。长会话失败恢复的请求数可能增加，详见 [事故修复报告](v8.5.1-summary-incident-review.md)及 [V8 阶段记录](V8阶段开发记录.md)。
+V8.5.1 摘要事故热修及 V8.12 重试修正：正常成功路径一场一次结构化请求；请求失败最多两次整场调用。整场截断或质量重试失败后，可按实际入离场边界及消息数量分段生成，再合并为同一个 finalization。此处历史版本最多 12 个片段；**Part 3 当前统一上限为 64 块**。各请求仍使用用户设置的输出 Token 上限。所有片段、来源 ID、在场边界与有向投影通过校验后才提交，不保存残缺 JSON。Provider 异常或无效输出最终失败时，仅保留原始消息恢复快照，不生成本地转录式“摘要”，不提交 Episode。自动恢复由下一场对话初始化触发；摘要页“重试失败摘要”不依赖活动 CK3 对话，可越过自动重试上限重新调用当前摘要模型，使用同一精简正文、重点记忆、在场隔离与落盘校验流程。余额不足必须充值或配置可用摘要模型，重试本身不能修复账户状态。手动重试单航班、跳过正在进行的对话和终局，清空记忆后不能复活旧快照；已成功提交或手工编辑的摘要不自动覆盖。底层 2.5 存储合同不变。长会话失败恢复的请求数可能增加，详见 [事故修复报告](versions/v8/V8.5.md#source-e510ff2d7ad5)及 [V8 阶段记录](versions/v8/OVERVIEW.md#source-bd3947cca735)。
 
 `Source-ID contract v2` 在最终指令中列出当前输入允许的消息和人物 ID，禁止模型按切片重新编号。仅含程序生成入离场标记的片段保留原始标记与准确来源，不要求模型臆造一段对话。此调整仅影响摘要请求，不改变 Chat 的冻结 Prompt 前缀。
 
@@ -387,7 +387,7 @@ V8.6.2 状态面板标记 Memory Engine 2.6；人物目录、缓存、来源消�
 
 ## V9.3.5 候选验证入口
 
-本轮构建、部署和自动化验证命令及结果以[V9.3.5 验证报告](current/v9/V9_3_5_VERIFICATION_REPORT.md)为准；索引和来源边界见[合同文档](current/v9/V9_3_5_INDEX_AND_SOURCE_CONTRACT.md)。真实 CK3、Soak 与远端 CI 尚待验收，不宣称 Full Freeze。
+本轮构建、部署和自动化验证命令及结果以[V9.3.5 验证报告](versions/v9/V9.3.md#source-cc2e8da3d33b)为准；索引和来源边界见[合同文档](versions/v9/V9.3.md#source-8eafdcc3251a)。真实 CK3、Soak 与远端 CI 尚待验收，不宣称 Full Freeze。
 
 ## V9.3.4 历史验证入口
 
@@ -405,8 +405,8 @@ node --check resources\app\out\main\main.js
 node --check resources\app\out\main\ipc\register-ipc.js
 ```
 
-自动回归不连接真实 CK3 或摘要 Provider。以上命令和[V9.3.4 实施报告](current/v9/V9_3_4_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_4_VERIFICATION_REPORT.md)仅保留为上一阶段历史证据；其结果不代表 V9.3.5 候选验证状态。
+自动回归不连接真实 CK3 或摘要 Provider。以上命令和[V9.3.4 实施报告](versions/v9/V9.3.md#source-bc6bd4bbafbe)、[验证报告](versions/v9/V9.3.md#source-88fc17e6ab27)仅保留为上一阶段历史证据；其结果不代表 V9.3.5 候选验证状态。
 
-V9.3.6.2见[实施报告](current/v9/V9_3_6_2_IMPLEMENTATION_REPORT.md)、[验证报告](current/v9/V9_3_6_2_VERIFICATION_REPORT.md)、[性能A/B](current/v9/V9_3_6_2_PAIR_PERFORMANCE_AB.md)和[Context说明](current/v9/V9_3_6_2_CONTEXT_COMPATIBILITY.md)。Owner可信摘要派生的进程内候选目录只做保守预筛，不替代PairLedger／Source／Forget；目录不完整显式走原全量路径，快路径保留每候选实际读和末尾复验，以及全Owner进入／退出核对。同版本支持safe／exhaustive回滚，L0不访问第三人目录。历史目标、时间和相关性统一取授权分句；局部否定不遮蔽其他明确历史目标。新GLM实例Custom90000为未经原生验证的兼容值，旧Auto不静默迁移；扩窗不改变记忆硬上限。
+V9.3.6.2见[实施报告](versions/v9/V9.3.md#source-1873df7cc39d)、[验证报告](versions/v9/V9.3.md#source-236538140d2f)、[性能A/B](versions/v9/V9.3.md#source-4ec33e321832)和[Context说明](versions/v9/V9.3.md#source-1b4ca612dc85)。Owner可信摘要派生的进程内候选目录只做保守预筛，不替代PairLedger／Source／Forget；目录不完整显式走原全量路径，快路径保留每候选实际读和末尾复验，以及全Owner进入／退出核对。同版本支持safe／exhaustive回滚，L0不访问第三人目录。历史目标、时间和相关性统一取授权分句；局部否定不遮蔽其他明确历史目标。新GLM实例Custom90000为未经原生验证的兼容值，旧Auto不静默迁移；扩窗不改变记忆硬上限。
 
-V9.3.6.3按可信Pair局部纳入旧摘要不确定来源，只有全域未知时完整回退；Owner进入和退出校验覆盖已读取的非标准旧JSON。同stat内容改动、Forget、身份与日期竞争仍整轮失效。事件之后的回顾由时间结构与谓词共同识别，未来、提醒、否定与引述保持L0。详见[实施报告](current/v9/V9_3_6_3_IMPLEMENTATION_REPORT.md)与[旧档兼容](current/v9/V9_3_6_3_LEGACY_COMPATIBILITY.md)。
+V9.3.6.3按可信Pair局部纳入旧摘要不确定来源，只有全域未知时完整回退；Owner进入和退出校验覆盖已读取的非标准旧JSON。同stat内容改动、Forget、身份与日期竞争仍整轮失效。事件之后的回顾由时间结构与谓词共同识别，未来、提醒、否定与引述保持L0。详见[实施报告](versions/v9/V9.3.md#source-1ab67ea12856)与[旧档兼容](versions/v9/V9.3.md#source-e40f70bfa876)。

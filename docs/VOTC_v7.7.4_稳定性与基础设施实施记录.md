@@ -1,21 +1,14 @@
-# VOTC v7.7.4 稳定性与基础设施实施记录
+<!-- version-document-redirect:v1 -->
+# 历史链接索引
 
-## 已实施
+本文原文已完整合并到 [V7.7 版本册](versions/v7/V7.7.md#source-a8331a2a5ba9)。
+此页仅兼容旧链接；请从版本目录阅读，历史结论未重新验收。
 
-- GitHub Actions 的检出步骤启用 `lfs: true`，发布回归可以获得 LFS 管理的 Electron 二进制资产。
-- 新增核心版本常量：应用功能基线为 `7.7.4`，Memory Engine 保持 `2.4`；安装包 `resources/app/package.json` 的 `2.0.4` 不变。
-- 人物摘要目录缓存返回独立记录，避免调用方修改污染缓存；记录命中、未命中、失效和当前条目数。摘要管理器的“刷新”会先使缓存失效。
-- 完成整场人物目录落盘和既有持久化验证后才使缓存失效；中途的定向文件写入不提前清空缓存。
-- Token 估算器统一用于对话、动作、摘要和记忆预算；中文 CJK 字符按更接近实际的权重估算。用量记录新增 `promptEstimateRatio`，用于与 Provider 返回的输入 Token 校准。
-- 配对记忆检索对同一角色只读取一次 knowledge JSON。来源 `messageId` 必须是本场真实历史中的严格递增、不重复整数；显式 `speakerId` 还必须属于本场参与者。
-- 通用外部链接 IPC 只允许 HTTP/HTTPS；Player2 改走仅打开固定 `player2://` 的专用 IPC。动作文件打开被限制在动作根目录内；摘要编辑、摘要索引、角色 ID、重生成 ID 和 Token 设置均在主进程检查范围与类型。
-
-## 自动验证
-
-- `scripts/test-v7.7.4-stability-infrastructure.js` 覆盖 CJK 估算、缓存不变性及指标、刷新失效、单次 knowledge 读取、畸形 ID、CI LFS 与 IPC 边界。
-- 发布清单增至 37 组；本地静态语法检查和完整发布回归通过后方可标记发布完成。
-
-## 未在本次自动化中执行
-
-- 不删除本地或远端 `v6.8.4` Git 标签，也不推送新标签：这会改变仓库历史，需要单独确认。
-- 未进行真实 CK3 对话和真实 Provider 调用；自动测试验证的是本地逻辑与接口边界，仍应在发布前人工结束一场包含迟到、离场和私密行动的多人对话。
+<a id="votc-v774-稳定性与基础设施实施记录"></a>
+- [VOTC v7.7.4 稳定性与基础设施实施记录](versions/v7/V7.7.md#source-a8331a2a5ba9--votc-v774-稳定性与基础设施实施记录)
+<a id="已实施"></a>
+- [已实施](versions/v7/V7.7.md#source-a8331a2a5ba9--已实施)
+<a id="自动验证"></a>
+- [自动验证](versions/v7/V7.7.md#source-a8331a2a5ba9--自动验证)
+<a id="未在本次自动化中执行"></a>
+- [未在本次自动化中执行](versions/v7/V7.7.md#source-a8331a2a5ba9--未在本次自动化中执行)
