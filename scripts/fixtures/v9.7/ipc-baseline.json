@@ -1,0 +1,2325 @@
+{
+  "baselineCommit": "3721b925270457175e0e583f943a20db581de03e",
+  "routes": [
+    {
+      "exposure": "actionsAPI.execute",
+      "kind": "invoke",
+      "channel": "actions:execute",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "characters.get",
+        "console.error",
+        "conversationManager.addManualActionFeedback",
+        "conversationManager.getCurrentConversation"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "actionsAPI.getAll",
+      "kind": "invoke",
+      "channel": "actions:getAll",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "actionRegistry.getAllActions",
+        "actionRegistry.getEffectiveDestructive",
+        "actionRegistry.hasDestructiveOverride",
+        "actionRegistry.isActionDisabled",
+        "actions.map",
+        "console.error",
+        "settingsRepository.getLanguage"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "actionsAPI.getDetails",
+      "kind": "invoke",
+      "channel": "actions:getDetails",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "actionRegistry.getById",
+        "actionRegistry.getEffectiveDestructive",
+        "args.map",
+        "characters.get",
+        "console.error",
+        "conversationManager.getCurrentConversation",
+        "definition.args",
+        "definition.check",
+        "settingsRepository.getLanguage"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "actionsAPI.getSettings",
+      "kind": "invoke",
+      "channel": "actions:getSettings",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "settingsRepository.getActionSettings"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "actionsAPI.openFile",
+      "kind": "invoke",
+      "channel": "actions:openFile",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "shell.openPath"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "actionsAPI.openFolder",
+      "kind": "invoke",
+      "channel": "actions:openFolder",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "shell.openPath"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "actionsAPI.reload",
+      "kind": "invoke",
+      "channel": "actions:reload",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "actionRegistry.reloadActions",
+        "console.error"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "actionsAPI.setDestructiveOverride",
+      "kind": "invoke",
+      "channel": "actions:setDestructiveOverride",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "actionRegistry.getSettings",
+        "actionRegistry.setDestructiveOverride",
+        "console.error",
+        "settingsRepository.saveActionSettings"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "actionsAPI.setDisabled",
+      "kind": "invoke",
+      "channel": "actions:setDisabled",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "actionRegistry.getSettings",
+        "actionRegistry.setActionDisabled",
+        "console.error",
+        "settingsRepository.saveActionSettings"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "bridgeAPI.getState",
+      "kind": "invoke",
+      "channel": "bridge:getState",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "bridgeService.getState"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "bridgeAPI.redetect",
+      "kind": "invoke",
+      "channel": "bridge:redetect",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "bridgeService.redetect"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "characterKnowledgeAPI.getConversationView",
+      "kind": "invoke",
+      "channel": "characterKnowledge:getConversationView",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "characterKnowledgeAPI.getOwnerView",
+      "kind": "invoke",
+      "channel": "characterKnowledge:getOwnerView",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "characterKnowledge.getOwnerView"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/character-knowledge-ui.js"
+      ]
+    },
+    {
+      "exposure": "characterKnowledgeAPI.getTargetView",
+      "kind": "invoke",
+      "channel": "characterKnowledge:getTargetView",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "characterKnowledge.getTargetView"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/character-knowledge-ui.js"
+      ]
+    },
+    {
+      "exposure": "characterKnowledgeAPI.setManualStatus",
+      "kind": "invoke",
+      "channel": "characterKnowledge:setManualStatus",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "characterKnowledge.setManualStatus"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/character-knowledge-ui.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.applyPairMemoryBackfill",
+      "kind": "invoke",
+      "channel": "conversation:applyPairMemoryBackfill",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "Array.isArray",
+        "Object.keys",
+        "allowed.has"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "conversationAPI.approveActions",
+      "kind": "invoke",
+      "channel": "conversation:approveActions",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "conversation.approveActions",
+        "conversationManager.getCurrentConversation"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.bindLegacyConversationCampaign",
+      "kind": "invoke",
+      "channel": "conversation:bindLegacyConversationCampaign",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "SummariesManager.bindLegacyConversationCampaign",
+        "console.error"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.bindLegacyOwnerCampaign",
+      "kind": "invoke",
+      "channel": "conversation:bindLegacyOwnerCampaign",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "SummariesManager.bindLegacyOwnerCampaign",
+        "console.error"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.bindLegacySummaryCampaign",
+      "kind": "invoke",
+      "channel": "conversation:bindLegacySummaryCampaign",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "Array.isArray",
+        "SummariesManager.bindLegacySummaryCampaign",
+        "console.error",
+        "summaryIds.some"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.cancelStream",
+      "kind": "invoke",
+      "channel": "conversation:cancelStream",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "conversationManager.cancelCurrentStream"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.clearSummaries",
+      "kind": "invoke",
+      "channel": "conversation:clearSummaries",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "conversationManager.getCurrentConversation",
+        "gameData.loadCharactersSummaries",
+        "memoryEngine.clearAllLongTermMemory"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.declineActions",
+      "kind": "invoke",
+      "channel": "conversation:declineActions",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "conversation.declineActions",
+        "conversationManager.getCurrentConversation"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.deleteCharacterSummaries",
+      "kind": "invoke",
+      "channel": "conversation:deleteCharacterSummaries",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "SummariesManager.deleteCharacterSummaries",
+        "console.error"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.deleteSummary",
+      "kind": "invoke",
+      "channel": "conversation:deleteSummary",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "SummariesManager.deleteSummary",
+        "console.error"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.editUserMessage",
+      "kind": "invoke",
+      "channel": "conversation:editUserMessage",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "console.log",
+        "conversation.editUserMessage",
+        "conversationManager.getCurrentConversation"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.getActiveConversationData",
+      "kind": "invoke",
+      "channel": "conversation:getActiveConversationData",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "conversationManager.getActiveConversationData"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.getContextUsage",
+      "kind": "invoke",
+      "channel": "conversation:getContextUsage",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.getConversationEntries",
+      "kind": "invoke",
+      "channel": "conversation:getEntries",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "conversationManager.getConversationEntries"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.getConversationState",
+      "kind": "invoke",
+      "channel": "conversation:getState",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.getPairMemoryIndex",
+      "kind": "invoke",
+      "channel": "conversation:getPairMemoryIndex",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "Array.isArray",
+        "Object.keys",
+        "allowed.has"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "conversationAPI.getPromptPreview",
+      "kind": "invoke",
+      "channel": "conversation:getPromptPreview",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "conversationManager.getPromptPreview"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.getSummariesDashboardData",
+      "kind": "invoke",
+      "channel": "conversation:getSummariesDashboardData",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "SummariesManager.getRecoveryStatus",
+        "SummariesManager.listAllSummaries",
+        "console.error",
+        "conversationManager.getCurrentConversation",
+        "memoryEngine.invalidateSummaryFolderCache"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.getUiContext",
+      "kind": "invoke",
+      "channel": "conversation:getUiContext",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "conversationManager.getUiContext"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "conversationAPI.joinWaitingCharacter",
+      "kind": "invoke",
+      "channel": "conversation:joinWaitingCharacter",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.leavePresentCharacter",
+      "kind": "invoke",
+      "channel": "conversation:leavePresentCharacter",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.listAllSummaries",
+      "kind": "invoke",
+      "channel": "conversation:listAllSummaries",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "SummariesManager.listAllSummaries",
+        "console.error"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.onContextUsageUpdate",
+      "kind": "on",
+      "channel": "conversation:contextUsageUpdated",
+      "handlerOwner": "Main event -> Preload listener",
+      "serviceCalls": [],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.onConversationUpdate",
+      "kind": "on",
+      "channel": "conversation:updated",
+      "handlerOwner": "Main event -> Preload listener",
+      "serviceCalls": [],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js",
+        "src/app/renderer/character-knowledge-ui.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.openPairMemorySource",
+      "kind": "invoke",
+      "channel": "conversation:openPairMemorySource",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "Array.isArray",
+        "Object.keys",
+        "allowed.has"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "conversationAPI.openSummariesFolder",
+      "kind": "invoke",
+      "channel": "conversation:openSummariesFolder",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "shell.openPath"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.pauseConversation",
+      "kind": "invoke",
+      "channel": "conversation:pause",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "conversationManager.pauseConversation"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.previewLegacyConversationBinding",
+      "kind": "invoke",
+      "channel": "conversation:previewLegacyConversationBinding",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "SummariesManager.previewLegacyConversationBinding",
+        "console.error"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.previewLegacyOwnerBinding",
+      "kind": "invoke",
+      "channel": "conversation:previewLegacyOwnerBinding",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "SummariesManager.previewLegacyOwnerBinding",
+        "console.error"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.previewPairMemoryBackfill",
+      "kind": "invoke",
+      "channel": "conversation:previewPairMemoryBackfill",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "Array.isArray",
+        "Object.keys",
+        "allowed.has"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "conversationAPI.regenerateError",
+      "kind": "invoke",
+      "channel": "conversation:regenerateError",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "console.log",
+        "conversationManager.getCurrentConversation",
+        "conversationManager.regenerateError"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.regenerateMessage",
+      "kind": "invoke",
+      "channel": "conversation:regenerateMessage",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "console.log",
+        "conversation.regenerateMessage",
+        "conversationManager.getCurrentConversation"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.regenerateSummary",
+      "kind": "invoke",
+      "channel": "conversation:regenerateSummary",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "SummariesManager.regenerateSummary",
+        "console.error"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.reset",
+      "kind": "invoke",
+      "channel": "conversation:reset",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "conversationManager.endCurrentConversation"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.resumeConversation",
+      "kind": "invoke",
+      "channel": "conversation:resume",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "conversationManager.resumeConversation"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.retryFailedSummaries",
+      "kind": "invoke",
+      "channel": "conversation:retryFailedSummaries",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "SummariesManager.retryFailedSummaries",
+        "console.error"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.returnTemporaryCharacter",
+      "kind": "invoke",
+      "channel": "conversation:returnTemporaryCharacter",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.sendMessage",
+      "kind": "invoke",
+      "channel": "conversation:sendMessage",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "console.log",
+        "settingsRepository.getGlobalStreamSetting"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.temporarilyLeaveCharacter",
+      "kind": "invoke",
+      "channel": "conversation:temporarilyLeaveCharacter",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "conversationAPI.updateSummary",
+      "kind": "invoke",
+      "channel": "conversation:updateSummary",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "SummariesManager.updateSummary",
+        "console.error"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "electronAPI.collectAndOpenLogs",
+      "kind": "invoke",
+      "channel": "logs:collectAndOpen",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "JSON.stringify",
+        "app.getPath",
+        "app.getVersion",
+        "console.error",
+        "fs2.copyFileSync",
+        "fs2.existsSync",
+        "fs2.mkdirSync",
+        "fs2.readdirSync",
+        "fs2.unlinkSync",
+        "fs2.writeFileSync",
+        "os.arch",
+        "os.platform",
+        "os.tmpdir",
+        "path2.join",
+        "settingsRepository.getCK3UserFolderPath",
+        "shell.openPath"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "electronAPI.getAppVersion",
+      "kind": "invoke",
+      "channel": "app:getVersion",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "app.getVersion"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "electronAPI.hideWindow",
+      "kind": "send",
+      "channel": "chat-hide",
+      "handlerOwner": "main/main.js + main/window-manager.js",
+      "serviceCalls": [],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "electronAPI.onChatReset",
+      "kind": "on",
+      "channel": "chat-reset",
+      "handlerOwner": "Main event -> Preload listener",
+      "serviceCalls": [],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "electronAPI.onHideChat",
+      "kind": "on",
+      "channel": "chat-hide",
+      "handlerOwner": "Main event -> Preload listener",
+      "serviceCalls": [],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "electronAPI.onOverlayVisibilityChange",
+      "kind": "on",
+      "channel": "overlay-visibility-change",
+      "handlerOwner": "Main event -> Preload listener",
+      "serviceCalls": [],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "electronAPI.onToggleMinimize",
+      "kind": "on",
+      "channel": "toggle-minimize",
+      "handlerOwner": "Main event -> Preload listener",
+      "serviceCalls": [],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "electronAPI.onToggleSettings",
+      "kind": "on",
+      "channel": "toggle-settings",
+      "handlerOwner": "Main event -> Preload listener",
+      "serviceCalls": [],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "electronAPI.openExternal",
+      "kind": "invoke",
+      "channel": "shell:openExternal",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "shell.openExternal"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "electronAPI.openPlayer2",
+      "kind": "invoke",
+      "channel": "shell:openPlayer2",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "shell.openExternal"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "electronAPI.setIgnoreMouseEvents",
+      "kind": "send",
+      "channel": "set-ignore-mouse-events",
+      "handlerOwner": "main/main.js + main/window-manager.js",
+      "serviceCalls": [],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "electronAPI.toggleConfigPanel",
+      "kind": "invoke",
+      "channel": "toggle-config-panel",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "webContents.send"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "lettersAPI.cancelBlockedRunCommand",
+      "kind": "invoke",
+      "channel": "letters:cancelBlockedRunCommand",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "letterManager.cancelBlockedRunCommand"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "lettersAPI.cancelStalledRunCommand",
+      "kind": "invoke",
+      "channel": "letters:cancelStalledRunCommand",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "letterManager.cancelStalledRunCommand"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "lettersAPI.clearOldStatuses",
+      "kind": "invoke",
+      "channel": "letters:clearOldStatuses",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "letterManager.clearOldStatuses"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "lettersAPI.clearPending",
+      "kind": "invoke",
+      "channel": "letters:clearPending",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "letterManager.clearPendingLetters"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "lettersAPI.confirmEffectDiagnostic",
+      "kind": "invoke",
+      "channel": "letters:confirmEffectDiagnostic",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "letterManager.confirmEffectDiagnostic"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "lettersAPI.getLetterDetails",
+      "kind": "invoke",
+      "channel": "letters:getLetterDetails",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "letterManager.getLetterStatus"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "lettersAPI.getPromptPreview",
+      "kind": "invoke",
+      "channel": "letter:getPromptPreview",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "letterManager.buildPromptPreview"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "lettersAPI.getStatuses",
+      "kind": "invoke",
+      "channel": "letters:getStatuses",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "Date.now",
+        "console.error"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "lettersAPI.resyncGameDate",
+      "kind": "invoke",
+      "channel": "letters:resyncGameDate",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "letterManager.resyncGameDate"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "lettersAPI.retryBlockedRunCommand",
+      "kind": "invoke",
+      "channel": "letters:retryBlockedRunCommand",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "letterManager.retryBlockedRunCommand"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "lettersAPI.retryFailed",
+      "kind": "invoke",
+      "channel": "letters:retryFailed",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "letterManager.retryFailedLetter"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "lettersAPI.retryPayload",
+      "kind": "invoke",
+      "channel": "letters:retryPayload",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "letterManager.retryIncompletePayload"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "lettersAPI.retryStalledRunCommand",
+      "kind": "invoke",
+      "channel": "letters:retryStalledRunCommand",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "letterManager.retryStalledRunCommand"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "lettersAPI.runEffectDiagnostic",
+      "kind": "invoke",
+      "channel": "letters:runEffectDiagnostic",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "letterManager.runEffectDiagnostic"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.checkPlayer2Health",
+      "kind": "invoke",
+      "channel": "llm:checkPlayer2Health",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "provider.checkHealth",
+        "providerRegistry.createProvider",
+        "settingsRepository.getActiveProviderConfig"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.clearCustomContextLength",
+      "kind": "invoke",
+      "channel": "llm:clearCustomContextLength",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "llmManager.clearCustomContextLength"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "llmConfigAPI.deletePreset",
+      "kind": "invoke",
+      "channel": "llm:deletePreset",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.deletePreset"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.getActionApprovalSettings",
+      "kind": "invoke",
+      "channel": "llm:getActionApprovalSettings",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.getActionApprovalSettings"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.getActionsProviderId",
+      "kind": "invoke",
+      "channel": "llm:getActionsProviderId",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.getActionsProviderInstanceId"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.getAllowPrerelease",
+      "kind": "invoke",
+      "channel": "llm:getAllowPrerelease",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.getAllowPrerelease"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "llmConfigAPI.getAppSettings",
+      "kind": "invoke",
+      "channel": "llm:getAppSettings",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.getAppSettings"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.getContextDiagnostics",
+      "kind": "invoke",
+      "channel": "llm:getContextDiagnostics",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "llmManager.getContextDiagnostics"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "llmConfigAPI.getCurrentContextLength",
+      "kind": "invoke",
+      "channel": "llm:getCurrentContextLength",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "llmManager.getCurrentContextLength"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "llmConfigAPI.getLanguage",
+      "kind": "invoke",
+      "channel": "llm:getLanguage",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.getLanguage"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "llmConfigAPI.getLanguagePreferences",
+      "kind": "invoke",
+      "channel": "llm:getLanguagePreferences",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.getLanguagePreferences"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "llmConfigAPI.getMaxContextLength",
+      "kind": "invoke",
+      "channel": "llm:getMaxContextLength",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "llmManager.getMaxContextLength"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "llmConfigAPI.getSummaryPromptSettings",
+      "kind": "invoke",
+      "channel": "llm:getSummaryPromptSettings",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.getSummaryPromptSettings"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.getSummaryProviderId",
+      "kind": "invoke",
+      "channel": "llm:getSummaryProviderId",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.getSummaryProviderInstanceId"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.getUiLanguage",
+      "kind": "invoke",
+      "channel": "llm:getUiLanguage",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.getUiLanguage"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "llmConfigAPI.getUiPresentationEnabled",
+      "kind": "invoke",
+      "channel": "llm:getUiPresentationEnabled",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.getUiPresentationEnabled"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "llmConfigAPI.listModels",
+      "kind": "invoke",
+      "channel": "llm:listModels",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "llmManager.listModelsForProvider"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.saveActionApprovalSettings",
+      "kind": "invoke",
+      "channel": "llm:saveActionApprovalSettings",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.saveActionApprovalSettings"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.saveAllowPrerelease",
+      "kind": "invoke",
+      "channel": "llm:saveAllowPrerelease",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.saveAllowPrerelease"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.saveGenerateFollowingMessagesSetting",
+      "kind": "invoke",
+      "channel": "llm:saveGenerateFollowingMessagesSetting",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.saveGenerateFollowingMessagesSetting"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.saveGlobalStreamSetting",
+      "kind": "invoke",
+      "channel": "llm:saveGlobalStreamSetting",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.saveGlobalStreamSetting"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.saveLanguage",
+      "kind": "invoke",
+      "channel": "llm:saveLanguage",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.saveLanguage"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "llmConfigAPI.saveMessageFontSize",
+      "kind": "invoke",
+      "channel": "llm:saveMessageFontSize",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.saveMessageFontSize"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.savePauseOnRegenerationSetting",
+      "kind": "invoke",
+      "channel": "llm:savePauseOnRegenerationSetting",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.savePauseOnRegenerationSetting"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.saveProviderConfig",
+      "kind": "invoke",
+      "channel": "llm:saveProviderConfig",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.saveProviderConfig"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.saveShowSettingsOnStartupSetting",
+      "kind": "invoke",
+      "channel": "llm:saveShowSettingsOnStartupSetting",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.saveShowSettingsOnStartupSetting"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.saveSummaryPromptSettings",
+      "kind": "invoke",
+      "channel": "llm:saveSummaryPromptSettings",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "Array.isArray",
+        "settingsRepository.saveSummaryPromptSettings"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.saveUiLanguage",
+      "kind": "invoke",
+      "channel": "llm:saveUiLanguage",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.saveUiLanguage"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "llmConfigAPI.saveUiPresentationEnabled",
+      "kind": "invoke",
+      "channel": "llm:saveUiPresentationEnabled",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.saveUiPresentationEnabled"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "llmConfigAPI.selectFolder",
+      "kind": "invoke",
+      "channel": "dialog:selectFolder",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "dialog.showOpenDialog"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.setActionsProviderId",
+      "kind": "invoke",
+      "channel": "llm:setActionsProviderId",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.setActionsProviderInstanceId"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.setActiveProvider",
+      "kind": "invoke",
+      "channel": "llm:setActiveProvider",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.setActiveProviderInstanceId"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.setCK3Folder",
+      "kind": "invoke",
+      "channel": "llm:setCK3Folder",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "console.log",
+        "letterManager.restartLogTailing",
+        "letterManager.stopLogTailing",
+        "runFileManager.refreshPathFromSettings",
+        "settingsRepository.getCK3UserFolderPath",
+        "settingsRepository.setCK3UserFolderPath"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.setCustomContextLength",
+      "kind": "invoke",
+      "channel": "llm:setCustomContextLength",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "llmManager.setCustomContextLength"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "llmConfigAPI.setModLocationPath",
+      "kind": "invoke",
+      "channel": "llm:setModLocationPath",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.setModLocationPath"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.setSummaryProviderId",
+      "kind": "invoke",
+      "channel": "llm:setSummaryProviderId",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.setSummaryProviderInstanceId"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "llmConfigAPI.testConnection",
+      "kind": "invoke",
+      "channel": "llm:testConnection",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "llmManager.testProviderConnection"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "performanceDiagnosticsAPI.exportReport",
+      "kind": "invoke",
+      "channel": "performance:export-report",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "JSON.stringify",
+        "dialog.showSaveDialog",
+        "performanceTrace.exportReport",
+        "promises.writeFile"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "performanceDiagnosticsAPI.getState",
+      "kind": "invoke",
+      "channel": "performance:get-state",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "performanceDiagnosticsAPI.recordRendererMetrics",
+      "kind": "invoke",
+      "channel": "performance:record-renderer",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "Array.isArray",
+        "Number.isFinite",
+        "Number.isSafeInteger",
+        "Object.keys",
+        "metrics.some",
+        "performanceTrace.recordRendererMetrics",
+        "results.has",
+        "steps.has"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "performanceDiagnosticsAPI.snapshot",
+      "kind": "invoke",
+      "channel": "performance:snapshot",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "performanceTrace.snapshot"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "promptsAPI.deletePreset",
+      "kind": "invoke",
+      "channel": "prompts:deletePreset",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "promptConfigManager.deletePreset"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "promptsAPI.exportZip",
+      "kind": "invoke",
+      "channel": "prompts:exportZip",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "dialog.showSaveDialog",
+        "promptConfigManager.ensurePromptDirs",
+        "promptConfigManager.getPresets",
+        "promptConfigManager.normalizeSettings",
+        "settingsRepository.getPromptSettings"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "promptsAPI.getDefaultLetterMain",
+      "kind": "invoke",
+      "channel": "prompts:getDefaultLetterMain",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "promptConfigManager.getDefaultLetterMainTemplateContent"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "promptsAPI.getDefaultMain",
+      "kind": "invoke",
+      "channel": "prompts:getDefaultMain",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "promptConfigManager.getDefaultMainTemplateContent"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "promptsAPI.getLetterSettings",
+      "kind": "invoke",
+      "channel": "prompts:getLetterSettings",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.getLetterPromptSettings"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "promptsAPI.getSettings",
+      "kind": "invoke",
+      "channel": "prompts:getSettings",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.getPromptSettings"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "promptsAPI.listFiles",
+      "kind": "invoke",
+      "channel": "prompts:list",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "promptConfigManager.listFiles"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "promptsAPI.listPresets",
+      "kind": "invoke",
+      "channel": "prompts:listPresets",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "promptConfigManager.getPresets"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "promptsAPI.openPromptFile",
+      "kind": "invoke",
+      "channel": "prompts:openPromptFile",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "promptConfigManager.resolvePath",
+        "shell.openPath"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "promptsAPI.openPromptsFolder",
+      "kind": "invoke",
+      "channel": "prompts:openPromptsFolder",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "shell.openPath"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "promptsAPI.readFile",
+      "kind": "invoke",
+      "channel": "prompts:readFile",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "promptConfigManager.readPromptFile"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "promptsAPI.saveFile",
+      "kind": "invoke",
+      "channel": "prompts:saveFile",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "console.error",
+        "promptConfigManager.savePromptFile"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "promptsAPI.saveLetterSettings",
+      "kind": "invoke",
+      "channel": "prompts:saveLetterSettings",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.saveLetterPromptSettings"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "promptsAPI.savePreset",
+      "kind": "invoke",
+      "channel": "prompts:savePreset",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "promptConfigManager.normalizeSettings",
+        "promptConfigManager.savePreset",
+        "uuid.v4"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "promptsAPI.saveSettings",
+      "kind": "invoke",
+      "channel": "prompts:saveSettings",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.savePromptSettings"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "promptsAPI.validateTemplate",
+      "kind": "invoke",
+      "channel": "prompts:validateTemplate",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "TemplateEngine.validateTemplate"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "providerDiagnosticsAPI.exportCacheDiagnosticsV2",
+      "kind": "invoke",
+      "channel": "provider-diagnostics:export-cache-diagnostics-v2",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "providerDiagnostics.exportCacheDiagnosticsV2"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "providerDiagnosticsAPI.exportRealRequestDiff",
+      "kind": "invoke",
+      "channel": "provider-diagnostics:export-real-request-diff",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "providerDiagnostics.exportRealRequestDiff"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "providerDiagnosticsAPI.exportRecent",
+      "kind": "invoke",
+      "channel": "providerDiagnostics:exportRecent",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "providerDiagnostics.exportRecent"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "providerDiagnosticsAPI.getRealRequestDiff",
+      "kind": "invoke",
+      "channel": "provider-diagnostics:get-real-request-diff",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "providerDiagnostics.getRealRequestDiffStatus"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "providerDiagnosticsAPI.getRecent",
+      "kind": "invoke",
+      "channel": "providerDiagnostics:getRecent",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "providerDiagnostics.getRecent"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "providerDiagnosticsAPI.getStatus",
+      "kind": "invoke",
+      "channel": "providerDiagnostics:getStatus",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "providerDiagnostics.getStatus"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "providerDiagnosticsAPI.getV89Settings",
+      "kind": "invoke",
+      "channel": "providerDiagnostics:getV89Settings",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.getChatPromptV89Settings"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "providerDiagnosticsAPI.saveV89Settings",
+      "kind": "invoke",
+      "channel": "providerDiagnostics:saveV89Settings",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "settingsRepository.saveChatPromptV89Settings"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "usageAPI.clear",
+      "kind": "invoke",
+      "channel": "usage:clear",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "usageAnalytics.clear"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "usageAPI.getReport",
+      "kind": "invoke",
+      "channel": "usage:getReport",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "usageAnalytics.getReport"
+      ],
+      "rendererConsumers": [
+        "src/app/renderer/assets/index-Dn3qWlAB.js"
+      ]
+    },
+    {
+      "exposure": "worldlineAPI.confirmCanonBranch",
+      "kind": "invoke",
+      "channel": "worldline:confirmCanonBranch",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.confirmCanonBranch"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.createSupplemental",
+      "kind": "invoke",
+      "channel": "worldline:createSupplemental",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.deleteSupplemental",
+      "kind": "invoke",
+      "channel": "worldline:deleteSupplemental",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.forkCanonBranch",
+      "kind": "invoke",
+      "channel": "worldline:forkCanonBranch",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.forkCanonBranch"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.getAnnualDelta",
+      "kind": "invoke",
+      "channel": "worldline:getAnnualDelta",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.getAnnualDelta"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.getCanonCurrentTruth",
+      "kind": "invoke",
+      "channel": "worldline:getCanonCurrentTruth",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.getCanonCurrentTruth"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.getCanonHistory",
+      "kind": "invoke",
+      "channel": "worldline:getCanonHistory",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.getCanonHistory"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.getCheckpointStatus",
+      "kind": "invoke",
+      "channel": "worldline:getCheckpointStatus",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.getDiagnostics",
+      "kind": "invoke",
+      "channel": "worldline:getDiagnostics",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.getDiagnostics"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.getEntityKinshipInspector",
+      "kind": "invoke",
+      "channel": "worldline:getEntityKinshipInspector",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "Number.isSafeInteger",
+        "worldlineService.getEntityKinshipInspector",
+        "worldlineService.getEntityKinshipInspectorAsync"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.getHistoricalBindings",
+      "kind": "invoke",
+      "channel": "worldline:getHistoricalBindings",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.getHistoricalBindings",
+        "worldlineService.getHistoricalBindingsAsync"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.getKinshipIntegrityReport",
+      "kind": "invoke",
+      "channel": "worldline:getKinshipIntegrityReport",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.getKinshipIntegrityReport"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.getLegacySupplementalMigration",
+      "kind": "invoke",
+      "channel": "worldline:getLegacySupplementalMigration",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.getLegacySupplementalMigration"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.getOfficialRecollection",
+      "kind": "invoke",
+      "channel": "worldline:getOfficialRecollection",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.getOfficialRecollectionForResponder"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.getOverview",
+      "kind": "invoke",
+      "channel": "worldline:getOverview",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.getOverview"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.getPromptDiagnostics",
+      "kind": "invoke",
+      "channel": "worldline:getPromptDiagnostics",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.getPromptDiagnosticsAsync"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.getSettings",
+      "kind": "invoke",
+      "channel": "worldline:getSettings",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.getSettings"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.getSubjectiveResponderOptions",
+      "kind": "invoke",
+      "channel": "worldline:getSubjectiveResponderOptions",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.getSubjectiveResponderOptions"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.getSubjectiveWorldView",
+      "kind": "invoke",
+      "channel": "worldline:getSubjectiveWorldView",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "Number.isSafeInteger",
+        "worldlineService.getSubjectiveWorldView"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.getWorldKnowledge",
+      "kind": "invoke",
+      "channel": "worldline:getWorldKnowledge",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.getWorldKnowledge"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.listCanon",
+      "kind": "invoke",
+      "channel": "worldline:listCanon",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.listCanon"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.listCanonCharacterOptions",
+      "kind": "invoke",
+      "channel": "worldline:listCanonCharacterOptions",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.listCanonCharacterOptions"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.listSupplemental",
+      "kind": "invoke",
+      "channel": "worldline:listSupplemental",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.listSupplemental"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.migrateLegacySupplemental",
+      "kind": "invoke",
+      "channel": "worldline:migrateLegacySupplemental",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.migrateLegacySupplemental"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.mutateCanon",
+      "kind": "invoke",
+      "channel": "worldline:mutateCanon",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.mutateCanon"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.onUpdated",
+      "kind": "on",
+      "channel": "worldline:updated",
+      "handlerOwner": "Main event -> Preload listener",
+      "serviceCalls": [],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.rebuildCheckpoint",
+      "kind": "invoke",
+      "channel": "worldline:rebuildCheckpoint",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.rebuildCheckpoint"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.renameCanonBranch",
+      "kind": "invoke",
+      "channel": "worldline:renameCanonBranch",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.renameCanonBranch"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.resumeCanonBranch",
+      "kind": "invoke",
+      "channel": "worldline:resumeCanonBranch",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.resumeCanonBranch"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.selectAutosaveFile",
+      "kind": "invoke",
+      "channel": "worldline:selectAutosaveFile",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.selectAutosaveFile"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.setAutosavePath",
+      "kind": "invoke",
+      "channel": "worldline:setAutosavePath",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.setAutosavePath"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.setRecallSettings",
+      "kind": "invoke",
+      "channel": "worldline:setRecallSettings",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.setRecallSettings"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.temporalArchive",
+      "kind": "invoke",
+      "channel": "worldline:temporalArchive",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.runTemporalArchive"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.testCanonRecall",
+      "kind": "invoke",
+      "channel": "worldline:testCanonRecall",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.testCanonRecall"
+      ],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.updateSupplemental",
+      "kind": "invoke",
+      "channel": "worldline:updateSupplemental",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [],
+      "rendererConsumers": []
+    },
+    {
+      "exposure": "worldlineAPI.validateAutosavePath",
+      "kind": "invoke",
+      "channel": "worldline:validateAutosavePath",
+      "handlerOwner": "main/ipc/register-ipc.js",
+      "serviceCalls": [
+        "worldlineService.validateAutosavePath"
+      ],
+      "rendererConsumers": []
+    }
+  ],
+  "handlers": [
+    "actions:execute",
+    "actions:getAll",
+    "actions:getDetails",
+    "actions:getSettings",
+    "actions:openFile",
+    "actions:openFolder",
+    "actions:reload",
+    "actions:setDestructiveOverride",
+    "actions:setDisabled",
+    "app:getVersion",
+    "bridge:getState",
+    "bridge:redetect",
+    "characterKnowledge:getConversationView",
+    "characterKnowledge:getOwnerView",
+    "characterKnowledge:getTargetView",
+    "characterKnowledge:setManualStatus",
+    "conversation:applyPairMemoryBackfill",
+    "conversation:approveActions",
+    "conversation:bindLegacyConversationCampaign",
+    "conversation:bindLegacyOwnerCampaign",
+    "conversation:bindLegacySummaryCampaign",
+    "conversation:cancelStream",
+    "conversation:clearSummaries",
+    "conversation:declineActions",
+    "conversation:deleteCharacterSummaries",
+    "conversation:deleteSummary",
+    "conversation:editUserMessage",
+    "conversation:getActiveConversationData",
+    "conversation:getContextUsage",
+    "conversation:getEntries",
+    "conversation:getPairMemoryIndex",
+    "conversation:getPromptPreview",
+    "conversation:getState",
+    "conversation:getSummariesDashboardData",
+    "conversation:getUiContext",
+    "conversation:joinWaitingCharacter",
+    "conversation:leavePresentCharacter",
+    "conversation:listAllSummaries",
+    "conversation:openPairMemorySource",
+    "conversation:openSummariesFolder",
+    "conversation:pause",
+    "conversation:previewLegacyConversationBinding",
+    "conversation:previewLegacyOwnerBinding",
+    "conversation:previewPairMemoryBackfill",
+    "conversation:regenerateError",
+    "conversation:regenerateMessage",
+    "conversation:regenerateSummary",
+    "conversation:reset",
+    "conversation:resume",
+    "conversation:retryFailedSummaries",
+    "conversation:returnTemporaryCharacter",
+    "conversation:sendMessage",
+    "conversation:temporarilyLeaveCharacter",
+    "conversation:updateSummary",
+    "dialog:selectFolder",
+    "letter:getPromptPreview",
+    "letters:cancelBlockedRunCommand",
+    "letters:cancelStalledRunCommand",
+    "letters:clearOldStatuses",
+    "letters:clearPending",
+    "letters:confirmEffectDiagnostic",
+    "letters:getLetterDetails",
+    "letters:getStatuses",
+    "letters:resyncGameDate",
+    "letters:retryBlockedRunCommand",
+    "letters:retryFailed",
+    "letters:retryPayload",
+    "letters:retryStalledRunCommand",
+    "letters:runEffectDiagnostic",
+    "llm:checkPlayer2Health",
+    "llm:clearCustomContextLength",
+    "llm:deletePreset",
+    "llm:getActionApprovalSettings",
+    "llm:getActionsProviderId",
+    "llm:getAllowPrerelease",
+    "llm:getAppSettings",
+    "llm:getContextDiagnostics",
+    "llm:getCurrentContextLength",
+    "llm:getLanguage",
+    "llm:getLanguagePreferences",
+    "llm:getMaxContextLength",
+    "llm:getSummaryPromptSettings",
+    "llm:getSummaryProviderId",
+    "llm:getUiLanguage",
+    "llm:getUiPresentationEnabled",
+    "llm:listModels",
+    "llm:saveActionApprovalSettings",
+    "llm:saveAllowPrerelease",
+    "llm:saveGenerateFollowingMessagesSetting",
+    "llm:saveGlobalStreamSetting",
+    "llm:saveLanguage",
+    "llm:saveMessageFontSize",
+    "llm:savePauseOnRegenerationSetting",
+    "llm:saveProviderConfig",
+    "llm:saveShowSettingsOnStartupSetting",
+    "llm:saveSummaryPromptSettings",
+    "llm:saveUiLanguage",
+    "llm:saveUiPresentationEnabled",
+    "llm:setActionsProviderId",
+    "llm:setActiveProvider",
+    "llm:setCK3Folder",
+    "llm:setCustomContextLength",
+    "llm:setModLocationPath",
+    "llm:setSummaryProviderId",
+    "llm:testConnection",
+    "logs:collectAndOpen",
+    "performance:export-report",
+    "performance:get-state",
+    "performance:record-renderer",
+    "performance:snapshot",
+    "prompts:deletePreset",
+    "prompts:exportZip",
+    "prompts:getDefaultLetterMain",
+    "prompts:getDefaultMain",
+    "prompts:getLetterSettings",
+    "prompts:getSettings",
+    "prompts:list",
+    "prompts:listPresets",
+    "prompts:openPromptFile",
+    "prompts:openPromptsFolder",
+    "prompts:readFile",
+    "prompts:saveFile",
+    "prompts:saveLetterSettings",
+    "prompts:savePreset",
+    "prompts:saveSettings",
+    "prompts:validateTemplate",
+    "provider-diagnostics:export-cache-diagnostics-v2",
+    "provider-diagnostics:export-real-request-diff",
+    "provider-diagnostics:get-real-request-diff",
+    "providerDiagnostics:exportRecent",
+    "providerDiagnostics:getRecent",
+    "providerDiagnostics:getStatus",
+    "providerDiagnostics:getV89Settings",
+    "providerDiagnostics:saveV89Settings",
+    "shell:openExternal",
+    "shell:openPlayer2",
+    "toggle-config-panel",
+    "usage:clear",
+    "usage:getReport",
+    "worldline:confirmCanonBranch",
+    "worldline:createSupplemental",
+    "worldline:deleteSupplemental",
+    "worldline:forkCanonBranch",
+    "worldline:getAnnualDelta",
+    "worldline:getCanonCurrentTruth",
+    "worldline:getCanonHistory",
+    "worldline:getCheckpointStatus",
+    "worldline:getDiagnostics",
+    "worldline:getEntityKinshipInspector",
+    "worldline:getHistoricalBindings",
+    "worldline:getKinshipIntegrityReport",
+    "worldline:getLegacySupplementalMigration",
+    "worldline:getOfficialRecollection",
+    "worldline:getOverview",
+    "worldline:getPromptDiagnostics",
+    "worldline:getSettings",
+    "worldline:getSubjectiveResponderOptions",
+    "worldline:getSubjectiveWorldView",
+    "worldline:getWorldKnowledge",
+    "worldline:listCanon",
+    "worldline:listCanonCharacterOptions",
+    "worldline:listSupplemental",
+    "worldline:migrateLegacySupplemental",
+    "worldline:mutateCanon",
+    "worldline:rebuildCheckpoint",
+    "worldline:renameCanonBranch",
+    "worldline:resumeCanonBranch",
+    "worldline:selectAutosaveFile",
+    "worldline:setAutosavePath",
+    "worldline:setRecallSettings",
+    "worldline:temporalArchive",
+    "worldline:testCanonRecall",
+    "worldline:updateSupplemental",
+    "worldline:validateAutosavePath"
+  ],
+  "sendHandlers": [
+    "chat-hide",
+    "set-ignore-mouse-events"
+  ]
+}
