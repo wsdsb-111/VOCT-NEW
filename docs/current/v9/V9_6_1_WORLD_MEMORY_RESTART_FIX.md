@@ -2,6 +2,8 @@
 
 日期：2026-11-01。本轮为 V9.6.1 修复补丁，Core／App／UI 版本保持；Workshop 2.0.5 未修改或上传。普通世界记忆动态召回上限按用户要求调整为 4096 Token。
 
+准确代码提交 `7d05c3d11e8296ca1de93a7faf2a371c99288604` 的 [Windows CI 41263860222](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/41263860222) **PASS**：519 组完整回归、353 项构建部署核验及完整分发 EXE 冷启动／同配置重启／IPC／媒体解码／正常退出，Runtime 指纹与本机一致。后续仅本报告记账，未更改已验证代码。
+
 ## 确认的故障
 
 1. 编辑器测试允许 640 Token，正式当前轮召回被 `WorldlineService` 再限制为 512。用户现存的一条完整记忆连同头部需约 554 Token：原测试可选中、正式路径跳过。被跳过时没有预算原因；相关 Canon 数字诊断也被 analytics 的投影丢弃。
@@ -31,4 +33,4 @@
 
 已构建并部署 353 项 Runtime 资源，payload 为 `02c9cbf97be6ffb0a2d4d3e5313ad51132d877daf046f33a96e5309be3e7869a`，源码／构建／安装逐项一致。原目录隔离配置启动通过：9.6.1 IPC、Renderer／Preload、中文语言包、ffmpeg／合成 PCM 解码和 `app.quit()` 退出码 0；证据 `.build/world-memory-fix-installed-smoke.json`。真实用户配置未用于启动测试。
 
-完整 CI 结果按准确提交另记，不能以此前 518 组的 V9.6.1 CI 冒充本次通过。真实 CK3 新对话／模型回复及 Soak 未验收，无新增付费请求。
+完整 CI 使用 Node 22.23.4，实际分类 647 个测试文件、519 发布组、127 历史归档；新增重启／预算回归也在隔离 Windows 上通过。两次完整 EXE 启动均读回 9.6.1 并以 0 退出。该提交 Runtime payload 为 `02c9cbf97be6ffb0a2d4d3e5313ad51132d877daf046f33a96e5309be3e7869a`，与本机部署一致。不能以此前 518 组的 V9.6.1 CI 替代本次记录。真实 CK3 新对话／模型回复及 Soak 未验收，无新增付费请求。
