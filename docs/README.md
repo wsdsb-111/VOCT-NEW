@@ -1,6 +1,6 @@
 # VOTC 文档索引
 
-当前源码候选为 **V9.7.0 Legacy Decommission**；本机安装保留 V9.6.1。旧 Workshop 一体化分发路线已取消，Runtime / Workshop 独立维护，下一阶段为 V9.8 RC / Soak。
+当前源码候选为 **V9.7.0 Legacy Decommission**；本机已按用户确认部署 V9.7.0。旧 Workshop 一体化分发路线已取消，Runtime / Workshop 独立维护，下一阶段为 V9.8 RC / Soak。
 
 - [当前交付与 CI 状态](versions/v9/STATUS.md)。
 - [V9.7 版本册](versions/v9/V9.7.md)：设计、基线、台账、等价矩阵、数据保留、实施、验证及 V9.8 移交。
