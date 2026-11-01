@@ -41,6 +41,7 @@ const RECALL_REASONS = {
   CURRENT_TRUTH_CONFLICT: "这条记忆与 CK3 当前事实冲突",
   RECORD_NOT_ACTIVE: "这条记忆当前未生效",
   NOT_SELECTED: "候选已找到，但未进入本次召回",
+  BUDGET_EXCEEDED: "完整记忆超出本次召回预算",
   RELEVANT_ENTITY_MATCH: "问题涉及这条记忆中的人物",
   RELEVANT_TEXT_MATCH: "问题与这条记忆的文字相关"
 };
@@ -60,6 +61,7 @@ const CURRENT_CLAIM_FIELDS = {
   courtEmployer: "所在宫廷"
 };
 const CANON_ERROR_MESSAGES = {
+  branch_confirmation_required: "请先确认当前存档延续原分支，再测试召回。已保存的记忆仍然保留。",
   branch_write_blocked_reload_editor: "存档分支已变化，这次操作未保存。请在刷新后的存档中重新核对后提交。",
   supplemental_date_invalid: "日期格式无效，请重新选择日期。",
   supplemental_current_date_invalid: "无法识别当前游戏日期，请刷新存档后重试。",
@@ -588,6 +590,8 @@ export function WorldMemoryEditor({ react: R, t }) {
   const renderTestResult = (result, record) => result && h("div", { className: `world-memory-test-result ${result.matched ? "is-matched" : "is-unmatched"}` },
     h("strong", null, copy(result.matched ? "test.willRecall" : "test.willNotRecall", result.matched ? "这条记忆会被召回" : "这条记忆不会被召回")),
     h("p", null, copy("test.reason", "原因：{{reason}}", { reason: enumLabel("recallReasons", result.reason, RECALL_REASONS, "未知原因") })),
+    result.tokenBudget != null && h("p", { className: "world-memory-help" }, copy("persistence.testBudget", "测试上限：{{budget}} Token；正式对话仍受剩余上下文限制。", { budget: result.tokenBudget })),
+    result.budgetBlockedCount > 0 && h("p", { className: "world-memory-test-warning" }, copy("persistence.overBudget", "完整记忆需要 {{required}} Token，本次可用 {{budget}} Token。请精简正文或释放上下文空间；正文不会被截断。", { required: result.requiredTokens, budget: result.tokenBudget })),
     h("div", { className: "world-memory-test-metrics" }, h("span", null, copy("test.metricPermission", "权限：{{value}}", { value: copy(result.visibility === "ALLOW" ? "test.allowed" : "test.blocked", result.visibility === "ALLOW" ? "允许" : "阻止") })), h("span", null, copy("test.metricTime", "时间：{{value}}", { value: copy(result.temporal === "SAFE" ? "test.safe" : "test.blocked", result.temporal === "SAFE" ? "安全" : "阻止") })), h("span", null, copy("test.metricBranch", "分支：{{value}}", { value: copy(result.branch === "MATCH" ? "test.match" : "test.mismatch", result.branch === "MATCH" ? "一致" : "不一致") })), h("span", null, copy("test.metricTruth", "CK3 当前事实：{{value}}", { value: copy(result.currentTruth === "CONFLICT" ? "test.conflict" : "test.noConflict", result.currentTruth === "CONFLICT" ? "冲突" : "无冲突") })), h("span", null, copy("test.metricTokens", "Token：{{count}}", { count: result.tokens || 0 }))),
     result.currentTruth === "CONFLICT" && h("div", { className: "world-memory-test-conflict" }, h("p", { className: "world-memory-test-warning" }, copy("test.truthConflict", "当前状态与 CK3 冲突，回答将服从 CK3。")), record.currentClaim && h("p", null, copy("test.claimValues", "CK3 当前状态：{{current}} · 世界记忆：{{memory}}", { current: String(result.currentTruthValue ?? copy("test.unavailableValue", "无法读取")), memory: String(result.claimValue ?? record.currentClaim.value) })), h("p", { className: "world-memory-help" }, copy("test.pastEventHelp", "改为过去事件时，请同时把正文中的“现在 / 目前”等措辞改成过去时。")), h("div", { className: "world-memory-inline-action" }, button("改为过去事件", () => editWithoutCurrentClaim(record, record.gameDate ? "SPECIFIC_DATE" : "CURRENT_DATE"), busy), button("取消当前状态声明", () => editWithoutCurrentClaim(record, "CURRENT_DATE"), busy), button("隐藏此记录", () => change(record, { status: "HIDDEN", revisionReason: "当前状态与 CK3 冲突，玩家隐藏记录" }), !writable))),
     result.promptText && h("details", { className: "world-memory-test-preview" }, h("summary", null, copy("test.promptPreview", "查看最终召回预览")), h("pre", null, result.promptText))
@@ -610,7 +614,7 @@ export function WorldMemoryEditor({ react: R, t }) {
     h("div", { className: "world-memory-record-meta" }, h("span", null, record.temporalMode === "TIMELESS" ? enumLabel("temporalModes", "TIMELESS", TEMPORAL_MODES) : record.temporalMode === "PLANNED" ? enumLabel("temporalModes", "PLANNED", TEMPORAL_MODES) : formatGameDateForDisplay(record.gameDate) || copy("ui.noDate", "无日期")), h("span", null, enumLabel("types", record.type, TYPES, "未知类型")), h("span", null, enumLabel("visibility", record.visibility, VISIBILITY, "未知范围")), h("span", null, copy("ui.revision", "修订 {{revision}}", { revision: record.revision }))),
     record.recallWarning && h("p", { className: "world-memory-record-warning", role: "status" }, copy(RECALL_WARNING_KEYS[record.recallWarning] || "warnings.generic", "这条记忆当前无法召回。")),
     h("div", { className: "world-memory-record-actions" },
-      record.status === "ACTIVE" && button("测试这条记忆", () => openTest(record), !data.branch.branchId),
+      record.status === "ACTIVE" && button("测试这条记忆", () => openTest(record), !writable),
       button("编辑", () => beginEdit(record), !writable || record.status === "SUPERSEDED"),
       button(record.status === "ACTIVE" ? "隐藏" : "恢复生效", () => change(record, { status: record.status === "ACTIVE" ? "HIDDEN" : "ACTIVE", revisionReason: "玩家调整显示状态" }), !writable || record.status === "SUPERSEDED"),
       button("恢复自动来源", () => change(record, { status: "RETIRED", revisionReason: "撤销补充层记录，恢复自动来源" }), !writable || record.status === "SUPERSEDED"),
@@ -661,6 +665,7 @@ export function WorldMemoryEditor({ react: R, t }) {
   );
 
   const renderBranchStatus = () => {
+    if (data.branch?.reason === "same_date_different_content") return h("strong", { className: "is-warning" }, copy("persistence.changed", "存档内容变化，需确认延续"));
     if (!data.branch?.branchId) return h("strong", { className: "is-blocked" }, copy("branch.unconnected", "未连接当前存档"));
     if (branchState === "ROLLBACK_CANDIDATE") return h("strong", { className: "is-warning" }, copy("branch.rollback", "检测到存档回档"));
     if (branchState === "BRANCH_FORK_DETECTED") return h("strong", { className: "is-warning" }, copy("branch.forkDetected", "检测到复制存档 / 新分支"));
@@ -672,10 +677,11 @@ export function WorldMemoryEditor({ react: R, t }) {
   const renderBranchWarning = () => {
     if (!branchNeedsAction) return null;
     const loadBoundary = branchState === "LOAD_BOUNDARY_CANDIDATE";
-    const canConfirm = data.branch.reason === "save_continuity_unverified" || loadBoundary;
+    const sameDateChange = data.branch.reason === "same_date_different_content";
+    const canConfirm = ["save_continuity_unverified", "same_date_different_content"].includes(data.branch.reason) || loadBoundary;
     return h("details", { className: "world-memory-warning", open: true },
       h("summary", null, branchState === "ROLLBACK_CANDIDATE" ? copy("branch.rollback", "检测到存档回档") : branchState === "BRANCH_RESUME_AMBIGUOUS" ? copy("branch.resumeTitle", "选择要恢复的存档分支") : loadBoundary ? copy("branch.newLoadSession", "检测到新的 CK3 载入会话") : data.branch.reason === "save_continuity_unverified" ? copy("branch.continuityConfirm", "存档连续性需要确认") : copy("branch.notBound", "当前存档尚未安全绑定")),
-      h("p", null, branchState === "ROLLBACK_CANDIDATE" ? copy("branch.rollbackHelp", "当前存档看起来回到了更早的检查点。请确认是否继续原分支；在确认前不会写入世界记忆。") : branchState === "BRANCH_RESUME_AMBIGUOUS" ? copy("branch.ambiguousHelp", "检测到多个可能的历史分支，请明确选择；系统不会自动猜测。") : loadBoundary ? copy("branch.loadBoundaryHelp", "检测到 CK3 重新载入或新的游戏会话。请明确选择继续当前分支，或建立不继承旧 Canon 的独立分支；系统不会自动把两段存档接在一起。") : data.branch.reason === "save_continuity_unverified" ? copy("branch.continuityHelp", "只有确定这是原分支的继续游玩时才确认；复制存档应建立独立分支。") : copy("branch.rebindHelp", "请重新读取存档，或明确建立不继承旧 Canon 的独立分支。")),
+      h("p", null, sameDateChange ? copy("persistence.continuityHelp", "同一天的存档内容发生了变化。若是原时间线继续游玩，请确认延续；若是回档或复制，请建立独立分支。原记忆仍保留。") : branchState === "ROLLBACK_CANDIDATE" ? copy("branch.rollbackHelp", "当前存档看起来回到了更早的检查点。请确认是否继续原分支；在确认前不会写入世界记忆。") : branchState === "BRANCH_RESUME_AMBIGUOUS" ? copy("branch.ambiguousHelp", "检测到多个可能的历史分支，请明确选择；系统不会自动猜测。") : loadBoundary ? copy("branch.loadBoundaryHelp", "检测到 CK3 重新载入或新的游戏会话。请明确选择继续当前分支，或建立不继承旧 Canon 的独立分支；系统不会自动把两段存档接在一起。") : data.branch.reason === "save_continuity_unverified" ? copy("branch.continuityHelp", "只有确定这是原分支的继续游玩时才确认；复制存档应建立独立分支。") : copy("branch.rebindHelp", "请重新读取存档，或明确建立不继承旧 Canon 的独立分支。")),
       branchState === "BRANCH_RESUME_AMBIGUOUS" && h("div", { className: "world-memory-inline-action" }, h("select", { value: resumeBranchId, disabled: busy, onChange: event => setResumeBranchId(event.target.value), "aria-label": copy("branch.resumeAria", "选择要恢复的分支") }, h("option", { value: "" }, copy("branch.chooseHistorical", "选择历史分支")), (data.branch.resumeCandidates || []).map(item => h("option", { key: item.branchId, value: item.branchId }, `${item.sourcePath || item.branchId} · ${item.gameDate || copy("ui.noDate", "无日期")}`))), button("恢复所选分支", () => run(async sequence => { if (!resumeBranchId) throw new Error("请先选择历史分支。"); await api.resumeCanonBranch({ token: data.branch.token, branchId: resumeBranchId }); await load(sequence); }), busy || !resumeBranchId)),
       canConfirm && button(loadBoundary ? "继续当前分支" : "确认延续当前分支", () => run(async sequence => { await api.confirmCanonBranch(data.branch.token); await load(sequence); }), busy),
       (loadBoundary || !data.branch.branchId) && data.branch.campaignId && button("建立独立分支（不继承旧 Canon）", () => run(async sequence => { await api.forkCanonBranch(data.branch.token); await load(sequence); }), busy)
@@ -728,12 +734,15 @@ export function WorldMemoryEditor({ react: R, t }) {
       h("div", { className: "world-memory-status-card" }, h("span", null, copy("status.savedMemories", "已保存记忆")), h("strong", null, copy("status.count", "{{count}} 条", { count: data.total })))),
     renderRecallGuidance(),
     renderBranchWarning(),
+    data.recordsReadOnly && h("p", { className: "world-memory-record-warning", role: "status" }, copy("persistence.readOnly", "已保存的记忆仍在。以下内容仅供核对；确认延续原分支后才能编辑或供 NPC 召回。")),
     renderLegacySupplemental(),
     data.renameCandidates?.length > 0 ? h("details", { className: "world-memory-secondary-details" }, h("summary", null, copy("branch.renamedQuestion", "存档只是重命名？")), h("p", null, copy("branch.renamedHelp", "只有内容指纹相同、且当前分支从未写入时，才保留原分支记忆。复制存档请保持独立。")), h("div", { className: "world-memory-inline-action" }, h("select", { value: renameSource, disabled: busy, onChange: event => setRenameSource(event.target.value), "aria-label": copy("branch.renameAria", "重命名前的存档") }, h("option", { value: "" }, copy("branch.chooseSource", "选择原存档")), data.renameCandidates.map(item => h("option", { key: item.branchId, value: item.branchId }, item.sourcePath))), button("确认重命名", () => run(async sequence => { await api.renameCanonBranch({ token: data.branch.token, sourceBranchId: renameSource }); await load(sequence); }), busy || !renameSource))) : null,
     developerMode && h("details", { className: "world-memory-secondary-details" }, h("summary", null, copy("branch.developerInfo", "分支技术信息")), h("p", null, copy("developer.branch", "Campaign：{{campaign}} · Branch：{{branch}} · Revision：{{revision}}", { campaign: data.branch.campaignId || "—", branch: data.branch.branchId || "—", revision: data.revision }))),
     renderForm(),
     h("div", { className: "world-memory-list-heading" }, h("strong", null, copy("list.title", "已有世界记忆")), h("span", null, copy("list.count", "{{shown}} / {{total}}", { shown: data.records.length, total: data.total }))),
-    data.records.length === 0 ? h("p", { className: "worldline-empty" }, copy("list.empty", "当前存档还没有长期记忆。")) : h("div", { className: "world-memory-record-list" }, data.records.map(renderRecord)),
+    data.records.length === 0 ? h("p", { className: "worldline-empty" }, branchNeedsAction
+      ? copy("persistence.pending", "当前分支尚待确认，暂不展示记忆；这不表示已保存的记忆被删除。")
+      : copy("list.empty", "当前存档还没有长期记忆。")) : h("div", { className: "world-memory-record-list" }, data.records.map(renderRecord)),
     h("div", { className: "world-memory-pagination" }, button("上一页", () => run(sequence => load(sequence, Math.max(0, data.offset - 20))), busy || !data.offset), button("下一页", () => run(sequence => load(sequence, data.offset + 20)), busy || data.offset + 20 >= data.total)),
     renderHistory()
   ] : [];

@@ -314,7 +314,7 @@ async function run() {
       const currentContext = await conversation.checkAndSummarizeIfNeeded(gameData.characters.get(2));
       assert.equal(coveragePatchCalls, 1, "current-query Canon recall preserves the existing coverage-patch call");
       assert.equal(recallCalls.length, 1, "V813 current query invokes the new per-turn Canon service path");
-      assert(recallCalls[0].tokenBudget > 0 && recallCalls[0].tokenBudget <= 900, "Canon recall receives bounded current-turn headroom");
+      assert(recallCalls[0].tokenBudget > 900 && recallCalls[0].tokenBudget <= 4096, "Canon recall receives the requested 4096-token ceiling within current-turn headroom");
       assert.deepEqual(recallCalls[0].excludeIds, [recordIds.get("stable")], "the dynamic query excludes only stable Canon actually frozen at opening");
       assert.deepEqual(currentContext.stableCanonRecordIds, [recordIds.get("stable")]);
       assert(currentContext.coveragePatchText?.includes("V96_COVERAGE_PATCH_SENTINEL"), "the existing patch text remains in the dynamic block");

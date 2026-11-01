@@ -171,7 +171,8 @@ class BranchRegistry {
           return { state: "SAME_BRANCH", campaignId: current.campaignId, branchId: current.branchId };
         }
         if (newDate < oldDate) return { state: "ROLLBACK_CANDIDATE", campaignId: evidence.campaignId, branchId: null, reason: "save_date_moved_backward" };
-        if (newDate === oldDate && current.fingerprint !== evidence.fingerprint) return { state: "BRANCH_CONFLICT", campaignId: evidence.campaignId, branchId: null, reason: "same_date_different_content" };
+        if (newDate === oldDate && current.fingerprint !== evidence.fingerprint) return { state: "BRANCH_CONFLICT", campaignId: evidence.campaignId, branchId: null,
+          continuationBranchId: current.branchId, reason: "same_date_different_content" };
         return { state: "SAME_BRANCH", campaignId: current.campaignId, branchId: current.branchId };
       }
       const sameCampaign = state.branches.some((item) => item.campaignId === evidence.campaignId);

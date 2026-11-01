@@ -8,6 +8,7 @@ const { createConversationRuntime } = require("./conversation-runtime");
 const participantLifecycle = require("./participant-lifecycle");
 const { buildPresenceObservationFacts } = require("../worldline/direct-observation-producer");
 const { resolveWorldlineTurnBudget, shouldTrimMemoryTurnRecall } = require("../worldline/worldline-context-budget");
+const { SUPPLEMENTAL_MAX_TOKENS } = require("../worldline/supplemental-retriever");
 const { parseTimeHint } = require("../worldline/world-query-planner");
 const { buildFrozenCoverageManifest, hasFrozenCoverage, buildCoveragePatchKey } = require("../worldline/frozen-coverage-manifest");
 const { verifyActionConfirmation, settleActionResult } = require("../actions/action-confirmation");
@@ -601,13 +602,15 @@ class Conversation {
             activeParticipantIds: this.getActiveConversationCharacters().map(character => character.id),
             conversationId: this.id, turnEpoch: this.turnEpoch,
             excludeIds: this.frozenWorldlineByResponder?.get(Number(npc.id))?.stableCanonRecordIds || [],
-            tokenBudget: Math.max(0, resolveWorldlineTurnBudget({ contextLimit, basePromptTokens: estimatedTokens }).turnBudget
+            tokenBudget: Math.max(0, resolveWorldlineTurnBudget({ contextLimit, basePromptTokens: estimatedTokens, hardMax: SUPPLEMENTAL_MAX_TOKENS }).turnBudget
               - TokenCounter.estimateTokens(memoryContext.coveragePatchText || "") - 2)
           }));
           if (canon?.text) memoryContext.coveragePatchText = [memoryContext.coveragePatchText, canon.text].filter(Boolean).join("\n\n");
           if (canon) usageAnalytics?.record({ requestType: "worldline_recall", characterId: npc.id, conversationId: this.id,
             supplementalCandidateCount: canon.candidateCount || 0, supplementalSelectedCount: canon.selected?.length || 0,
             supplementalTokens: canon.tokens || 0, supplementalRevision: canon.revision || 0,
+            canonBudgetBlockedCount: canon.budgetBlockedCount || 0, canonRequiredTokens: canon.requiredTokens || 0,
+            canonTokenBudget: canon.tokenBudget ?? null,
             canonConflictCount: canon.conflictCount || 0, canonTemporalBlockedCount: canon.temporalBlockedCount || 0,
             canonVisibilityBlockedCount: canon.visibilityBlockedCount || 0, cacheHit: canon.cacheHit === true }, null);
         } catch (error) {

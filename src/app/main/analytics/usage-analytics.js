@@ -236,6 +236,11 @@ function createUsageAnalytics({ fs, dataDir, analyticsFile, retention, createPro
         worldStableTokens: Number(metadata?.worldStableTokens) || 0,
         worldTurnRecallTokens: Number(metadata?.worldTurnRecallTokens) || 0,
         worldlineTokens: Number(metadata?.worldlineTokens) || 0,
+        ...(metadata?.requestType === "worldline_recall" ? Object.fromEntries([
+          "supplementalCandidateCount", "supplementalSelectedCount", "supplementalTokens", "supplementalRevision",
+          "canonConflictCount", "canonTemporalBlockedCount", "canonVisibilityBlockedCount",
+          "canonBudgetBlockedCount", "canonRequiredTokens", "canonTokenBudget"
+        ].map(key => [key, Number.isSafeInteger(metadata[key]) && metadata[key] >= 0 ? metadata[key] : null])) : {}),
         worldTurnRecallTrimmed: Number(metadata?.worldTurnRecallTrimmed) || 0,
         worldRetrievalMs: Number(metadata?.worldRetrievalMs) || 0,
         worldPolicyMs: Number(metadata?.worldPolicyMs) || 0,

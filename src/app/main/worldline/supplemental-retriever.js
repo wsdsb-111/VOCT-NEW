@@ -1,4 +1,5 @@
 "use strict";
+const SUPPLEMENTAL_MAX_TOKENS = 4096;
 
 const { classifyKnowledge } = require("./character-knowledge-policy");
 const { normalizeGameDate } = require("./character-temporal-facts");
@@ -25,8 +26,10 @@ function supplementalCandidates(index, query, entityIds) {
   return [...found];
 }
 
-function retrieveSupplemental({ records = [], campaignId, branchId, responderId, query = "", entityIds = [], currentTotalDays = null, currentGameDate = null, historicalFromGameDate = null, scopeResolver = () => ({}), currentTruth = () => undefined, selectionIds = null, tokenBudget = 512, estimateTokens = (text) => Math.ceil(text.length / 2), historical = false } = {}) {
-  const result = { selected: [], text: null, tokens: 0, conflictCount: 0, temporalBlockedCount: 0, visibilityBlockedCount: 0 };
+function retrieveSupplemental({ records = [], campaignId, branchId, responderId, query = "", entityIds = [], currentTotalDays = null, currentGameDate = null, historicalFromGameDate = null, scopeResolver = () => ({}), currentTruth = () => undefined, selectionIds = null, tokenBudget = SUPPLEMENTAL_MAX_TOKENS, estimateTokens = (text) => Math.ceil(text.length / 2), historical = false } = {}) {
+  const budget = Number.isFinite(tokenBudget) ? Math.min(SUPPLEMENTAL_MAX_TOKENS, Math.max(0, tokenBudget)) : SUPPLEMENTAL_MAX_TOKENS;
+  const result = { selected: [], text: null, tokens: 0, conflictCount: 0, temporalBlockedCount: 0, visibilityBlockedCount: 0,
+    tokenBudget: budget, budgetBlockedCount: 0, requiredTokens: 0 };
   if (!campaignId || !branchId || responderId == null) return result;
   const terms = textFeatures(query);
   const entities = new Set(entityIds.map(String));
@@ -89,7 +92,6 @@ function retrieveSupplemental({ records = [], campaignId, branchId, responderId,
   const header = historical
     ? "=== 本轮历史 Canon / 补充世界记忆（Dynamic Tail） ===\n指定历史 Checkpoint 的 CK3 结构化事实优先；以下记录必须符合查询日期、Campaign、Branch 与历史知情范围，不能覆盖游戏时间线。\n"
     : "=== 本轮玩家 Canon / 补充世界记忆 ===\n当前 CK3 结构化事实优先；以下只补充 RP 事实，不能覆盖当前状态。过去经历与主观记忆分别保留。\n";
-  const budget = Number.isFinite(tokenBudget) ? Math.min(640, Math.max(0, tokenBudget)) : 512;
   const rows = [];
   if (result.conflictCount) rows.push("CANON_CONFLICT：相关补充记录存在冲突或当前状态未经验证；以获准 CK3 事实为准，不得从补充记录推断或随机选边。");
   for (const { record, relevant } of allowed.sort((a, b) => b.score - a.score || a.record.recordId.localeCompare(b.record.recordId))) {
@@ -99,7 +101,12 @@ function retrieveSupplemental({ records = [], campaignId, branchId, responderId,
     const row = record.currentClaim
       ? `- CK3 结构化核对：角色 #${record.currentClaim.entityId} · ${record.currentClaim.field}=${String(record.currentClaim.displayValue ?? record.currentClaim.value)}`
       : `- ${record.type === "PLANNED_DECISION" || record.temporalMode === "PLANNED" ? "计划/意图，尚未发生：" : ""}${record.title}：${record.content}`;
-    if (estimateTokens(header + [...rows, row].join("\n")) > budget) continue;
+    const requiredTokens = estimateTokens(header + [...rows, row].join("\n"));
+    if (requiredTokens > budget) {
+      result.budgetBlockedCount++;
+      result.requiredTokens = Math.max(result.requiredTokens, requiredTokens);
+      continue;
+    }
     rows.push(row);
     result.selected.push({ recordId: record.recordId, revision: record.revision });
   }
@@ -110,4 +117,4 @@ function retrieveSupplemental({ records = [], campaignId, branchId, responderId,
   return result;
 }
 
-module.exports = { retrieveSupplemental, buildSupplementalIndex, supplementalCandidates };
+module.exports = { retrieveSupplemental, buildSupplementalIndex, supplementalCandidates, SUPPLEMENTAL_MAX_TOKENS };

@@ -176,6 +176,7 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.6.1-world-memory-restart-budget", script: "test-v9.6.1-world-memory-restart-budget.js" },
   { group: "v9.6.1-relationship-recognition-regression", script: "test-v9.6.1-relationship-recognition-regression.js" },
   { group: "v9.6.1-family-visibility-independent-qa", script: "test-v9.6.1-family-visibility-independent-qa.js" },
   { group: "v9.6.1-terra-boundary-qa", script: "test-v9.6.1-terra-boundary-qa.js" },

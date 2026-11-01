@@ -81,6 +81,14 @@ export default {
     }
   },
   worldMemoryEditor: {
+    persistence: {
+      changed: "存档内容变化，需确认延续",
+      continuityHelp: "同一天的存档内容发生了变化。若是原时间线继续游玩，请确认延续；若是回档或复制，请建立独立分支。原记忆仍保留。",
+      readOnly: "已保存的记忆仍在。以下内容仅供核对；确认延续原分支后才能编辑或供 NPC 召回。",
+      pending: "当前分支尚待确认，暂不展示记忆；这不表示已保存的记忆被删除。",
+      testBudget: "测试上限：{{budget}} Token；正式对话仍受剩余上下文限制。",
+      overBudget: "完整记忆需要 {{required}} Token，本次可用 {{budget}} Token。请精简正文或释放上下文空间；正文不会被截断。"
+    },
     common: { unknown: "未知", unknownType: "未知类型", unknownScope: "未知范围", unknownReason: "未知原因", unknownField: "未知状态" },
     types: { PLAYER_CANON: "普通剧情事实", RP_POLITICAL_DECISION: "政治决定", SECRET_AGREEMENT: "秘密约定", NARRATIVE_EVENT: "剧情事件", WORLD_ANNOTATION: "长期世界规则", PLANNED_DECISION: "未来计划", MANUAL_CORRECTION: "开发者纠正（兼容旧记录）" },
     typeHelp: { PLAYER_CANON: "已经发生、但 CK3 没有记录的剧情事实。", RP_POLITICAL_DECISION: "玩家确认过的政治安排或决定。", SECRET_AGREEMENT: "只有授权人物可以知道的约定。", NARRATIVE_EVENT: "一件需要长期保留的剧情事件。", WORLD_ANNOTATION: "长期有效的世界规则，不代表某个角色的当前状态。", PLANNED_DECISION: "已经计划但尚未发生的事情。", MANUAL_CORRECTION: "旧版本或开发者维护记录。" },
@@ -89,10 +97,11 @@ export default {
     importance: { LOW: "低", NORMAL: "普通", HIGH: "重要", CRITICAL: "关键" },
     status: { ACTIVE: "生效", HIDDEN: "已隐藏", RETIRED: "已恢复自动来源", SUPERSEDED: "已被替代", CONFLICTED: "冲突", TEMPORAL_BLOCKED: "时间未满足", UNKNOWN: "未知状态", currentSave: "当前存档", npcMemory: "NPC 世界记忆", enabled: "已开启", disabled: "未开启", savedMemories: "已保存记忆", count: "{{count}} 条" },
     temporalModes: { CURRENT_DATE: "当前游戏日期", SPECIFIC_DATE: "指定日期", TIMELESS: "长期规则（无日期）", PLANNED: "未来计划" },
-    recallReasons: { RECALL_DISABLED: "当前对话召回尚未开启", QUERY_NOT_RELEVANT: "问题与这条记忆没有明显关联", NPC_NOT_AUTHORIZED: "这个 NPC 没有权限知道", TEMPORAL_BLOCKED: "这条记忆在当前时间尚未生效或已失效", CURRENT_TRUTH_CONFLICT: "这条记忆与 CK3 当前事实冲突", RECORD_NOT_ACTIVE: "这条记忆当前未生效", NOT_SELECTED: "候选已找到，但未进入本次召回", RELEVANT_ENTITY_MATCH: "问题涉及这条记忆中的人物", RELEVANT_TEXT_MATCH: "问题与这条记忆的文字相关" },
+    recallReasons: { BUDGET_EXCEEDED: "完整记忆超出本次召回预算", RECALL_DISABLED: "当前对话召回尚未开启", QUERY_NOT_RELEVANT: "问题与这条记忆没有明显关联", NPC_NOT_AUTHORIZED: "这个 NPC 没有权限知道", TEMPORAL_BLOCKED: "这条记忆在当前时间尚未生效或已失效", CURRENT_TRUTH_CONFLICT: "这条记忆与 CK3 当前事实冲突", RECORD_NOT_ACTIVE: "这条记忆当前未生效", NOT_SELECTED: "候选已找到，但未进入本次召回", RELEVANT_ENTITY_MATCH: "问题涉及这条记忆中的人物", RELEVANT_TEXT_MATCH: "问题与这条记忆的文字相关" },
     claimFields: { location: "所在地", alive: "是否在世", faith: "信仰", culture: "文化", liege: "直属领主", courtEmployer: "所在宫廷" },
     picker: { searchPlaceholder: "搜索人物姓名", searchAria: "搜索人物姓名", searching: "搜索中…", search: "搜索", chooseCurrentPlayer: "选择当前玩家", removePersonAria: "移除{{name}}", currentlyPresent: "当前场景", recentlyMentioned: "最近提及", unavailable: "当前版本没有角色选择接口。", genericError: "人物列表暂时无法读取，请稍后重试。", testHelp: "可以搜索当前存档人物。" },
     errors: {
+      branch_confirmation_required: "请先确认当前存档延续原分支，再测试召回。已保存的记忆仍然保留。",
       branch_write_blocked_reload_editor: "存档分支已变化，这次操作未保存。请在刷新后的存档中重新核对后提交。",
       supplemental_date_invalid: "日期格式无效，请重新选择日期。", supplemental_current_date_invalid: "无法识别当前游戏日期，请刷新存档后重试。", supplemental_specific_date_invalid: "指定日期无效，请输入例如 1175.8.23。", supplemental_specific_date_required: "指定日期无效，请填写日期。", supplemental_planned_date_invalid: "计划日期无效，请输入例如 1175.8.23。", supplemental_current_date_unavailable: "当前游戏日期暂不可用，请刷新存档后重试。", supplemental_scope_character_required: "请先选择范围人物，或选择当前玩家，再保存宫廷或领地记忆。", supplemental_known_by_required: "请先选择明确知情的人物，再保存个人记忆或秘密。",
       titleAndContentRequired: "请填写标题和希望世界长期记住的内容。", currentTruthEntityRequired: "当前状态需要先选择一名涉及人物。", entityRequired: "请先选择一名涉及人物。", currentTruthMustBeRead: "请先读取并确认 CK3 当前事实；当前值不允许手动填写。", testResponderRequired: "请先选择要测试的 NPC。", testQueryRequired: "请填写一个测试问题。", testUnavailable: "当前版本没有召回测试接口。", currentTruthUnavailable: "当前版本没有 CK3 当前事实读取接口。", historyBranchRequired: "请先选择历史分支。", legacyMigrationUnavailable: "当前版本没有旧版 Supplemental 迁移接口。", legacyRecordRequired: "请先选择一条旧版 Supplemental。", migrationKnownByRequired: "请重新选择至少一名明确知情人物。", migrationScopeRequired: "请重新选择宫廷或领地范围人物。", supplemental_current_state_needs_structured_confirmation: "正文可能包含人物当前状态。若是历史叙述，请明确写出过去的时间语境；若确实要记录当前状态，请勾选当前状态选项，选择人物和状态，读取 CK3 事实后再保存。", supplemental_current_claim_required: "当前状态声明缺少结构化状态。请勾选当前状态选项，选择人物和状态，再读取 CK3 事实。", supplemental_current_claim_semantics_invalid: "当前状态声明与记忆类型不一致。请关闭当前状态选项，或按提示重新选择人物、状态并读取 CK3 事实。", supplemental_current_claim_requires_current_date: "当前状态必须绑定当前游戏日期。请刷新存档后重新读取 CK3 事实。", supplemental_current_claim_character_required: "无法验证所选人物。请重新从当前存档选择人物，并再次读取 CK3 事实。", supplemental_current_claim_value_mismatch: "CK3 当前值与上次读取的值不同。请重新读取当前事实并核对后再保存。", supplemental_current_claim_checkpoint_unavailable: "当前存档事实暂不可用。请连接或刷新存档，再读取 CK3 当前事实。", supplemental_current_claim_invalid: "当前状态声明无法验证。请重新选择人物和状态，并读取 CK3 当前事实。", supplemental_current_truth_field_unsupported: "所选状态不受当前事实校验支持。请重新选择所在地、生死、信仰、文化、领主或所在宫廷。", supplemental_current_truth_character_unavailable: "所选人物不在当前存档中。请重新选择人物后再读取 CK3 当前事实。", supplemental_current_truth_life_status_conflict: "CK3 对人物生死状态的信息存在冲突，无法安全保存当前状态。请刷新存档并核对人物资料。", supplemental_current_truth_value_unavailable: "CK3 当前存档没有可验证的这项状态。请检查人物和状态选择，或将内容改为历史叙述。", supplemental_current_truth_value_invalid: "CK3 返回的当前状态格式无法验证。请刷新存档并重新读取。", generic: "请求失败，请刷新或重试。"

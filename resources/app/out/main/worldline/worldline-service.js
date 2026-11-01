@@ -5,6 +5,7 @@ const nodeFs = require("fs");
 const nodePath = require("path");
 const { Worker: NodeWorker } = require("worker_threads");
 const { CanonService } = require("./canon-service");
+const { SUPPLEMENTAL_MAX_TOKENS } = require("./supplemental-retriever");
 const { readSavePreamble } = require("./save-container");
 const { dateValue } = require("./game-state-adapter");
 const { resolvePlayerPoliticalContext } = require("./political-context");
@@ -1719,7 +1720,7 @@ class WorldlineService {
     return this.canon.recall({ responderId: args.responderId, query: args.query,
       entityIds: args.mentionedEntityIds || [], conversationId: args.conversationId,
       excludeIds: args.excludeIds || [], currentFacts: view.allowedFacts || [],
-      tokenBudget: Math.max(0, Math.min(512, Number.isFinite(args.tokenBudget) ? args.tokenBudget : 512)) });
+      tokenBudget: Math.max(0, Math.min(SUPPLEMENTAL_MAX_TOKENS, Number.isFinite(args.tokenBudget) ? args.tokenBudget : SUPPLEMENTAL_MAX_TOKENS)) });
   }
 
   getHistoricalQueryContext({ responderId = null, query = "", assistContext = "", queryPlan = null, queryAnalysis = null, directObservationFacts = [], tokenBudget = null, precomputed = null } = {}) {
@@ -1925,9 +1926,9 @@ class WorldlineService {
     const formatStartedAt = Date.now();
     const baseline = snapshotMode === "CONVERSATION_BASELINE";
     const formatted = baseline ? buildSubjectiveWorldBaselinePrompt(view, { tokenBudget }) : buildSubjectiveWorldTurnRecall(view, { tokenBudget });
-    const remaining = tokenBudget == null ? 512 : Math.max(0, tokenBudget - formatted.tokens - 2);
+    const remaining = tokenBudget == null ? SUPPLEMENTAL_MAX_TOKENS : Math.max(0, tokenBudget - formatted.tokens - 2);
     const stableCanon = this.canon.recall({ responderId, stable: true, conversationId, tokenBudget: 192, currentFacts: view.allowedFacts || [] });
-    const canon = baseline ? { text: null, selected: [] } : this.canon.recall({ responderId, query, entityIds: mentionedEntityIds, tokenBudget: Math.min(512, remaining), currentFacts: view.allowedFacts || [], excludeIds: stableCanon.selected.map(item => item.recordId) });
+    const canon = baseline ? { text: null, selected: [] } : this.canon.recall({ responderId, query, entityIds: mentionedEntityIds, tokenBudget: Math.min(SUPPLEMENTAL_MAX_TOKENS, remaining), currentFacts: view.allowedFacts || [], excludeIds: stableCanon.selected.map(item => item.recordId) });
     const turnText = [formatted.text, canon.text].filter(Boolean).join("\n\n") || null;
     const turnTokens = turnText ? estimateTokens(turnText) : 0;
     return {
@@ -1954,6 +1955,9 @@ class WorldlineService {
         supplementalCandidateCount: canon.candidateCount || 0,
         supplementalSelectedCount: canon.selected.length,
         supplementalTokens: canon.tokens,
+        canonBudgetBlockedCount: canon.budgetBlockedCount || 0,
+        canonRequiredTokens: canon.requiredTokens || 0,
+        canonTokenBudget: canon.tokenBudget ?? null,
         supplementalStableTokens: stableCanon.tokens,
         supplementalStableCacheHit: stableCanon.cacheHit === true,
         supplementalCacheHit: canon.cacheHit === true,
