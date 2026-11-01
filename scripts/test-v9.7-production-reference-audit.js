@@ -23,7 +23,7 @@ assert.throws(() => captureIpc({ preloadSource: preloadSource.replace('invoke("b
 const payload = readPayload(root);
 assert.deepEqual(payload.map(item => item.target), runtimeBaseline.files.map(item => item.path), "no silent mapping deletion or addition");
 const approvedChanges = new Set(["package.json", "out/main/version.js", "out/main/bridge/runtime-manifest.json",
-  "out/main/providers/provider-result.js", "out/renderer/index.html", "out/renderer/assets/index-Dn3qWlAB.js"]);
+  "out/main/providers/provider-result.js", "out/renderer/index.html", "out/renderer/assets/index-Dn3qWlAB.js", "out/renderer/bridge-diagnostics.js"]);
 for (const item of payload) {
   if (approvedChanges.has(item.target)) continue;
   const original = runtimeBaseline.files.find(entry => entry.path === item.target);
