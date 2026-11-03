@@ -5,6 +5,7 @@ const nodeFs = require("fs");
 const nodePath = require("path");
 const { Worker: NodeWorker } = require("worker_threads");
 const { CanonService } = require("./canon-service");
+const { CampaignBackgroundStore, backgroundCampaignKey } = require("./campaign-background");
 const { SUPPLEMENTAL_MAX_TOKENS } = require("./supplemental-retriever");
 const { readSavePreamble } = require("./save-container");
 const { dateValue } = require("./game-state-adapter");
@@ -193,6 +194,11 @@ function readLiveProbe({ fs, debugLogPath }) {
     for (const match of characterMatches) latestCharacterById.set(match[1].trim(), { runtimeId: match[1].trim(), historyId: match[2].trim() || null, gameDate: match[3].trim(), totalDays: match[4] ? Number(match[4]) : null });
     const latestDate = dateMatches.at(-1);
     const latestIn = inMatches.at(-1);
+    const latestRawInit = [...text.matchAll(/VOTC:IN\/;\/init(?:\/;\/([^\r\n]*))?/g)].filter(match => match.index > boundary).at(-1);
+    const initFields = latestRawInit?.[1]?.split("/;/") || [];
+    const backgroundInitComplete = initFields.length >= 9 && !!initFields[4]?.trim() && /^\d+$/.test(initFields[8]?.trim());
+    const campaignMarkers = [...text.matchAll(/VOTC:CAMPAIGN\/([^\r\n]*)/g)].filter(match => backgroundInitComplete && match.index > latestRawInit.index);
+    const campaignToken = campaignMarkers.at(-1)?.[1]?.trim() || null;
     const latestClock = clockMatches.at(-1);
     const latestCharacter = characterMatches.at(-1);
     const markers = [
@@ -205,6 +211,7 @@ function readLiveProbe({ fs, debugLogPath }) {
     const latestDayMarker = markers.filter((marker) => Number.isFinite(marker.totalDays)).at(-1) || null;
     return {
       connected: markers.length > 0,
+      campaignToken: backgroundCampaignKey(campaignToken) ? campaignToken : null,
       gameDate: latestMarker?.gameDate || null,
       totalDays: latestDayMarker?.totalDays ?? null,
       characters: [...latestCharacterById.values()],
@@ -232,6 +239,7 @@ class WorldlineService {
     this.getRuntimeNames = getRuntimeNames;
     this.memoryEngine = memoryEngine;
     this.storageDir = path.join(dataDir, "worldline-v8.4");
+    this.backgroundStore = new CampaignBackgroundStore(path.join(dataDir, "campaign-background-v9.7.1"));
     this.canon = new CanonService({ root: path.join(this.storageDir, "supplemental-v8.7"), getCheckpoint: () => this.currentCheckpoint, getLiveState: () => this.getLiveState() });
     this.historicalBindingCache = new HistoricalEntityBindingCache();
     this.checkpointPath = path.join(this.storageDir, "checkpoint.json");
@@ -719,6 +727,31 @@ class WorldlineService {
         lastError: this.lastError
       }
     };
+  }
+
+  getBackgroundSetting() {
+    const live = this.getLiveState();
+    return this.backgroundStore.read(live.connected ? live.campaignToken : null);
+  }
+
+  saveBackgroundSetting(request) {
+    const live = this.getLiveState();
+    const token = live.connected ? live.campaignToken : null;
+    return this.backgroundStore.save(token, request, () => {
+      const current = this.getLiveState();
+      return current.connected && current.campaignToken === token;
+    });
+  }
+
+  getConversationBackground(campaignToken) {
+    const live = this.getLiveState();
+    if (!live.connected || !backgroundCampaignKey(campaignToken) || live.campaignToken !== campaignToken) return null;
+    return Object.freeze(this.backgroundStore.read(campaignToken));
+  }
+
+  isBackgroundCampaignCurrent(bindingKey) {
+    const live = this.getLiveState();
+    return live.connected && backgroundCampaignKey(live.campaignToken) === bindingKey;
   }
 
   getLiveState() {

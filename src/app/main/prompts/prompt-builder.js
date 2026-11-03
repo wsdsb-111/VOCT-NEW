@@ -1,6 +1,7 @@
 "use strict";
 
 const { buildFamilyFactBlock } = require("../worldline/character-family-facts");
+const { backgroundPrompt } = require("../worldline/campaign-background");
 const { resolveProviderPromptProfile, resolvePromptLayoutId } = require("./provider-prompt-adapter");
 const { createStableProfile, createLiveProfile, buildStableKinship, formatStableProfile, formatStableKinship, formatLiveProfile } = require("./character-profile-v2");
 const { buildHistoricalReferenceReplacement } = require("../worldline/subjective-prompt-context");
@@ -287,6 +288,7 @@ function createPromptBuilder({
     static createMemoryExcludedContext(memoryContext) {
       if (!memoryContext || typeof memoryContext !== "object") return memoryContext;
       const worldlineKeys = [
+        "worldBackground",
         "historicalReferenceInfo", "historicalWorldText", "coveragePatchText", "recentWorldText",
         "worldStableText", "worldTopicText", "worldSupplementalText", "worldCurrentText", "worldTurnRecallText"
       ];
@@ -860,6 +862,15 @@ ${nameAccessRule}
       };
       llmMessages.push({ role: "system", content: anchorTokenBlock.content });
       blocksWithTokens.push(anchorTokenBlock);
+      const backgroundText = backgroundPrompt(memoryContext?.worldBackground);
+      if (backgroundText) {
+        llmMessages.push({ role: "system", content: backgroundText });
+        blocksWithTokens.push({ block: { id: "campaign-background-v9.7.1", type: "campaign_background", label: "Player-defined World Background",
+          stable: true, lifecycle: PROMPT_LIFECYCLE.CONVERSATION_FROZEN }, content: backgroundText, tokens: TokenCounter.estimateTokens(backgroundText) });
+        if (!memoryContext?.historicalReferenceInfo) memoryContext = { ...memoryContext, historicalReferenceInfo: {
+          period: "自主背景世界", context: "本战役使用玩家自主背景设定。不要用现实世界的历史人物、事件或年代补全此剧本。",
+          notableEvents: [], notableFigures: [] } };
+      }
       if (memoryContext?.subjectiveWorldPolicyActive && !memoryContext.historicalReferenceInfo) {
         memoryContext = { ...memoryContext, historicalReferenceInfo: buildHistoricalReferenceReplacement(null, gameData?.date) || {
           period: "当前年代未确认", context: "游戏为先，历史为次。年代与当前事实缺失时明确未知，不得以历史传记补全人物生死、行踪或战争。", notableEvents: [], notableFigures: []

@@ -1,6 +1,8 @@
 {
   "schemaVersion": 1,
   "files": [
+    { "source": "main/worldline/campaign-background.js", "target": "out/main/worldline/campaign-background.js" },
+    { "source": "renderer/campaign-background-editor.js", "target": "out/renderer/campaign-background-editor.js" },
     {
       "source": "default_userdata/actions/standard/AGENTS.md",
       "target": "default_userdata/actions/standard/AGENTS.md"

@@ -176,6 +176,9 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.7.1-background-ui", script: "test-v9.7.1-background-ui.js" },
+  { group: "v9.7.1-campaign-background", script: "test-v9.7.1-campaign-background.js" },
+  { group: "v9.7.1-background-independent-qa", script: "test-v9.7.1-background-independent-qa.js" },
   { group: "version-document-preservation", script: "test-version-documents.js" },
   { group: "v9.7-ci-baseline", script: "test-v9.7-ci-baseline.js" },
   { group: "v9.7-production-reference-audit", script: "test-v9.7-production-reference-audit.js" },

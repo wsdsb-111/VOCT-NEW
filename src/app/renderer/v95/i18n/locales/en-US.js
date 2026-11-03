@@ -5,6 +5,16 @@ export default {
   memory: { title: "Legacy Summary", verified: "Source verified", empty: "No summaries in this scope." },
   knowledge: { title: "Character knowledge", empty: "No authorized facts available." },
   worldline: { title: "Worldline", empty: "No current facts available.", readOnly: "Read only" },
+  worldBackground: {
+    title: "Custom World Background", content: "Scenario background for this campaign", bound: "Bound to this campaign. Branches share it; a new campaign starts empty.",
+    unbound: "Campaign not identified. Start a VOTC conversation in the current save, then refresh here.",
+    help: "Leave empty to keep existing history and worldline behavior. A filled background is included in full for every responder and frozen at the start of each new conversation. Changes apply only to new conversations.",
+    placeholder: "Describe the shared premise of this fictional world or alternate timeline.", count: "{{count}} / {{limit}} characters (including punctuation, spaces and line breaks)",
+    save: "Save background", refresh: "Refresh campaign", reloadSaved: "Reload saved background (discard draft)", saved: "Saved. Applies to new conversations.", failed: "Unable to read or save. Refresh and try again.",
+    world_background_campaign_changed: "The campaign changed. Refresh and enter the background in the correct save.",
+    world_background_revision_changed: "The background changed elsewhere. Refresh before saving.", world_background_too_long: "The background must be 3,000 characters or fewer.",
+    world_background_store_invalid: "Unable to read the background file. The original file is preserved."
+  },
   letters: { title: "Letters", empty: "No letters in this scope." },
   actions: { title: "Action activity", empty: "No actions in this scope.", reviewRequired: "Review required" },
   provider: { title: "Provider", unavailable: "Provider unavailable" },

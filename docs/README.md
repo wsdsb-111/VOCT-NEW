@@ -1,5 +1,7 @@
 # VOTC 文档索引
 
+**V9.7.1已本机安装**：[自主背景设定](versions/v9/V9.7.md#v971-custom-world-background) · [当前验收](versions/v9/STATUS.md)。按战役隔离、3000字符、下一场对话起冻结生效。下方V9.7为已验收基线。
+
 当前源码候选为 **V9.7.0 Legacy Decommission**；本机已按用户确认部署 V9.7.0。旧 Workshop 一体化分发路线已取消，Runtime / Workshop 独立维护，下一阶段为 V9.8 RC / Soak。
 
 - [当前交付与 CI 状态](versions/v9/STATUS.md)。

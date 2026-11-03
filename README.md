@@ -1,3 +1,5 @@
+**V9.7.1 自主背景设定已本机安装（2026-11-02）**：世界书顶部可填写3000字符的剧本背景，按战役隔离、分支沿用，新建战役需重填；各角色在新对话开场完整冻结复用，留空保持原行为。[实施与验证](docs/versions/v9/V9.7.md#v971-custom-world-background) · [当前状态](docs/versions/v9/STATUS.md)。以下为V9.7已验收基线记录。
+
 [V9.7 当前验收与文档库](docs/versions/v9/STATUS.md) · [V6–V9 文档目录](docs/README.md)
 
 **2026-11-01 当前源码候选：V9.7.0 Legacy Decommission。** 历史兼容路径逐项审计，仅退役已证明不可达的 Provider finish 分支；保留旧配置、Prompt 回退、Legacy/Forget、五代亲属、4096 Token Canon、Action/Letter/Bridge。旧 V9.7 Workshop 一体化分发已取消，下一阶段是 V9.8 RC／Soak。Runtime 与 Workshop 继续分开维护。[实施与边界](docs/versions/v9/V9.7.md#source-caf83136db36) · [验证](docs/versions/v9/V9.7.md#source-908c3f69beb8) · [台账](docs/versions/v9/V9.7.md#source-c92823293f85)。本机已按用户确认部署 V9.7.0，353项哈希与两次隔离启动/重启已通过；以下是历史版本证据。

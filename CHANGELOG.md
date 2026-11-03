@@ -1,3 +1,9 @@
+# V9.7.1 自主背景设定候选（2026-11-02）
+
+- 世界书新增3000字符自主背景，按战役保存、分支沿用、新战役重填；留空保持原行为。
+- 完整正文在新对话按场冻结供所有角色复用，修改不影响旧场；提供中英文与切档/修订防错。
+- [版本记录](docs/versions/v9/V9.7.md#v971-custom-world-background) · [验收状态](docs/versions/v9/STATUS.md)。
+
 - 文档整理：327份正文合并为35个版本册，并补13个阶段索引；旧路径保留链接入口。[文档目录](docs/README.md) · [当前验收](docs/versions/v9/STATUS.md)。
 
 # V9.7.0 Legacy Decommission 候选（2026-11-01）

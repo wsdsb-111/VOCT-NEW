@@ -9,6 +9,7 @@ const participantLifecycle = require("./participant-lifecycle");
 const { buildPresenceObservationFacts } = require("../worldline/direct-observation-producer");
 const { resolveWorldlineTurnBudget, shouldTrimMemoryTurnRecall } = require("../worldline/worldline-context-budget");
 const { SUPPLEMENTAL_MAX_TOKENS } = require("../worldline/supplemental-retriever");
+const { backgroundCampaignKey } = require("../worldline/campaign-background");
 const { parseTimeHint } = require("../worldline/world-query-planner");
 const { buildFrozenCoverageManifest, hasFrozenCoverage, buildCoveragePatchKey } = require("../worldline/frozen-coverage-manifest");
 const { verifyActionConfirmation, settleActionResult } = require("../actions/action-confirmation");
@@ -350,6 +351,7 @@ class Conversation {
     }
     try {
       this.gameData = await traceOperation(performanceTrace, "gameData.logParse", { attribution: "MAIN" }, () => this.parseCK3GameData(ck3DebugPath));
+      this.captureWorldBackground();
       this.gameDataRevision += 1;
       this.gameData.gameDataRevision = this.gameDataRevision;
       console.log("GameData initialized with", this.gameData.characters.size, "characters");
@@ -849,8 +851,18 @@ class Conversation {
     }
     return this.frozenMemoryBudget.tokens;
   }
+  captureWorldBackground() {
+    if (this.worldBackground === undefined) this.worldBackground = worldlineService?.getConversationBackground?.(this.gameData?.campaignToken) || null;
+    if (this.worldBackground?.text && (this.worldBackground.bindingKey !== backgroundCampaignKey(this.gameData?.campaignToken)
+      || worldlineService?.isBackgroundCampaignCurrent?.(this.worldBackground.bindingKey) === false)) {
+      throw new Error("world_background_campaign_changed_start_new_conversation");
+    }
+    return this.worldBackground;
+  }
+
   async getMemoryContextFor(npc, contextLimit = null, options = {}) {
-    if (!memoryEngine || !npc || !this.gameData) return null;
+    const worldBackground = this.captureWorldBackground?.();
+    if (!memoryEngine || !npc || !this.gameData) return worldBackground?.text ? { worldBackground } : null;
     if (Number(npc.id) === Number(this.gameData.playerID)) return null;
     if (this.isV813PrefixEnabled?.()) await this.worldlinePrefetchPromise;
     if (memoryEngine.isSummaryOwnerDeceased(npc.id)) memoryEngine.reviveSummaryOwner(npc.id);
@@ -1038,6 +1050,7 @@ class Conversation {
     }
     return {
       ...retrieved,
+      ...(worldBackground?.text ? { worldBackground } : {}),
       ...this.getCharacterDisclosureContext(npc, currentTurnMentionedCharacterIds),
       turnRecall: turnRecall.selected,
       turnRecallText: turnRecall.text,
@@ -1663,6 +1676,7 @@ class Conversation {
             if (requestPhase === "streaming" && event.usage?.native) publishContextUsage("streaming");
           },
           beforeSendGuard: () => {
+            this.captureWorldBackground?.();
             if (narrationTarget && (!this.messages.includes(narrationTarget) || narrationTarget.content !== originalNarration)) {
               const error = new Error("Original narration changed before send");
               error.name = "AbortError";

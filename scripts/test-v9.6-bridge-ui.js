@@ -456,7 +456,8 @@ async function main() {
   process.stdout.write("V9.6 Bridge diagnostics UI checks passed\n");
 }
 
-main().catch(error => {
+if (require.main === module) main().catch(error => {
   process.stderr.write(`${error?.stack || error}\n`);
   process.exitCode = 1;
 });
+module.exports = { createHookHarness, nodeText, findNode };

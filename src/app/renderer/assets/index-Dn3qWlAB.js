@@ -1,5 +1,6 @@
 import { createBridgeDiagnostics } from "../bridge-diagnostics.js";
 import { WorldMemoryEditor } from "../world-memory-editor.js";
+import { CampaignBackgroundEditor } from "../campaign-background-editor.js";
 import { getLegacySummaryPage, getSummaryDisplayEntries, getSummaryImportantMatters } from "../summary-date-order.js";
 import { createRendererRuntime } from "../v95/containers/renderer-runtime.js";
 import { createReadBoundary } from "../v95/state/read-boundary.js";
@@ -59,7 +60,7 @@ function V95UiSettings() {
     error && jsxRuntimeExports.jsx("p", { role: "status", children: error })
   ] });
 }
-const VOTC_FEATURE_VERSION = "V9.7.0";
+const VOTC_FEATURE_VERSION = "V9.7.1";
 const VOTC_WORKSHOP_MOD_VERSION = "2.0.5";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -23630,6 +23631,7 @@ function WorldlineView() {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [/* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: text("世界书", "Worldline") }), /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "muted-text", children: text(`${VOTC_FEATURE_VERSION} · CK3 当前事实只读；历史检索与长期世界记忆按战役和存档分支隔离。`, `${VOTC_FEATURE_VERSION} · Current CK3 facts are read-only; historical retrieval and durable world memories are scoped by campaign and save branch.`) })] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `worldline-status worldline-status-${String(pipelineStatus || loadState).toLowerCase()}`, children: jsxRuntimeExports.jsx(V95PageVisuals.StatusBadge, { code: apiReady ? pipelineStatus : "UNKNOWN", label: apiReady ? player.status(pipelineStatus) : text("暂不可用", "Unavailable") }) })
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(CampaignBackgroundEditor, { react: reactExports, t: v95Runtime?.t }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "worldline-card worldline-source-card", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { children: text("年度存档", "Annual Save") }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "worldline-metric-grid worldline-player-summary-grid", children: [

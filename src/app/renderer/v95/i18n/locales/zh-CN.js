@@ -5,6 +5,16 @@ export default {
   memory: { title: "Legacy Summary", verified: "来源已核验", empty: "此范围内暂无摘要。" },
   knowledge: { title: "人物认知", empty: "暂无获授权的事实。" },
   worldline: { title: "世界线", empty: "暂无当前事实。", readOnly: "只读" },
+  worldBackground: {
+    title: "自主背景设定", content: "当前战役的剧本背景", bound: "已绑定当前战役；同战役分支沿用，新建战役需重新填写。",
+    unbound: "尚未识别当前战役。请先在当前存档发起一次 VOTC 对话，再刷新此处。",
+    help: "留空保持现有历史与世界线。填写后，所有回应角色会在新对话开场完整载入并冻结为稳定背景；修改只对新对话生效。",
+    placeholder: "描述这个异世界或不同时间线的共同背景。", count: "{{count}} / {{limit}} 字符（含标点、空格和换行）",
+    save: "保存背景", refresh: "刷新战役", reloadSaved: "重新载入已保存背景（放弃草稿）", saved: "已保存，将从新对话生效。", failed: "读取或保存失败，请刷新后重试。",
+    world_background_campaign_changed: "当前战役已改变，请刷新并在正确存档中重新填写。",
+    world_background_revision_changed: "背景已被修改，请刷新后再保存。", world_background_too_long: "背景最多 3000 字符，请缩短后保存。",
+    world_background_store_invalid: "背景文件无法读取，原文件已保留。"
+  },
   letters: { title: "信件", empty: "此范围内暂无信件。" },
   actions: { title: "动作记录", empty: "此范围内暂无动作。", reviewRequired: "需要审查" },
   provider: { title: "服务商", unavailable: "服务商暂不可用" },

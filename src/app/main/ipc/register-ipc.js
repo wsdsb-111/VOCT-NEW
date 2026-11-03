@@ -102,6 +102,8 @@ function registerIpcHandlers(runtime) {
       window.webContents.send("worldline:updated", payload);
     });
     electron.ipcMain.handle("worldline:getSettings", () => worldlineService.getSettings());
+    electron.ipcMain.handle("worldline:getBackgroundSetting", () => worldlineService.getBackgroundSetting());
+    electron.ipcMain.handle("worldline:saveBackgroundSetting", (_event, request) => worldlineService.saveBackgroundSetting(request));
     electron.ipcMain.handle("worldline:getOfficialRecollection", (_event, responderId) => {
       if (!/^\d+$/.test(String(responderId || ""))) throw new Error("official_recollection_responder_id_required");
       return worldlineService.getOfficialRecollectionForResponder(responderId);
