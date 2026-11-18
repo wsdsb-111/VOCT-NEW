@@ -181,6 +181,8 @@ const releaseChecks = [
   { group: "v9.7.3-provider-prefix", script: "test-v9.7.3-provider-prefix.js" },
   { group: "v9.7.3-roleplay-turn-timing", script: "test-v9.7.3-roleplay-turn-timing.js" },
   { group: "v9.7.3-disclosure-lifecycle", script: "test-v9.7.3-disclosure-lifecycle.js" },
+  { group: "v9.7.4-name-disclosure", script: "test-v9.7.4-name-disclosure.js" },
+  { group: "v9.7.4-name-disclosure-outbound", script: "test-v9.7.4-name-disclosure-outbound.js" },
   { group: "v9.7.4-openrouter-probe-layout", script: "test-v9.7.4-openrouter-probe-layout.js" },
   { group: "v9.7.4-all-provider-probes", script: "test-v9.7.4-all-provider-probes.js" },
   { group: "v9.7.2-glm-append-layout", script: "test-v9.7.2-glm-append-layout.js" },

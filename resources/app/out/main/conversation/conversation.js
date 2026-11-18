@@ -1,7 +1,8 @@
 "use strict";
 
 const { getCharacterPersonalName } = require("../memory-system/character-identity");
-const { buildCharacterDisclosureContext } = require("./character-disclosure-context");
+const { buildCharacterDisclosureContext, formatCharacterDisclosureBlocks } = require("./character-disclosure-context");
+const { extractEffectivePromptMessages } = require("../providers/effective-request");
 const { activateSocialRecognition, deactivateSocialRecognition, preserveSocialRecognition } = require("../prompts/social-recognition-policy");
 const { memoryMatchesCampaign } = require("../memory-system/memory-types");
 const { MentionTracker } = require("../memory-system/mention-tracker");
@@ -1667,6 +1668,25 @@ class Conversation {
       };
       const chatRequestMetadata = {
           requestType: "chat",
+          ...(applicationServices?.characterKnowledge?.nameDiagnosticSink ? {
+            onEffectiveRequest: snapshot => {
+              const service = applicationServices.characterKnowledge;
+              const authorized = formatCharacterDisclosureBlocks(memoryContext, this.gameData, npc.id);
+              const outgoing = extractEffectivePromptMessages(snapshot);
+              const details = { ownerId: npc.id, revision: memoryContext?.characterKnowledgeRevision };
+              let expectedNames = 0;
+              for (const phase of ["frozen", "current"]) {
+                const section = authorized[phase].split("\n\n")[0];
+                if (!section.startsWith("=== 本角色已获知的姓名 ===")) continue;
+                expectedNames++;
+                const present = outgoing.some(message => typeof message.content === "string" && message.content.includes(section));
+                service.reportName(present ? `NAME_OUTBOUND_${phase.toUpperCase()}` : "NAME_OUTBOUND_MISSING", {
+                  ...details, blockId: `responder-disclosures-${phase}`, reason: present ? undefined : "NOT_SERIALIZED"
+                });
+              }
+              if (!expectedNames) service.reportName("NAME_OUTBOUND_MISSING", { ...details, reason: "NO_DISCLOSURE" });
+            }
+          } : {}),
           ...(promptBuild.promptPlanFallbackReason ? { cacheDiagnosticContext: {
             fallbackReason: promptBuild.promptPlanFallbackReason, plan: { evidenceStatus: "LEGACY_OBSERVED" } } } : {}),
           ...(chatPlanProof ? {

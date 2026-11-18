@@ -38,6 +38,9 @@ const REPORTED_SPEECH = /听[^。.!！?？;；，,\r\n]{0,24}(?:说(?:道|过)?|
 const QUOTE_CLOSE = new Map([["“", "”"], ["‘", "’"], ["「", "」"], ["『", "』"], ['"', '"']]);
 const QUOTE_CLOSERS = new Set(QUOTE_CLOSE.values());
 const ATTRIBUTION_WORDS = /说(?:道|过)?|曰|道|表示|宣称|告诉|提到|问(?:道)?|答(?:道)?|回答|回应|追问|喊(?:道)?|笑|冷笑|看着|望着|行礼|thought|said|asked|told|declared|remarked|looked|bowed/i;
+const NAME_SPEECH_ATTRIBUTION = /^(?:我|吾|朕|寡人|孤|本王|在下|鄙人|本人)\s*(?:(?:微笑|轻笑|笑|点头|颔首|叹息|行礼)着?(?:[，,]\s*)?)?(?:说(?:道)?|开口(?:说|道)|回答|答道|回应|说道)\s*[:：]?\s*$/u;
+const NAME_SPEECH_END = /(?:说(?:道)?|开口道|回答|答道|回应|喊(?:道)?|\b(?:said|declared|replied))\s*[:：]?$/iu;
+const NAME_RETRACTION = /[,，]\s*(?:不过|但是|但)?\s*(?:这|那|刚才的话)?\s*(?:(?:只是|是)(?:个|句)?(?:玩笑|谎话|假的)|我(?:开玩笑|骗你)|(?:just kidding|that was a joke))/iu;
 
 function normalizedText(value) {
   return typeof value === "string" ? value.normalize("NFKC").trim().toLowerCase().replace(/\s+/g, " ") : "";
@@ -346,7 +349,7 @@ function phraseRemainderMatches(remainder, facts) {
   return factKeys.size === 1 ? longest[0].fact : null;
 }
 
-function explicitNameTarget(sentence, profiles, speakerId) {
+function explicitNameTarget(sentence, profiles, speakerId, diagnostics) {
   const selfPrefixes = [
     /^(?:我|吾|朕|寡人|孤|本王|在下|鄙人|本人)\s*(?:的)?(?:名字|姓名|名讳|名號|名号)\s*(?:现在|如今|当前)?\s*(?:是|叫|名为|叫做)\s*/u,
     /^(?:我|吾|朕|寡人|孤|本王|在下|鄙人|本人)\s*(?:名叫|叫做|叫|名为)\s*/u,
@@ -360,6 +363,8 @@ function explicitNameTarget(sentence, profiles, speakerId) {
     /^(?:i\s+am|i'm)\s+/i
   ];
   const normalized = sentence.normalize("NFKC").trim();
+  if (diagnostics && (selfPrefixes.slice(0, 3).some(prefix => prefix.test(normalized))
+    || /^my\s+name\s+is\s+/i.test(normalized))) diagnostics.introductions++;
   for (const prefix of selfPrefixes) {
     const match = normalized.match(prefix);
     if (!match) continue;
@@ -553,7 +558,7 @@ function recipientDirectedSpeechClause(clause, profiles) {
   return { recipientRuntimeId: targetIds[0], exclusive: selected.some(row => row.exclusive) };
 }
 
-function quoteContextIsSpeakerSpeech(text, start, end, profiles, speakerId, audienceIds) {
+function quoteContextIsSpeakerSpeech(text, start, end, profiles, speakerId, audienceIds, nameOnly) {
   const prefix = text.slice(0, start - 1);
   const boundaries = [...prefix.matchAll(/[。.!！?？;；\r\n]|[”’」』"]/gu)];
   const boundary = boundaries.at(-1);
@@ -565,6 +570,8 @@ function quoteContextIsSpeakerSpeech(text, start, end, profiles, speakerId, audi
     ? nextQuote : nextSentenceBoundary < 0 ? after.length : nextSentenceBoundary).replace(/^[\s，,:：、—–-]+/u, "").trim();
   if ([context, trailing].some(clause => INNER_THOUGHT_OR_REPORT.test(clause) || WRITTEN_QUOTE.test(clause)
     || REPORTED_SPEECH.test(clause))) return false;
+  if (nameOnly && (UNCERTAIN.test(context) || UNCERTAIN.test(trailing) || /^\s*[?？]/u.test(after)
+    || /(?:问(?:道)?|追问|\basked)\s*[:：]?$/iu.test(context))) return false;
   const clauses = [context.split(/[,，]|[—–]+/u).filter(Boolean).at(-1) || "", trailing];
   const resolutions = clauses.map(clause => clauseAliasResolution(clause, profiles, speakerId));
   if (resolutions.some(row => row.kind === "other" || row.kind === "ambiguous")) return false;
@@ -575,16 +582,20 @@ function quoteContextIsSpeakerSpeech(text, start, end, profiles, speakerId, audi
     const exclusive = recipientClauses.some(row => row.exclusive);
     return { accepted: true, recipientIds: exclusive ? recipientIds : audienceIds, addresseeId: recipientIds[0] };
   }
-  if (resolutions.some(row => row.kind === "self")) return { accepted: true, recipientIds: audienceIds };
+  if (resolutions.some((row, index) => row.kind === "self" && (!nameOnly || NAME_SPEECH_END.test(clauses[index])))
+    || nameOnly && NAME_SPEECH_ATTRIBUTION.test(context))
+    return { accepted: true, recipientIds: audienceIds };
   if (clauses.some(clause => ATTRIBUTION_WORDS.test(clause))) return false;
-  return { accepted: true, recipientIds: audienceIds };
+  return { accepted: !nameOnly, recipientIds: audienceIds };
 }
 
-function spokenTexts(text, profiles, speakerId, audienceIds) {
+function spokenTexts(text, profiles, speakerId, audienceIds, nameOnly = false) {
   if (typeof text !== "string" || !text.trim()) return [];
   const spans = [];
   const stack = [];
   let sawQuote = false;
+  let outsideStart = 0;
+  let outsideSpoken = true;
   for (let index = 0; index < text.length; index++) {
     const character = text[index];
     if (stack.length) {
@@ -595,9 +606,13 @@ function spokenTexts(text, profiles, speakerId, audienceIds) {
           const start = active.start + 1;
           const end = index;
           if (!active.nested && text.slice(start, end).trim()) {
-            const context = quoteContextIsSpeakerSpeech(text, active.start + 1, end, profiles, speakerId, audienceIds);
+            const context = quoteContextIsSpeakerSpeech(text, start, end, profiles, speakerId, audienceIds, nameOnly);
             if (context?.accepted) spans.push({ text: text.slice(start, end), recipientIds: context.recipientIds, addresseeId: context.addresseeId });
+            outsideSpoken = !!context && !context.addresseeId && /[。.!！?？;；]\s*$/u.test(text.slice(start, end));
+          } else {
+            outsideSpoken = false;
           }
+          outsideStart = index + 1;
         }
         continue;
       }
@@ -610,6 +625,10 @@ function spokenTexts(text, profiles, speakerId, audienceIds) {
       continue;
     }
     if (QUOTE_CLOSE.has(character)) {
+      if (nameOnly && outsideSpoken) {
+        const complete = text.slice(outsideStart, index).match(/^[\s\S]*[。.!！?？;；\r\n]/u)?.[0];
+        if (complete) spans.push({ text: complete, recipientIds: audienceIds });
+      }
       sawQuote = true;
       stack.push({ start: index, close: QUOTE_CLOSE.get(character), nested: false });
       continue;
@@ -617,8 +636,11 @@ function spokenTexts(text, profiles, speakerId, audienceIds) {
     if (QUOTE_CLOSERS.has(character)) return [];
   }
   if (stack.length) return [];
-  if (sawQuote) return spans;
-  if (ACTION_NARRATION.test(text) || WRITTEN_QUOTE.test(text)) return [];
+  if (sawQuote) {
+    if (nameOnly && outsideSpoken) spans.push({ text: text.slice(outsideStart), recipientIds: audienceIds });
+    return spans;
+  }
+  if (!nameOnly && (ACTION_NARRATION.test(text) || WRITTEN_QUOTE.test(text))) return [];
   const boundary = text.search(/[,，:：]/u);
   if (boundary >= 0) {
     const prefix = text.slice(0, boundary);
@@ -629,12 +651,14 @@ function spokenTexts(text, profiles, speakerId, audienceIds) {
         recipientIds: direction.exclusive ? [direction.recipientRuntimeId] : audienceIds }];
     }
     if (ATTRIBUTION_WORDS.test(prefix) && clauseAliasResolution(prefix, profiles, speakerId).kind === "other") return [];
+    if (nameOnly && NAME_SPEECH_ATTRIBUTION.test(prefix) && /[:：]/u.test(text[boundary]))
+      return [{ text: text.slice(boundary + 1), recipientIds: audienceIds }];
   }
   return [{ text, recipientIds: audienceIds }];
 }
 
-function extractCharacterDisclosures({ gameData, speakerId: speakerValue, text, audienceIds = [], traitAudienceIds = audienceIds, candidateTargetIds = [],
-  knownFacts = [], source } = {}) {
+function extractCharacterDisclosures({ gameData, speakerId: speakerValue, role, text, audienceIds = [], traitAudienceIds = audienceIds, candidateTargetIds = [],
+  knownFacts = [], source, nameOnly = false, allowName = true, nameDiagnostics } = {}) {
   const speakerId = runtimeId(speakerValue);
   const identity = sourceIdentity(source, gameData);
   const speakersCharacter = speakerId ? readCharacter(gameData, speakerId) : null;
@@ -652,8 +676,6 @@ function extractCharacterDisclosures({ gameData, speakerId: speakerValue, text, 
     .filter(id => id !== null && id !== speakerId))].sort((left, right) => left - right);
   const traitAudience = [...new Set((Array.isArray(traitAudienceIds) ? traitAudienceIds : []).map(runtimeId)
     .filter(id => id !== null))].sort((left, right) => left - right);
-  if (!audience.length && !traitAudience.length) return { disclosures: [] };
-
   const frozenAudience = [...new Set((Array.isArray(audienceIds) ? audienceIds : []).map(runtimeId)
     .filter(id => id !== null))].sort((left, right) => left - right);
   const collected = new Map();
@@ -672,10 +694,25 @@ function extractCharacterDisclosures({ gameData, speakerId: speakerValue, text, 
 
   const allOtherTargetAliases = uniqueText([...profiles.entries()].flatMap(([id, profile]) => id === speakerId
     ? [] : identityAliases(profile.character)));
-  for (const spokenText of spokenTexts(text, profiles, speakerId, frozenAudience)) {
+  if (allowName && (role === undefined || role === (speakerId === Number(gameData.playerID) ? "user" : "assistant"))) {
+    for (const spokenText of spokenTexts(text, profiles, speakerId, frozenAudience, true)) {
+      for (const sentence of splitSentences(spokenText.text)) {
+        if (NAME_RETRACTION.test(sentence)) continue;
+        for (const { clause, prefix } of splitExplicitIdentityClauses(sentence)) {
+          if (UNCERTAIN.test(clause) || DISCOURSE.test(clause) || ACTION_NARRATION.test(clause)
+            || INNER_THOUGHT_OR_REPORT.test(clause) || WRITTEN_QUOTE.test(clause) || hasReportedIntroductionPrefix(prefix)) continue;
+          const assertion = explicitNameTarget(clause, profiles, speakerId, nameDiagnostics);
+          if (!assertion) continue;
+          if (nameDiagnostics) nameDiagnostics.matches++;
+          record(assertion.targetId, assertion.fact, spokenText.recipientIds);
+        }
+      }
+    }
+  }
+  for (const spokenText of !nameOnly && (audience.length || traitAudience.length) ? spokenTexts(text, profiles, speakerId, frozenAudience) : []) {
     for (const sentence of splitSentences(spokenText.text)) {
       for (const assertion of explicitIdentityIntroductionAssertions(sentence, profiles, speakerId))
-        record(assertion.targetId, assertion.fact, spokenText.recipientIds);
+        if (assertion.fact.factType !== "NAME") record(assertion.targetId, assertion.fact, spokenText.recipientIds);
       for (const assertion of traitMentionAssertions(sentence, profiles, speakerId, spokenText.recipientIds, traitAudience, spokenText.addresseeId))
         record(assertion.targetId, assertion.fact, traitAudience);
       if (UNCERTAIN.test(sentence) || DISCOURSE.test(sentence) || INNER_THOUGHT_OR_REPORT.test(sentence)

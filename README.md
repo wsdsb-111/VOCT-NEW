@@ -1,3 +1,5 @@
+**V9.7.4 姓名披露补丁（2026-11-18）。** 支持带动作、引号混排的真实姓名自报，并按有效听众与来源在同战役跨场读回。[实施与诊断](docs/versions/v9/V9.7.md#name-disclosure-v974-20261118) · [安装与验收状态](docs/versions/v9/STATUS.md)
+
 **V9.7.3 已本地安装（2026-11-18）**：本场披露的姓名和特质放到动态区最前面，下场按回应者从已验证来源读回并放入冻结区。DeepSeek、OpenAI-compatible 和 GLM-5.3-Flash 优化稳定前缀；合成对照仅观察到 DeepSeek 命中率小幅提升。358 项安装核验、实际程序启动和正常退出通过。[实施与对照结果](docs/versions/v9/V9.7.md#provider-cache-v973-20261118) · [安装与验收状态](docs/versions/v9/STATUS.md)。
 
 **2026-11-14 PoD 个人背景故事已本地安装**：按历史人物 ID 精确绑定当前人物，把专属传记放在其官方追忆前的上层稳定区；没有传记保持原行为。需自行重启 CK3 与 VOTC 后新开对话手测。[提取、稳定区与验证](docs/current/v9/POD_PERSONAL_BACKGROUND_20261114.md)。

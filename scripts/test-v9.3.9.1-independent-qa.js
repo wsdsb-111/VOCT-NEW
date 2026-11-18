@@ -146,23 +146,36 @@ function testOwnerIsolationAndManualRevision() {
 
 function testListenersAndRelayRevocation() {
   const fixture = conversationFixture(path.join(root, "relay"));
-  const { characters, conversation, store, sourceContext, record, known } = fixture;
+  const { conversation, record, known } = fixture;
   conversation.messages.push({ id: 10, role: "user", speakerCharacterId: 1, name: "甲",
-    content: "只对乙低声说：“我是巫师。”" });
-  conversation.messages.push({ id: 11, role: "assistant", speakerCharacterId: 2, name: "乙", content: "甲是巫师。" });
+    content: "只对乙低声说：“我叫甲真名。我是巫师。”" });
+  conversation.messages.push({ id: 11, role: "assistant", speakerCharacterId: 2, name: "乙", content: "甲的名字是甲真名。甲是巫师。" });
   record();
-  assert.equal(known(2, 1, "trait_witch"), true, "the private source reaches its named listener");
-  assert.equal(known(3, 1, "trait_witch"), true, "a listener who learned the fact may relay it in this scene");
-  assert.equal(known(4, 1, "trait_witch"), false, "a participant joining after both source messages gains no history");
+  assert.equal(known(2, 1, "name_甲真名"), true, "the private source reaches its named listener");
+  assert.equal(known(3, 1, "name_甲真名"), true, "a listener with a valid NAME proof may relay it");
+  assert.equal(known(4, 1, "name_甲真名"), false, "a participant joining after both source messages gains no history");
+  assert.equal(known(3, 1, "trait_witch"), true, "an explicit TRAIT source reaches the active listeners");
+  assert.equal(known(4, 1, "trait_witch"), false, "an explicit TRAIT source still requires presence");
 
   conversation.messages[0].content = "只对乙低声说：“今天天气很好。”";
   record();
-  assert.equal(known(2, 1, "trait_witch"), false, "editing the original disclosure revokes its direct proof");
-  assert.equal(known(3, 1, "trait_witch"), false, "editing the original disclosure revokes the dependent relay");
+  assert.equal(known(2, 1, "name_甲真名"), false, "editing the original NAME disclosure revokes its direct proof");
+  assert.equal(known(3, 1, "name_甲真名"), false, "editing the original NAME disclosure revokes the dependent relay");
+  assert.equal(known(3, 1, "trait_witch"), true, "the surviving explicit TRAIT statement is independent");
 
   conversation.messages = [conversation.messages[1]];
   record();
-  assert.equal(known(3, 1, "trait_witch"), false, "deleting the original source cannot revive a relay");
+  assert.equal(known(3, 1, "name_甲真名"), false, "deleting the original source cannot revive a NAME relay");
+  conversation.messages.push({ id: 12, role: "user", speakerCharacterId: 1, name: "甲",
+    content: "只对乙低声说：“我叫甲真名。”" });
+  record();
+  record();
+  assert.equal(known(2, 1, "name_甲真名"), true, "a new independent source reaches its listener");
+  assert.equal(known(3, 1, "name_甲真名"), false, "a later private introduction cannot authorize an earlier relay during replay");
+
+  conversation.messages[0].content = "甲是不是巫师？";
+  record();
+  assert.equal(known(3, 1, "trait_witch"), false, "editing the independent TRAIT statement into a question revokes it");
 }
 
 function testCurrentRequestTargetsAndIdentitySignature() {

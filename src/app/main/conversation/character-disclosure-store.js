@@ -28,14 +28,30 @@ const characterAt = (data, key) => data?.characters instanceof Map
   ? data.characters.get(Number(key)) || data.characters.get(String(key)) : data?.characters?.[key];
 const SECRET_TRAITS = { secret_bastard: "bastard", secret_disputed_heritage: "disputed_heritage", secret_witch: "witch",
   secret_cannibal: "cannibal", secret_deviant: "deviant", secret_incest: "incestuous", secret_adulterer: "adulterer" };
+const SEPARATE_QUOTED_THOUGHT = /[。.!！]\s*([“‘「『"])(?:他|她)(?:心想|心中|心里|暗想|暗自)[^“‘「『”’」』"]*([”’」』"])\s*[。.!！]?\s*$/u;
+const validNameSpeaker = (message, gameData) => Number.isSafeInteger(message?.speakerCharacterId) && message.speakerCharacterId > 0
+  && message.role === (message.speakerCharacterId === Number(gameData.playerID) ? "user" : "assistant");
 
 class ConversationDisclosureStore {
-  constructor({ dataDir, getCurrentConversation, fs = nodeFs, path = nodePath } = {}) {
+  constructor({ dataDir, getCurrentConversation, fs = nodeFs, path = nodePath, nameDiagnosticSink } = {}) {
     this.fs = fs;
     this.path = path;
     this.getCurrentConversation = getCurrentConversation;
+    this.nameDiagnosticSink = typeof nameDiagnosticSink === "function" ? nameDiagnosticSink : null;
+    this.nameDiagnosticKey = this.nameDiagnosticSink ? crypto.randomBytes(32) : null;
     // V9.3.9 checkpoint-derived records are preserved; they are not dialogue proof.
     this.filePath = path.join(dataDir, "character-knowledge", "disclosures-v1.json");
+  }
+
+  reportName(code, { ownerId, targetId, messageId, revision, count, reason, blockId } = {}) {
+    if (!this.nameDiagnosticSink) return;
+    try {
+      this.nameDiagnosticSink({ code, schemaVersion: 1,
+        ownerId: Number.isSafeInteger(Number(ownerId)) ? Number(ownerId) : undefined,
+        targetId: Number.isSafeInteger(Number(targetId)) ? Number(targetId) : undefined,
+        messageId: Number.isSafeInteger(messageId) ? messageId : undefined, count, reason, blockId,
+        ...(revision ? { evidenceHash: crypto.createHmac("sha256", this.nameDiagnosticKey).update(revision).digest("hex") } : {}) });
+    } catch { /* Diagnostics never affect evidence or delivery. */ }
   }
 
   _frame(expected = {}) {
@@ -73,9 +89,13 @@ class ConversationDisclosureStore {
   }
 
   _read() {
-    if (!this.fs.existsSync(this.filePath)) return { schemaVersion: 1, records: [], sourceRevisions: {} };
-    let state;
-    try { state = JSON.parse(this.fs.readFileSync(this.filePath, "utf8")); } catch (_error) { throw new Error("character_knowledge_state_invalid"); }
+    let body, state;
+    try { body = this.fs.readFileSync(this.filePath, "utf8"); }
+    catch (error) {
+      if (error.code === "ENOENT") return { schemaVersion: 1, records: [], sourceRevisions: {} };
+      throw new Error("character_knowledge_state_unreadable");
+    }
+    try { state = JSON.parse(body); } catch { throw new Error("character_knowledge_state_invalid"); }
     if (state?.schemaVersion !== 1 || !Array.isArray(state.records)) throw new Error("character_knowledge_state_invalid");
     if (!state.sourceRevisions || typeof state.sourceRevisions !== "object" || Array.isArray(state.sourceRevisions)
       || Object.values(state.sourceRevisions).some(value => !/^[a-f0-9]{64}$/.test(value))) throw new Error("character_knowledge_state_invalid");
@@ -128,17 +148,19 @@ class ConversationDisclosureStore {
     // is its own disclosure source under the in-scene sharing rule.
     if (candidate.factType !== "TRAIT" && String(evidence.speakerId) !== targetId) {
       if (!/^[1-9]\d{0,19}$/.test(String(evidence.speakerId))) return false;
-      const authority = this._facts(frame, String(evidence.speakerId), targetId, state, visited)
+      const authority = this._facts(frame, String(evidence.speakerId), targetId, state, visited,
+        candidate.factType === "NAME" ? evidence : null)
         .find(fact => fact.factType === candidate.factType && fact.factKey === candidate.factKey
           && fact.factSourceSnapshotId === candidate.factSourceSnapshotId && fact.effectiveKnown);
       if (!authority) return false;
     }
     if (evidence.conversationId !== frame.conversation.id) return true;
     const message = frame.conversation.messages?.find(item => item.id === evidence.messageId);
-    return !!message && !message.isStreaming && !message.error && hash(message.content) === evidence.messageRevision;
+    return !!message && !message.isStreaming && !message.incomplete && !message.error && hash(message.content) === evidence.messageRevision
+      && (candidate.factType !== "NAME" || validNameSpeaker(message, frame.data) && message.speakerCharacterId === Number(evidence.speakerId));
   }
 
-  _facts(frame, ownerId, targetId, state, visited = new Set()) {
+  _facts(frame, ownerId, targetId, state, visited = new Set(), nameBefore = null) {
     const target = characterAt(frame.data, targetId);
     const owner = characterAt(frame.data, ownerId);
     const nativeKnown = new Set((owner?.knownSecrets || []).filter(secret => String(secret.ownerId) === targetId)
@@ -157,7 +179,10 @@ class ConversationDisclosureStore {
       const proofKey = identity({ ...candidate, campaignToken: frame.scope.campaignToken, ownerRuntimeId: ownerId, targetRuntimeId: targetId });
       const nextVisited = new Set(visited).add(proofKey);
       const evidence = visited.has(proofKey) ? [] : (record?.evidence || []).filter(item =>
-        this._evidenceCurrent(frame, item, ownerId, targetId, { ...candidate, factSourceSnapshotId }, state, nextVisited));
+        this._evidenceCurrent(frame, item, ownerId, targetId, { ...candidate, factSourceSnapshotId }, state, nextVisited)
+        && (candidate.factType !== "NAME" || !nameBefore
+          || ((item.conversationId !== nameBefore.conversationId || item.messageId < nameBefore.messageId)
+            && normalizeGameDate(item.gameDate).serial <= normalizeGameDate(nameBefore.gameDate).serial)));
       const native = candidate.factType === "TRAIT" && nativeKnown.has(normalizeTraitKey(candidate.canonicalKey || candidate.factKey.slice(6)));
       const publicNickname = candidate.factType === "NICKNAME";
       const familyFact = closeFamily && ["NAME", "TITLE", "TRAIT"].includes(candidate.factType);
@@ -244,10 +269,23 @@ class ConversationDisclosureStore {
     try {
       const frame = this._frame(payload);
       const { ownerId, targetId } = this._pair(frame, payload.ownerRuntimeId, payload.targetRuntimeId, true);
-      const facts = this._facts(frame, ownerId, targetId, readState()).filter(fact => fact.effectiveKnown || fact.status === "MANUAL_HIDDEN");
+      const state = readState();
+      const facts = this._facts(frame, ownerId, targetId, state).filter(fact => fact.effectiveKnown || fact.status === "MANUAL_HIDDEN");
+      if (this.nameDiagnosticSink) {
+        const names = facts.filter(fact => fact.factType === "NAME" && fact.effectiveKnown);
+        this.reportName("NAME_PROFILE_READY", { ownerId, targetId, count: names.length });
+        const stale = state.records.filter(row => row.campaignToken === frame.scope.campaignToken && row.ownerRuntimeId === ownerId
+          && row.targetRuntimeId === targetId && row.factType === "NAME" && !names.some(fact => fact.factKey === row.factKey));
+        if (stale.length) this.reportName("NAME_EVIDENCE_STALE", { ownerId, targetId, count: stale.length });
+      }
       return { status: "READY", scope: { ...frame.scope, ownerRuntimeId: ownerId, targetRuntimeId: targetId },
         checkpointAsOf: frame.data.date, facts };
-    } catch (error) { return { status: "BLOCKED", facts: [], reason: error.message }; }
+    } catch (error) {
+      this.reportName("NAME_PROFILE_BLOCKED", { ownerId: Number(payload.ownerRuntimeId), targetId: Number(payload.targetRuntimeId),
+        reason: error.message === "character_knowledge_state_invalid" ? "INVALID_STATE"
+          : error.message === "character_knowledge_state_unreadable" ? "UNREADABLE_STATE" : "SCOPE_UNAVAILABLE" });
+      return { status: "BLOCKED", facts: [], reason: error.message };
+    }
   }
 
   setManualStatus(payload = {}) {
@@ -277,10 +315,16 @@ class ConversationDisclosureStore {
 
   recordConversation({ conversation, context } = {}) {
     if (!conversation?.gameData || !context?.campaignToken || context.campaignToken !== conversation.gameData.campaignToken) return { recorded: 0 };
-    const state = this._read();
+    let state;
+    try { state = this._read(); }
+    catch (error) {
+      this.reportName("NAME_WRITE_FAILED", { reason: error.message === "character_knowledge_state_invalid" ? "INVALID_STATE" : "UNREADABLE_STATE" });
+      throw error;
+    }
     const frame = this._frame({ conversationId: context.conversationId, campaignToken: context.campaignToken });
     if (conversation !== frame.conversation) throw new Error("character_knowledge_conversation_changed");
     let recorded = 0;
+    let namesRecorded = 0;
     let sourcesChanged = false;
     const participantIds = (context.participants || []).map(person => Number(person.id));
     const currentMessages = new Set((context.messages || []).map(message => JSON.stringify([context.conversationId, message.id])));
@@ -291,26 +335,57 @@ class ConversationDisclosureStore {
       }
     }
     for (const message of context.messages || []) {
-      if (!["user", "assistant"].includes(message.role) || message.isStreaming || message.error) continue;
+      if (!["user", "assistant"].includes(message.role) || message.isStreaming || message.incomplete || message.error) continue;
       const sourceKey = JSON.stringify([context.conversationId, message.id]);
       const messageRevision = hash(message.content);
       if (state.sourceRevisions[sourceKey] !== messageRevision) {
         state.sourceRevisions[sourceKey] = messageRevision;
         sourcesChanged = true;
       }
-      for (const paragraph of sourceParagraphSegments(context, message) || []) {
+      const paragraphs = sourceParagraphSegments(context, message) || [];
+      const hasNameSpeaker = validNameSpeaker(message, frame.data);
+      if (hasNameSpeaker) {
+        for (const paragraph of [...paragraphs]) {
+          // Revalidate the completed sentence against the original source.
+          const boundary = paragraph.visibility === "private" && paragraph.source === "spoken"
+            && paragraph.content.match(SEPARATE_QUOTED_THOUGHT);
+          if (boundary && "“‘「『\"".indexOf(boundary[1]) === "”’」』\"".indexOf(boundary[2]))
+            paragraphs.push({ ...paragraph, visibility: "public", content: paragraph.content.slice(0, boundary.index + 1), nameOnly: true });
+        }
+      }
+      if (!paragraphs.length || !hasNameSpeaker) this.reportName("NAME_SOURCE_REJECTED", {
+        messageId: message.id, revision: messageRevision, reason: !hasNameSpeaker ? "SPEAKER_UNVERIFIED" : "NO_SOURCE"
+      });
+      for (const paragraph of paragraphs) {
         const proof = validateSourceItem(paragraph, context);
+        const nameSourceAccepted = hasNameSpeaker && proof.success && proof.source === "spoken";
+        const diagnosticSource = { messageId: message.id, revision: messageRevision };
+        this.reportName(nameSourceAccepted ? "NAME_SOURCE_ACCEPTED" : "NAME_SOURCE_REJECTED", {
+          ...diagnosticSource, reason: nameSourceAccepted ? undefined : !hasNameSpeaker ? "SPEAKER_UNVERIFIED" : "VISIBILITY_UNVERIFIED"
+        });
         if (!proof.success || proof.source !== "spoken") continue;
         const traitAudienceIds = paragraph.visibility === "private" ? proof.audience : presentIds(context, Number(message.id));
         const speakerId = proof.speakers[0];
         const source = { conversationId: context.conversationId, messageId: message.id,
           messageRevision, gameDate: context.date, campaignToken: context.campaignToken, audienceIds: proof.audience };
         const knownFacts = participantIds.filter(targetId => targetId !== speakerId).flatMap(targetId =>
-          this._facts(frame, String(speakerId), String(targetId), state).filter(fact => fact.effectiveKnown)
+          this._facts(frame, String(speakerId), String(targetId), state, undefined, source).filter(fact => fact.effectiveKnown)
             .map(fact => ({ ...fact, ownerRuntimeId: String(speakerId), targetRuntimeId: String(targetId) })));
-        const result = extractCharacterDisclosures({ gameData: conversation.gameData, speakerId, text: paragraph.content,
-          audienceIds: proof.audience, traitAudienceIds, candidateTargetIds: participantIds, knownFacts, source });
+        const nameDiagnostics = this.nameDiagnosticSink && nameSourceAccepted ? { introductions: 0, matches: 0 } : null;
+        const result = extractCharacterDisclosures({ gameData: conversation.gameData, speakerId, role: message.role, text: paragraph.content,
+          audienceIds: proof.audience, traitAudienceIds, candidateTargetIds: participantIds, knownFacts, source,
+          allowName: nameSourceAccepted, nameOnly: paragraph.nameOnly, nameDiagnostics });
+        if (nameDiagnostics) {
+          const { matches, introductions } = nameDiagnostics;
+          this.reportName(matches ? "NAME_MATCHED" : "NAME_NOT_MATCHED", { ...diagnosticSource, count: matches,
+            reason: matches ? undefined : introductions ? "NO_NAME_CANDIDATE" : "NOT_SPOKEN" });
+          if (matches && !result.disclosures.some(fact => fact.factType === "NAME")) this.reportName("NAME_AUDIENCE_REJECTED", {
+            ...diagnosticSource, targetId: speakerId, reason: "NO_AUTHORIZED_RECIPIENT"
+          });
+        }
         for (const fact of result.disclosures || []) {
+          if (fact.factType === "NAME") this.reportName("NAME_AUDIENCE_ACCEPTED", { ...diagnosticSource,
+            ownerId: fact.ownerRuntimeId, targetId: fact.targetRuntimeId });
           const key = identity({ ...fact, campaignToken: context.campaignToken });
           let record = state.records.find(item => identity(item) === key);
           if (!record) {
@@ -327,10 +402,15 @@ class ConversationDisclosureStore {
           record.evidence.push({ ...source, audienceIds: fact.factType === "TRAIT" ? traitAudienceIds : proof.audience, speakerId, factSourceSnapshotId });
           record.revision++;
           recorded++;
+          if (fact.factType === "NAME") namesRecorded++;
         }
       }
     }
-    if (recorded || sourcesChanged) this._write(state);
+    if (recorded || sourcesChanged) {
+      try { this._write(state); }
+      catch (error) { this.reportName("NAME_WRITE_FAILED", { reason: "WRITE_FAILED" }); throw error; }
+    }
+    this.reportName(namesRecorded ? "NAME_EVIDENCE_WRITTEN" : "NAME_EVIDENCE_UNCHANGED", { count: namesRecorded });
     return { recorded };
   }
 }

@@ -402,7 +402,9 @@ const worldlineService = new WorldlineService({
   memoryEngine
 });
 const characterKnowledgeService = new ConversationDisclosureStore({ dataDir: VOTC_DATA_DIR,
-  getCurrentConversation: () => conversationManager.getCurrentConversation() });
+  getCurrentConversation: () => conversationManager.getCurrentConversation(),
+  nameDiagnosticSink: /^(?:1|true|yes|on)$/i.test(process.env.VOTC_NAME_DISCLOSURE_DIAGNOSTICS || "")
+    ? event => console.info("[NameDisclosure]", JSON.stringify(event)) : null });
 const providerRegistry = ProviderRegistry.getInstance();
 function createPromptFingerprint(value) {
   if (value === null || value === void 0) return null;
