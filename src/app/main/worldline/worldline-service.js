@@ -158,6 +158,17 @@ function latestHistoryHolder(title, afterDate, beforeDate) {
   return (title.history || []).filter((entry) => entry.holder && (dateValue(entry.date) || 0) > (dateValue(afterDate) || 0) && (dateValue(entry.date) || 0) <= (dateValue(beforeDate) || Number.MAX_SAFE_INTEGER)).at(-1) || null;
 }
 
+function probeBytesMatch(fs, fd, offset, expected) {
+  const actual = Buffer.alloc(expected.length);
+  return fs.readSync(fd, actual, 0, actual.length, offset) === actual.length && actual.equals(expected);
+}
+
+function probeIdentityMatches(fs, fd, previous) {
+  return probeBytesMatch(fs, fd, 0, previous.head)
+    && probeBytesMatch(fs, fd, previous.size - previous.anchor.length, previous.anchor)
+    && Object.values(previous.markers).every(marker => probeBytesMatch(fs, fd, marker.offset, Buffer.from(marker.text)));
+}
+
 function readProbeIdentity(fs, filePath, fd, stat, cache) {
   const key = `${filePath}:${stat.dev}:${stat.ino}:${stat.birthtimeMs}`;
   const read = (offset, length) => {
@@ -168,8 +179,7 @@ function readProbeIdentity(fs, filePath, fd, stat, cache) {
   const previous = cache.state;
   const reusable = previous?.key === key && stat.size >= previous.size
     && (stat.size !== previous.size || stat.mtimeMs === previous.mtimeMs && stat.ctimeMs === previous.ctimeMs)
-    && read(previous.size - previous.anchor.length, previous.anchor.length).equals(previous.anchor)
-    && read(0, previous.head.length).equals(previous.head);
+    && probeIdentityMatches(fs, fd, previous);
   let position = reusable ? previous.offset : 0;
   let lineOffset = position;
   let carry = Buffer.alloc(0);
@@ -808,7 +818,13 @@ class WorldlineService {
     try {
       const stat = debugLogPath ? this.fs.statSync(debugLogPath) : null;
       const key = stat ? `${debugLogPath}:${stat.dev}:${stat.ino}:${stat.birthtimeMs}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}` : String(debugLogPath || "unconfigured");
-      if (this.liveCache.key === key && this.liveCache.value) return clone(this.liveCache.value);
+      if (debugLogPath && this.liveCache.key === key && this.liveCache.value && this.liveIdentityCache.state) {
+        // Windows can report identical timestamps for consecutive same-size writes.
+        const fd = this.fs.openSync(debugLogPath, "r");
+        try {
+          if (probeIdentityMatches(this.fs, fd, this.liveIdentityCache.state)) return clone(this.liveCache.value);
+        } finally { this.fs.closeSync(fd); }
+      }
       const value = readLiveProbe({ fs: this.fs, debugLogPath, identityCache: this.liveIdentityCache });
       this.liveCache = { key, value };
       return clone(value);

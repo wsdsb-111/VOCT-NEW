@@ -107,8 +107,13 @@ async function main() {
   assert.throws(() => longScene.captureWorldBackground(), /campaign_changed/);
   fs.writeFileSync(largeLog, init + "\n" + marker(A) + "\n");
   assert.equal(service.getLiveState().campaignToken, A, "truncation resets the incremental identity");
+  const sameTimestampFs = Object.create(fs);
+  const frozenFileStat = fs.statSync(largeLog);
+  sameTimestampFs.statSync = filename => filename === largeLog ? frozenFileStat : fs.statSync(filename);
+  service.fs = sameTimestampFs;
   fs.writeFileSync(largeLog, init + "\n" + marker(B) + "\n");
   assert.equal(service.getLiveState().campaignToken, B, "same-size replacement cannot retain A");
+  service.fs = fs;
 
   // UTF-8 prefixes and chunk splits must preserve the absolute session offset.
   const splitLog = log("字".repeat(21842), load("session_split_01"), init, marker(A));
@@ -125,7 +130,7 @@ async function main() {
   assert(readBytes < 1024 * 1024 + 2048, "warm probe reads the bounded date tail plus new identity bytes, not the whole log");
   readBytes = 0;
   service.getLiveState();
-  assert.equal(readBytes, 0, "an unchanged file reuses the live probe");
+  assert(readBytes > 0 && readBytes < 2048, "unchanged file checks only cached anchors and identity markers");
 
   // Split the marker labels themselves, not only the surrounding UTF-8 line.
   for (const label of [load("session_chunk_01"), init, marker(A)]) {
