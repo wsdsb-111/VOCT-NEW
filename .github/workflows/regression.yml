@@ -53,7 +53,11 @@ jobs:
       - name: Build runtime from source
         run: node scripts/build-runtime.js
       - name: Verify pinned installation baseline before isolated upgrade
-        run: node scripts/seed-ci-runtime-baseline.js
+        run: |
+          # The checked-in generated files may already be the current release. Recreate the old installation in CI only.
+          git restore --source=3721b925270457175e0e583f943a20db581de03e --worktree -- resources/app/out resources/app/default_userdata resources/app/package.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/seed-ci-runtime-baseline.js
       - name: Verify and materialize generated runtime
         id: materialize
         run: |
