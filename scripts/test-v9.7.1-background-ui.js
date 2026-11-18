@@ -40,6 +40,13 @@ async function main() {
       const textarea = () => findNode(tree, node => node.type === "textarea");
       const save = () => findNode(tree, node => node.type === "button" && nodeText(node) === catalog.worldBackground.save);
       assert.equal(textarea().props.value, "A");
+      const good = current;
+      current = {};
+      update(); await flush(); tree = rig.render();
+      assert.equal(textarea().props.value, "A", "malformed bridge response must not crash the Worldline page");
+      assert.equal(save().props.disabled, true);
+      current = good;
+      update(); await flush(); tree = rig.render();
       assert.equal(textarea().props.maxLength, undefined, "UTF-16 maxLength cannot reject valid Unicode code points");
       assert(nodeText(tree).includes("5000"), "counter shows the new campaign background limit");
       textarea().props.onChange({ target: { value: "🐉".repeat(5001) } }); tree = rig.render();

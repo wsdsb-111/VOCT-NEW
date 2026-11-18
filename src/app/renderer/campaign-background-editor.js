@@ -18,6 +18,7 @@ export function CampaignBackgroundEditor({ react: R, t }) {
     try {
       const next = await api.getBackgroundSetting();
       if (!mounted.current || request !== sequence.current) return;
+      if (typeof next?.available !== "boolean" || typeof next.text !== "string") throw new Error("world_background_store_invalid");
       const keepDraft = next.available && next.bindingKey === loaded.current?.bindingKey && draft.current !== loaded.current.text;
       if (keepDraft && next.revision !== loaded.current.revision) {
         setConflict(next); setNotice(tr("world_background_revision_changed")); setPhase("error"); return;
