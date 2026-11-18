@@ -100,6 +100,10 @@ try {
         assert.equal(store.recordConversation({ conversation, context }).recorded, 0);
         assert(diagnostics.some(event => event.code === "NAME_EVIDENCE_UNCHANGED"));
         assert(diagnostics.some(event => /^[a-f0-9]{64}$/.test(event.evidenceHash ?? "")));
+        Object.assign(participants[2], { shortName: "赵元宁", fullName: "赵元宁" });
+        gameData.playerID = 3;
+        assert(!profile(2, 3).facts.some(fact => fact.factType === "NAME"), "switching to a same-name player ID does not carry over proof");
+        gameData.playerID = 1;
         fs.writeFileSync(store.filePath, "{ malformed");
         assert.deepEqual(profile(2), { status: "BLOCKED", facts: [], reason: "character_knowledge_state_invalid" });
         assert.throws(() => store.recordConversation({ conversation, context }), /state_invalid/);

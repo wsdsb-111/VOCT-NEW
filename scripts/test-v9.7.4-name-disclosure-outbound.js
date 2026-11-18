@@ -131,6 +131,22 @@ async function main() {
     await h.speak("你还记得我的名字吗？");
     h.assertWire(true);
     assert(h.events.some(event => event.code === "NAME_OUTBOUND_FROZEN"));
+
+    conversation = h.startScene("reopened-after-rename", "1176.6.16", 468);
+    const renamed = "赵新名";
+    const player = conversation.gameData.characters.get(conversation.gameData.playerID);
+    Object.assign(player, { firstName: renamed, shortName: renamed, fullName: renamed });
+    conversation.gameData.playerName = renamed;
+    assert.equal(h.profile().status, "READY");
+    assert(!h.profile().facts.some(fact => fact.factType === "NAME"), "persisted evidence cannot authorize an updated CK3 identity");
+    await h.speak("你还记得我的名字吗？");
+    h.assertWire(false);
+    assert(!h.requests.at(-1).messages.some(message => message.content.includes(renamed)));
+    assert(h.events.some(event => event.code === "NAME_EVIDENCE_STALE"));
+
+    conversation = h.startScene("reopened-original-character-facts", "1176.6.17", 469);
+    await h.speak("你还记得我的名字吗？");
+    h.assertWire(true);
     if (type === "zhipu") assert.equal(conversation.glmAppendReceipts.size, 1, "the authorized frozen request creates a GLM receipt");
 
     const formerCount = h.requests.length;
