@@ -15,7 +15,7 @@ function resolvePlanMode(value) {
 
 function canExtendHistoryPrefix(blocks, { layoutId, mode, requestType, profile, providerConfig }) {
   if (layoutId !== "v813" || mode !== "v9" || requestType !== "chat" || !profile?.adapterEnabled) return false;
-  const { providerType, defaultModel } = providerConfig;
+  const { providerType, defaultModel } = providerConfig || {};
   if (!["deepseek", "openai-compatible"].includes(providerType)
     && !(providerType === "zhipu" && defaultModel === "glm-5.3-flash")) return false;
   const history = blocks.filter(block => block.kind === "APPEND_ONLY_HISTORY");
