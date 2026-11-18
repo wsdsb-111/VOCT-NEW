@@ -46,10 +46,12 @@ function serializePromptPlan(plan, { layoutId = plan.layoutId, profileId = plan.
   const messageSpans = [...spans.values()];
   const blockMetadata = plan.blocks.map(block => {
     const span = spans.get(block.id);
+    const positions = [...new Set(span.contributions.map(part => part.messagePosition))];
     return { id: block.id, type: block.legacyType, label: block.label, position: block.order,
       kind: block.kind, semanticClass: block.kind, lifecycle: block.lifecycle.state, tokens: block.tokens.estimated,
       stable: block.cache.stableCandidate, fingerprint: block.cache.contentFingerprint,
-      messageStartPosition: span.start, messageCount: span.end - span.start,
+      messageStartPosition: span.start, messageCount: positions.length,
+      ...(positions.length !== span.end - span.start ? { messagePositions: positions } : {}),
       ...(block.provenance ? { provenance: { evidenceLevel: block.provenance.evidenceLevel, sourceCount: block.provenance.sourceCount } } : {}) };
   });
   const serializedFingerprint = fingerprint(messages);

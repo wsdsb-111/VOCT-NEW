@@ -4,10 +4,11 @@ const { normalizeGameDate, resolveLifeStatus } = require("../worldline/character
 const { getCharacterPersonalName } = require("../memory-system/character-identity");
 const { currentDirectParentFilter, currentPublicParentFilter } = require("../worldline/kinship-graph-cache");
 const { getFamilyVisibility } = require("../worldline/family-visibility");
-const PRIVATE_FIELDS = ["personality", "sexuality", "boldness", "compassion", "energy", "greed", "honor", "rationality", "sociability", "vengefulness", "zeal", "capitalLocation"];
+const { getSocialRecognitionSource, hasSpecialRelationKnowledge, isSupernaturalIdentity, getSupernaturalPerception } = require("./social-recognition-policy");
+const PRIVATE_FIELDS = ["personality", "sexuality", "boldness", "compassion", "energy", "greed", "honor", "rationality", "sociability", "vengefulness", "zeal", "capitalLocation", "faith", "culture", "modifiers"];
 const profileViewSources = new WeakMap();
 
-const { NON_OBSERVABLE_TO_OTHERS, OBSERVABLE_TO_OTHERS, getTraitAliases, normalizeTraitKey, resolveTraitVisibility } = require("./trait-visibility-policy");
+const { NON_OBSERVABLE_TO_OTHERS, OBSERVABLE_TO_OTHERS, getTraitAliases, normalizeTraitKey, resolveTraitVisibility, getSensedSpeciesTrait } = require("./trait-visibility-policy");
 
 function getTraitsForSelfProfile(character) {
   return Array.isArray(character?.traits) ? character.traits : [];
@@ -17,6 +18,23 @@ function observable(trait) {
 }
 function getTraitsForObservedProfile(character) {
   return getTraitsForSelfProfile(character).filter(observable);
+}
+
+function displayScrubber(hiddenAliases) {
+  const aliases = [...hiddenAliases.keys()].sort((left, right) => right.length - left.length);
+  const pattern = aliases.length ? new RegExp(aliases.map(alias => alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "gu") : null;
+  return text => pattern ? text.replace(pattern, (alias, offset) => {
+    if (/^[\p{Script=Latin}\d .'-]+$/u.test(alias)
+      && (/[\p{L}\p{N}_]/u.test(text[offset - 1] || "") || /[\p{L}\p{N}_]/u.test(text[offset + alias.length] || ""))) return alias;
+    return hiddenAliases.get(alias);
+  }) : text;
+}
+
+function scrubDerivedMetadata(value, scrub) {
+  if (typeof value === "string") return scrub(value);
+  if (!value || typeof value !== "object") return value;
+  for (const key of Object.keys(value)) value[key] = scrubDerivedMetadata(value[key], scrub);
+  return value;
 }
 
 function runtimeCharacterId(value) {
@@ -36,6 +54,14 @@ function familyKnown(observer, target, context) {
     : isPublicCloseFamily(runtimeCharacterId(observer), runtimeCharacterId(target), context.identitySource || context.gameData);
 }
 
+function isSpecialRelationKnown(observerId, targetId, gameData) {
+  return hasSpecialRelationKnowledge(profileViewSources.get(gameData) || gameData, observerId, targetId);
+}
+
+function fullProfileKnown(observer, target, context) {
+  return familyKnown(observer, target, context) || isSpecialRelationKnown(observer.id, target.id, context.identitySource || context.gameData);
+}
+
 function traitFactKeys(character, observableOnly = false) {
   const traits = observableOnly ? getTraitsForObservedProfile(character) : getTraitsForSelfProfile(character);
   return [...new Set(traits.map(normalizeTraitKey).filter(Boolean).map(key => `trait_${key}`))];
@@ -48,13 +74,22 @@ function getAutomaticTraitAccess(observer, target, gameData, options = {}) {
   const traitKeys = traitFactKeys(target);
   if (!traitKeys.length) return { source: null, traitKeys: [] };
   if (options.familyVisibility ? options.familyVisibility.ids.has(String(targetId)) : isPublicCloseFamily(observerId, targetId, gameData)) return { source: "PUBLIC_CLOSE_FAMILY", traitKeys };
+  if (isSpecialRelationKnown(observerId, targetId, gameData)) return { source: "SPECIAL_RELATION", traitKeys };
   const activeParticipantIds = Array.isArray(options?.activeParticipantIds) ? options.activeParticipantIds : [];
   const present = new Set(activeParticipantIds.map(runtimeCharacterId).filter(Boolean));
-  if (present.has(observerId) && present.has(targetId)) {
-    const observableKeys = traitFactKeys(target, true);
-    if (observableKeys.length) return { source: "OBSERVABLE", traitKeys: observableKeys };
-  }
-  return { source: null, traitKeys: [] };
+  const social = getSocialRecognitionSource(gameData, observerId, targetId);
+  const perception = getSupernaturalPerception(observer, target, gameData, { activeParticipantIds });
+  const observableKeys = present.has(observerId) && present.has(targetId) ? traitFactKeys(target, true) : [];
+  return { source: social ? "SOCIAL_RECOGNITION" : perception.traitKeys.length ? "SUPERNATURAL_RECOGNITION" : observableKeys.length ? "OBSERVABLE" : null,
+    traitKeys: [...new Set([...(social ? getTraitsForSelfProfile(target).filter(isSupernaturalIdentity)
+      .map(trait => `trait_${normalizeTraitKey(trait)}`) : perception.traitKeys), ...observableKeys])] };
+}
+
+function getPerceptionForKnownProfile(observer, target, context = {}) {
+  return getSupernaturalPerception(observer, target, context.identitySource || context.gameData, {
+    activeParticipantIds: context.activeParticipantIds,
+    hiddenTraitKeys: scopedDisclosureFacts(observer, target, context).filter(fact => fact.factType === "TRAIT" && fact.status === "MANUAL_HIDDEN").map(fact => fact.factKey)
+  });
 }
 
 function getTraitsForKnownProfile(observer, target, knowledgeContext = {}) {
@@ -73,6 +108,11 @@ function getTraitsForKnownProfile(observer, target, knowledgeContext = {}) {
     if (facts.some(fact => fact.currentDirectObservation === true && fact.effectiveKnown === true)) return true;
     return automaticTraitKeys.has(factKey) || facts.some(fact => fact.effectiveKnown === true)
       || secrets.some(secret => Number(secret.ownerId) === Number(target?.id) && secretTraits[secret.type] === normalizeTraitKey(trait));
+  }).map(trait => {
+    if (!["SUPERNATURAL_RECOGNITION", "SOCIAL_RECOGNITION"].includes(automatic.source) || !isSupernaturalIdentity(trait)) return trait;
+    const fullFact = scopedDisclosureFacts(observer, target, knowledgeContext).some(fact => fact.factType === "TRAIT"
+      && fact.factKey === `trait_${normalizeTraitKey(trait)}` && fact.effectiveKnown === true && !fact.speciesOnly);
+    return fullFact ? trait : getSensedSpeciesTrait(trait);
   });
 }
 
@@ -92,7 +132,8 @@ function knownTitle(observer, target, value, context) {
     && (normalize(fact.value) === normalize(value)
       || /^concept_/.test(value) && fact.aliases?.includes(normalize(value).toLowerCase())));
   if (facts.some(fact => fact.status === "MANUAL_HIDDEN")) return "";
-  if (familyKnown(observer, target, context) || facts.some(fact => fact.effectiveKnown === true)) return value;
+  if (fullProfileKnown(observer, target, context) || getSocialRecognitionSource(context.gameData, observer.id, target.id)
+    || facts.some(fact => fact.effectiveKnown === true)) return value;
   return "";
 }
 
@@ -103,6 +144,7 @@ function knownPersonalName(observer, target, context) {
   const normalize = value => String(value || "").normalize("NFKC").trim();
   const aliases = new Set([personalName, source.name, source.firstName, source.shortName, source.fullName].filter(Boolean).map(normalize));
   const facts = scopedDisclosureFacts(observer, target, context).filter(fact => fact.factType === "NAME" && aliases.has(normalize(fact.value)));
+  if (getSocialRecognitionSource(context.gameData, observer.id, target.id) && !isNameManuallyHidden(observer, target, context)) return personalName;
   const known = facts.find(fact => fact.effectiveKnown === true && fact.status !== "MANUAL_HIDDEN"
     && !facts.some(hidden => hidden.status === "MANUAL_HIDDEN" && normalize(hidden.value) === normalize(fact.value)));
   return known ? normalize(known.value) : null;
@@ -239,10 +281,14 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
         const isSelf = Number(value.id) > 0 && Number(value.id) === Number(observer?.id);
         if (Array.isArray(value.traits)) result.traits = (isSelf ? getTraitsForSelfProfile(value) : getTraitsForKnownProfile(observer, value, knowledge)).map(trait => copy(trait));
         if (!isSelf) {
-          const closeFamily = familyKnown(observer, value, knowledge);
+          const perception = getPerceptionForKnownProfile(observer, value, knowledge);
+          if (perception.level === "SUPERNATURAL" && !result.traits?.some(isSupernaturalIdentity)) {
+            result.supernaturalPerception = perception.cue;
+          } else delete result.supernaturalPerception;
+          const knowsProfile = fullProfileKnown(observer, value, knowledge);
           const ageFacts = scopedDisclosureFacts(observer, value, knowledge).filter(fact => fact.factType === "AGE");
           const knowsAge = !ageFacts.some(fact => fact.status === "MANUAL_HIDDEN")
-            && (closeFamily || ageFacts.some(fact => fact.effectiveKnown === true));
+            && (knowsProfile || ageFacts.some(fact => fact.effectiveKnown === true));
           if (!knowsAge) {
             if ("age" in result) result.age = null;
             for (const key of ["birth", "birthDate", "birthDateTotalDays", "birthTotalDays", "ageAtDeath", "ageAtDeathSource"]) delete result[key];
@@ -252,14 +298,21 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
               ? String(value[key] || "").split(/[,，、;；\n|]/).map(title => knownTitle(observer, value, title.trim(), knowledge)).filter(Boolean).join("、")
               : knownTitle(observer, value, String(value[key] || ""), knowledge);
           }
-          if (!closeFamily || isNameManuallyHidden(observer, value, knowledge)) {
+          for (const key of ["titles", "titleCandidates"]) if (Array.isArray(value[key])) {
+            result[key] = value[key].filter(title => knownTitle(observer, value,
+              typeof title === "string" ? title : title?.value || title?.name || title?.localizedName || "", knowledge)).map(title => copy(title));
+          }
+          if (!knowsProfile && !result.primaryTitle && !result.titleRankConcept) {
+            for (const key of ["isRuler", "isLandedRuler", "isIndependentRuler", "isKnight"]) if (key in result) result[key] = null;
+          }
+          if (!knowsProfile || isNameManuallyHidden(observer, value, knowledge)) {
             const personalName = knownPersonalName(observer, value, knowledge) || "未获知姓名的人物";
             for (const key of ["name", "firstName", "shortName"]) if (key in result) result[key] = personalName;
             result.shortName = personalName;
             result.fullName = value.nickname ? `${personalName} '${value.nickname}'` : personalName;
             if ("house" in result) result.house = "未获知家族";
           }
-          if (!closeFamily) for (const key of PRIVATE_FIELDS) delete result[key];
+          if (!knowsProfile) for (const key of PRIVATE_FIELDS) delete result[key];
           for (const key of ["secrets", "knownSecrets", "memories", "conversationSummaries"]) if (key in result) result[key] = [];
         }
       }
@@ -271,34 +324,58 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
   const projectedCharacter = copy(character);
   // Scrub generated CK3 display metadata, never spoken text or authorized memories.
   const hiddenAliases = new Map();
+  const targetScrubbers = new Map();
   const relationAliases = new Map();
   const projectedById = new Map();
   for (const [source, projected] of copies) if (runtimeCharacterId(source)) projectedById.set(runtimeCharacterId(source), projected);
   for (const person of sourceProfiles.values()) {
     const projected = view.characters?.get(Number(person.id)) || projectedById.get(runtimeCharacterId(person));
     if (!projected) continue;
+    const hiddenDetails = new Map();
+    const allowedTraits = new Set((projected.traits || []).map(normalizeTraitKey));
+    for (const trait of person.traits || []) {
+      const known = (projected.traits || []).find(item => normalizeTraitKey(item) === normalizeTraitKey(trait));
+      const knownAliases = new Set(known ? getTraitAliases(known) : []);
+      for (const alias of getTraitAliases(trait)) if (alias.length > 1 && (!allowedTraits.has(normalizeTraitKey(trait)) || !knownAliases.has(alias))) {
+        hiddenDetails.set(alias, "未获知特质");
+      }
+    }
     const fullIdentity = Number(person.id) === Number(observer.id)
-      || familyKnown(observer, person, knowledge) && !isNameManuallyHidden(observer, person, knowledge);
+      || (fullProfileKnown(observer, person, knowledge) || getSocialRecognitionSource(identityData, observer.id, person.id))
+        && !isNameManuallyHidden(observer, person, knowledge);
     for (const alias of [person.name, person.firstName, person.shortName, person.fullName].filter(value => typeof value === "string" && value.length > 1)) {
       const names = relationAliases.get(alias) || new Set();
       names.add(projected.shortName || projected.name || "未获知姓名的人物");
       relationAliases.set(alias, names);
-      if (!fullIdentity && ![projected.name, projected.firstName, projected.shortName, projected.fullName].includes(alias)) hiddenAliases.set(alias, projected.shortName || "未获知姓名的人物");
+      if (!fullIdentity && ![projected.name, projected.firstName, projected.shortName, projected.fullName].includes(alias)) {
+        hiddenAliases.set(alias, projected.shortName || "未获知姓名的人物");
+        hiddenDetails.set(alias, projected.shortName || "未获知姓名的人物");
+      }
     }
     for (const key of ["primaryTitle", "heldCourtAndCouncilPositions", "titleRankConcept", "house"]) {
       const allowed = new Set(String(projected[key] || "").split(/[,，、;；\n|]/).map(value => value.trim()));
       for (const title of String(person[key] || "").split(/[,，、;；\n|]/).map(value => value.trim())) {
-        if (title.length > 1 && !allowed.has(title) && !/^(?:none(?:\b|$)|concept_none$)/i.test(title)) hiddenAliases.set(title, "未获知身份");
+        if (title.length > 1 && !allowed.has(title) && !/^(?:none(?:\b|$)|concept_none$)/i.test(title)) {
+          hiddenAliases.set(title, "未获知身份");
+          hiddenDetails.set(title, "未获知身份");
+        }
       }
     }
+    const scrub = displayScrubber(hiddenDetails);
+    targetScrubbers.set(Number(person.id), scrub);
+    for (const key of ["modifiers", "personality", "faith", "culture", "topLiege", "liegeRealmLaw", "laws", "titles", "titleCandidates"]) {
+      if (key in projected) projected[key] = scrubDerivedMetadata(projected[key], scrub);
+    }
   }
-  const aliases = [...hiddenAliases.keys()].sort((left, right) => right.length - left.length);
-  const aliasPattern = aliases.length ? new RegExp(aliases.map(alias => alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "gu") : null;
-  const scrubDisplay = text => aliasPattern ? text.replace(aliasPattern, (alias, offset) => {
-    if (/^[\p{Script=Latin}\d .'-]+$/u.test(alias)
-      && (/[\p{L}\p{N}_]/u.test(text[offset - 1] || "") || /[\p{L}\p{N}_]/u.test(text[offset + alias.length] || ""))) return alias;
-    return hiddenAliases.get(alias);
-  }) : text;
+  for (const [source, projected] of copies) {
+    const personalityScrub = targetScrubbers.get(runtimeCharacterId(source));
+    if (personalityScrub && projected.personality) projected.personality = scrubDerivedMetadata(projected.personality, personalityScrub);
+    for (const row of projected.opinionBreakdowns || []) {
+      const scrub = targetScrubbers.get(Number(row.id));
+      if (scrub && row.breakdown) row.breakdown = scrubDerivedMetadata(row.breakdown, scrub);
+    }
+  }
+  const scrubDisplay = displayScrubber(hiddenAliases);
   const visited = new WeakSet();
   const scrubMetadata = value => {
     if (!value || typeof value !== "object" || visited.has(value)) return;
@@ -337,4 +414,4 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
 }
 
 module.exports = { NON_OBSERVABLE_TO_OTHERS, OBSERVABLE_TO_OTHERS, normalizeTraitKey, getTraitAliases, resolveTraitVisibility,
-  getTraitsForSelfProfile, getTraitsForObservedProfile, isPublicCloseFamily, getAutomaticTraitAccess, getTraitsForKnownProfile, createTraitProfileView, isNameManuallyHidden, isAgeManuallyHidden };
+  getTraitsForSelfProfile, getTraitsForObservedProfile, isPublicCloseFamily, isSpecialRelationKnown, getAutomaticTraitAccess, getTraitsForKnownProfile, getPerceptionForKnownProfile, createTraitProfileView, isNameManuallyHidden, isAgeManuallyHidden };

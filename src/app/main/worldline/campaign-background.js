@@ -5,7 +5,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { CK3_CAMPAIGN_TOKEN_PATTERN } = require("../historical-system/campaign-identity");
 const { assertNoLinks } = require("../memory-system/scoped-path");
-const MAX_BACKGROUND_CHARACTERS = 3000;
+const MAX_BACKGROUND_CHARACTERS = 5000;
 
 function backgroundCampaignKey(token) {
   return typeof token === "string" && CK3_CAMPAIGN_TOKEN_PATTERN.test(token)

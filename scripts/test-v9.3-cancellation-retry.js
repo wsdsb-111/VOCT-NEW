@@ -1,5 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict");
+const { mock } = require("node:test");
 const { createRequestControl, awaitWithSignal } = require("../src/app/main/providers/provider-cancellation");
 const { retryOperation } = require("../src/app/main/providers/provider-retry-policy");
 const { ProviderPlatformFacade } = require("../src/app/main/providers/provider-platform");
@@ -8,6 +9,38 @@ const { buildProviderCapabilities } = require("../src/app/main/providers/provide
 const { LLMManager, TokenCounter } = require("../src/app/main/provider-service");
 const config = { providerType: "deepseek", defaultModel: "synthetic" };
 const request = { model: "synthetic", messages: [{ role: "user", content: "synthetic only" }], stream: false };
+async function verifyRouterTimeout(platform) {
+  const watchdog = setTimeout(() => { throw new Error("OpenRouter timeout fixture hung"); }, 3000);
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const config = { providerType: "openrouter", defaultModel: "synthetic" };
+    for (const firstOutput of [false, true]) {
+      let sends = 0;
+      let transportSignal;
+      const control = createRequestControl({ requestType: "chat" });
+      const stream = await platform.generate({ async *chatCompletion(request, config, control) {
+        control.beforeSend();
+        sends++;
+        transportSignal = request.signal;
+        if (firstOutput) yield { delta: { content: "first reply" } };
+        yield { delta: { reasoning: true } };
+        await awaitWithSignal(new Promise(() => {}), transportSignal);
+      } }, { ...request, stream: true }, config, { control });
+      if (firstOutput) assert.equal((await stream.next()).value.delta.content, "first reply");
+      const reasoning = stream.next();
+      await new Promise(setImmediate);
+      mock.timers.tick(firstOutput ? 44000 : 89000);
+      assert.equal((await reasoning).value.delta.reasoning, true);
+      const pending = assert.rejects(stream.next(), e => e.providerError.category === "TIMEOUT" && e.providerError.safeToReplay === false);
+      mock.timers.tick(999);
+      assert.equal(transportSignal.aborted, false);
+      mock.timers.tick(1);
+      await pending;
+      assert.equal(transportSignal.aborted, true);
+      assert.equal(sends, 1, "timeout cannot replay the request");
+    }
+  } finally { mock.timers.reset(); clearTimeout(watchdog); }
+}
 async function main() {
   let configured = null, providerCreations = 0;
   const manager = new LLMManager({ settingsRepository: { getActiveProviderConfig: () => configured,
@@ -47,6 +80,23 @@ async function main() {
   const capabilities = buildProviderCapabilities(config, { contextWindow: 8192, maxOutputTokens: 2048 });
   capabilities.features.nonStreaming = { state: "UNSUPPORTED", source: "fixture" };
   const platform = new ProviderPlatformFacade();
+  await verifyRouterTimeout(platform);
+  const router = { providerType: "openrouter", defaultModel: "synthetic" };
+  const routerManager = new LLMManager({ settingsRepository: { getActiveProviderConfig: () => router,
+    getGlobalStreamSetting: () => false }, providerRegistry: { createProvider: () => ({
+    async testConnection(config, control) {
+      assert(control.deadline > Date.now() && control.deadline <= Date.now() + 30000);
+      return { success: true };
+    },
+    async chatCompletion(request, config, control) {
+      assert.equal(request.signal, control.signal);
+      assert(control.deadline > Date.now() && control.deadline <= Date.now() + 120000);
+      return { content: "ok", finish_reason: "stop" };
+    }
+  }) }, usageAnalytics: { record() {} }, TokenCounter, PromptBuilder: {} });
+  routerManager.getProviderCapabilities = async () => ({ contextWindow: 8192, maxOutputTokens: 2048 });
+  assert.equal((await routerManager.testProviderConnection()).success, true);
+  assert.equal((await routerManager.sendChatRequest(request.messages)).content, "ok");
   attempts = 0;
   await assert.rejects(platform.generate({ chatCompletion: async () => { attempts++; return {}; } }, request, config, { capabilities }), e => e.providerError.category === "UNSUPPORTED");
   assert.equal(attempts, 0);

@@ -24,6 +24,7 @@ function memoryBudgetMetadataSnapshot(messages, metadata) {
       type: block.type,
       messageStartPosition: block.messageStartPosition,
       messageCount: block.messageCount,
+      ...(block.messagePositions !== undefined ? { messagePositions: block.messagePositions } : {}),
       tokens: block.tokens,
       fingerprint: block.fingerprint
     }));
@@ -63,11 +64,15 @@ function validateMemoryBudgetMessages(messages, metadata, TokenCounter) {
       || start + count > messages.length) {
       throw new Error("chat_memory_budget_block_mapping_invalid");
     }
-    const end = start + count;
-    spans.push({ start, end });
+    const positions = block.messagePositions === undefined
+      ? Array.from({ length: count }, (_, index) => start + index) : block.messagePositions;
+    if (!Array.isArray(positions) || positions.length !== count || positions[0] !== start
+      || positions.some((position, index) => !Number.isSafeInteger(position) || position < 0 || position >= messages.length
+        || index > 0 && position <= positions[index - 1])) throw new Error("chat_memory_budget_block_mapping_invalid");
+    spans.push(...positions.map(position => ({ start: position, end: position + 1 })));
     if (!isMemory) continue;
 
-    const blockMessages = messages.slice(start, end);
+    const blockMessages = positions.map(position => messages[position]);
     if (blockMessages.some((message) => !message || typeof message.role !== "string" || typeof message.content !== "string")) {
       throw new Error("chat_memory_budget_block_mapping_invalid");
     }
@@ -338,6 +343,10 @@ class LLMManager {
       const provider = this.getProviderInstance(config);
       if (provider.testConnection) {
         const pinned = JSON.parse(JSON.stringify(config));
+        if (pinned.providerType === "openrouter") {
+          const deadline = Date.now() + 30000;
+          options = { ...options, deadline: options.deadline == null ? deadline : Math.min(options.deadline, deadline) };
+        }
         const control = this.createControl(pinned, "CHAT", signal, options);
         try { return await awaitWithSignal(provider.testConnection(pinned, control), control.signal); }
         finally { control.dispose(); }
@@ -410,12 +419,17 @@ class LLMManager {
         }
       };
     }
+    if (activeConfig.providerType === "openrouter" && ["chat", "chat_continuation"].includes(metadata.requestType || "chat")) {
+      const deadline = Date.now() + (stream ? 240000 : 120000);
+      controlMetadata = { ...controlMetadata, deadline: metadata.deadline == null ? deadline : Math.min(metadata.deadline, deadline) };
+    }
     const control = this.createControl(activeConfig, "CHAT", signal, controlMetadata);
     let capabilities;
     try { capabilities = await this.getProviderCapabilities("CHAT", null, control, activeConfig); }
     catch (error) { control.dispose(); throw toProviderError(error); }
     const requestedMaxTokens = Number(metadata.maxTokens) || Number(request.max_tokens) || capabilities.maxOutputTokens;
-    const budget = planRequestBudget({ messages, capabilities, requestedOutputTokens: requestedMaxTokens, countTokens: (items) => this.TokenCounter.calculateTotalTokens(items) });
+    const estimatedPromptTokens = this.TokenCounter.calculateTotalTokens(messages);
+    const budget = planRequestBudget({ messages, capabilities, requestedOutputTokens: requestedMaxTokens, countTokens: () => estimatedPromptTokens });
     if (!budget.safe) {
       control.dispose();
       const error = new Error("chat_request_budget_exceeded");
@@ -430,7 +444,6 @@ class LLMManager {
       });
       memoryGuardState.reservedOutputTokens = budget.reservedOutputTokens;
     }
-    const estimatedPromptTokens = this.TokenCounter.calculateTotalTokens(messages);
     console.log(`[LLMManager] Chat request: provider=${activeConfig.providerType}, model=${activeConfig.defaultModel}, messages=${messages.length}, estimatedPromptTokens=${estimatedPromptTokens}${isDeepseekChat ? `, maxTokens=${request.max_tokens}, thinking=enabled` : ""}`);
     const requestType = metadata.requestType || "chat";
     const v89Settings = this.settingsRepository.getChatPromptV89Settings?.() || { chatPromptV89OutboundDiagnostics: true };

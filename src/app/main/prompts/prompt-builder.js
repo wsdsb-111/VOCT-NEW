@@ -8,7 +8,7 @@ const { buildHistoricalReferenceReplacement } = require("../worldline/subjective
 const { currentRelationship } = require("../memory-system/entity-context");
 const { isMemoryBudgetBlock } = require("../memory-system/memory-budget-policy");
 const { parseRelationIntent } = require("../worldline/relation-intent-parser");
-const { createTraitProfileView, isPublicCloseFamily } = require("./trait-profile-selector");
+const { createTraitProfileView, isPublicCloseFamily, isSpecialRelationKnown } = require("./trait-profile-selector");
 const { resolveCharacterAge } = require("../worldline/character-age-service");
 const { getTargetedKinshipGraph } = require("../worldline/kinship-graph-cache");
 const { createRelationshipResolver } = require("../game-data/relationship-resolver");
@@ -17,7 +17,7 @@ const { resolveCharacterSexConsensus } = require("../worldline/character-demogra
 const { resolveKinshipLabel } = require("../worldline/kinship-label-resolver");
 const { resolveLifeStatus } = require("../worldline/character-temporal-facts");
 const { isStepFamilyQuery } = require("../worldline/step-family-facts");
-const { formatKnownNameFacts } = require("../conversation/character-disclosure-context");
+const { formatCharacterDisclosureBlocks, formatSelfConcealment } = require("../conversation/character-disclosure-context");
 const { normalizeSpouseRecords } = require("../worldline/canonical-spouse-record");
 
 const { createPromptAssembly, captureBlockSpans, markTrustedMainSegment } = require("./prompt-plan-builder");
@@ -297,6 +297,9 @@ function createPromptBuilder({
         subjectiveWorldPolicyActive: memoryContext.subjectiveWorldPolicyActive,
         campaignToken: memoryContext.campaignToken,
         disclosureProfiles: memoryContext.disclosureProfiles instanceof Map ? new Map(memoryContext.disclosureProfiles) : memoryContext.disclosureProfiles,
+        audienceKnowledge: memoryContext.audienceKnowledge,
+        characterKnowledgeRevision: memoryContext.characterKnowledgeRevision,
+        disclosureTargetIds: memoryContext.disclosureTargetIds,
         presenceText: memoryContext.presenceText,
         confirmedActionText: memoryContext.confirmedActionText,
         cacheV2FrozenSnapshots: null
@@ -471,6 +474,7 @@ function createPromptBuilder({
     static buildPlayerIdentityKnowledge(char, gameData, publicCloseFamily = false) {
       const playerId = Number(gameData?.playerID);
       if (!gameData?.characters?.has(playerId) || Number(char?.id) === playerId) return null;
+      const specialRelationship = isSpecialRelationKnown(Number(char.id), playerId, gameData);
       const formalRelationships = [
         ...currentRelationship(gameData, Number(char.id), playerId).types,
         ...currentRelationship(gameData, playerId, Number(char.id)).types
@@ -480,14 +484,18 @@ function createPromptBuilder({
         ...formalRelationships,
         ...buildStableKinship(char, gameData).filter(relative => Number(relative.runtimeId) === playerId).map(relative => relative.kinshipType)
       ])];
-      const identityKnowledgeRule = publicCloseFamily
+      const identityKnowledgeRule = specialRelationship
+        ? `  - 当前CK3明确特殊关系允许双方互知本轮完整人物资料：姓名、年龄、全部头衔、全部特质与性格等，无需重复自我介绍；手动隐藏仍优先。此权限不授权秘密、过往记忆或其他人物资料。`
+        : publicCloseFamily
         ? `  - 当前可靠公开的亲属关系允许双方依本轮可信人物资料白名单互知姓名、年龄、头衔与特质，无需重复自我介绍；此例外仅限这些当前字段，不授权秘密、过往记忆或其他人物资料。称号（Nickname）默认可见。`
         : `  - 人物资料、在场表、场景说明、Runtime ID 和消息说话者前缀里的玩家姓名、全名、家族、头衔与官职都是后台标签，不构成本角色已经知道玩家身份的证据。本边界优先于这些资料和标签。称号（Nickname）默认可见，用于角色扮演，但不授予真名、精确头衔或官职。`;
-      const nameAccessRule = publicCloseFamily
+      const nameAccessRule = specialRelationship
+        ? `  - 特殊关系双方可依据当前获准人物资料识别对方，不必假装不知其姓名或身份；不授权个人秘密与过往对话记忆，不扩展到第三人。`
+        : publicCloseFamily
         ? `  - 仅当前可靠公开的近亲可按本轮白名单知晓玩家姓名、年龄、头衔与特质；不得据此读取记忆或秘密，也不得扩展到其他人物资料。`
         : `  - 只可依据当前 CK3 明确的亲属或正式关系、本角色获准的记忆、获准的公开事实，以及当前对话正文中明确说出的自我介绍或他人介绍识别玩家。只授予来源明确给出的那项姓名或身份，不得据此解锁整包玩家资料；介绍中的化名不等于已得知后台真名。已公开的头衔和特质逐项限定于获知的角色；旧头衔不代表自动知道新头衔，已消失特质不作为当前属性。`;
       return `=== 玩家身份知情边界（本轮高优先级，适用于当前回应角色） ===
-  - 当前 CK3 身份识别关系证据：${relationships.join("、") || "未提供"}。${publicCloseFamily ? "双方是当前可靠公开的近亲，关系证据支持相应称谓。" : "关系证据支持双方相识及相应称谓，不自动授予全部后台身份资料；缺少记录不等于从未相识。"}
+  - 当前 CK3 身份识别关系证据：${relationships.join("、") || (specialRelationship ? "CK3特殊关系标记" : "未提供")}。${specialRelationship ? "双方存在当前CK3确认的特殊关系，获准互知当前完整人物资料。" : publicCloseFamily ? "双方是当前可靠公开的近亲，关系证据支持相应称谓。" : "关系证据支持双方相识及相应称谓，不自动授予全部后台身份资料；缺少记录不等于从未相识。"}
 ${identityKnowledgeRule}
 ${nameAccessRule}
   - 当前回合开始交谈、同场、好感数值、SHARED_SCENE 或本次相遇的直接交谈次数，都不等于已知玩家身份。没有上述具体身份来源时，应按尚未识别的对方自然回应，不得主动叫出后台姓名、家族、头衔或官职，也不得因为系统提供资料而装作早已认识。
@@ -876,6 +884,15 @@ ${nameAccessRule}
           period: "当前年代未确认", context: "游戏为先，历史为次。年代与当前事实缺失时明确未知，不得以历史传记补全人物生死、行踪或战争。", notableEvents: [], notableFigures: []
         } };
       }
+      const disclosures = formatCharacterDisclosureBlocks(memoryContext, ageAuthorityGameData, Number(char.id));
+      const appendDisclosures = (phase, label, lifecycle) => {
+        const content = disclosures[phase];
+        if (!content) return;
+        llmMessages.push({ role: "system", content });
+        blocksWithTokens.push({ block: { id: `responder-disclosures-${phase}`, type: `character_disclosure_${phase}`,
+          label, lifecycle, stable: lifecycle !== PROMPT_LIFECYCLE.DYNAMIC }, content, tokens: TokenCounter.estimateTokens(content) });
+      };
+      appendDisclosures("frozen", "Previously Disclosed Names and Traits", PROMPT_LIFECYCLE.RESPONDER_FROZEN);
       const promptGameData = memoryContext?.historicalReferenceInfo ? Object.assign(Object.create(Object.getPrototypeOf(gameData)), gameData, {
         historicalReferenceInfo: memoryContext.historicalReferenceInfo,
         currentEmperor: null,
@@ -896,14 +913,23 @@ ${nameAccessRule}
       const cacheV2ResponderText = cacheV2Snapshots ? formatStableProfile(cacheV2Snapshots.stableProfile) : null;
       const cacheV2KinshipText = cacheV2Snapshots ? formatStableKinship(cacheV2Snapshots.stableProfile) : null;
       const cacheV2LiveText = glmCacheV2 || v813Layout ? formatLiveProfile(createLiveProfile(char, promptGameData, memoryContext?.activeParticipantIds)) : null;
+      const speakerIdsByName = new Map();
       const normalizedHistory = history.map((m) => ({
         role: m.role,
         name: (() => {
           if (!m.name) return m.name;
           let speakerId = m.role === "user" ? Number(gameData.playerID) : numericRuntimeId(m.speakerCharacterId);
           if (!speakerId) {
-            const matches = [...ageAuthorityGameData.characters.values()].filter(person => [person.fullName, person.shortName, person.firstName].includes(m.name));
-            if (matches.length === 1) speakerId = Number(matches[0].id);
+            if (!speakerIdsByName.has(m.name)) {
+              let uniqueId = null;
+              for (const person of ageAuthorityGameData.characters.values()) {
+                if (![person.fullName, person.shortName, person.firstName].includes(m.name)) continue;
+                if (uniqueId !== null) { uniqueId = null; break; }
+                uniqueId = Number(person.id);
+              }
+              speakerIdsByName.set(m.name, uniqueId);
+            }
+            speakerId = speakerIdsByName.get(m.name);
           }
           return (gameData.characters.get(speakerId) || gameData.characters.get(String(speakerId)))?.fullName || "未获知姓名的人物";
         })(),
@@ -924,7 +950,8 @@ ${nameAccessRule}
       };
       const responderGameFacts = [
         this.buildResponderGameFacts(char, gameData, playerIdentityFamilyAccess),
-        formatKnownNameFacts(memoryContext, ageAuthorityGameData, Number(char.id))
+        disclosures.other,
+        formatSelfConcealment(memoryContext, ageAuthorityGameData, Number(char.id), [...activeParticipantIds])
       ].filter(Boolean).join("\n\n");
       const latestUserQuery = [...workingHistory].reverse().find((message) => message.role === "user")?.content || "";
       const ageDiagnostics = [];
@@ -1244,6 +1271,7 @@ ${nameAccessRule}
       };
       if (v813Layout) insertCacheV2Frozen();
       const v813FrozenBlockCount = v813Layout ? blocksWithTokens.length : 0;
+      appendDisclosures("current", "Names and Traits Disclosed in This Conversation", PROMPT_LIFECYCLE.DYNAMIC);
       for (const block of blocks) {
         if (!block.enabled) continue;
         if (memoryMode === "exclude" && (String(block.id || "").startsWith("memory-")

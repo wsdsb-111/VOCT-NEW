@@ -99,7 +99,9 @@ function buildMessageBlockMap(blocks = [], messageCount = 0) {
     const start = Number(block?.messageStartPosition);
     const count = Number(block?.messageCount);
     if (!Number.isInteger(start) || !Number.isInteger(count) || start < 0 || count < 1) continue;
-    for (let index = start; index < Math.min(messageCount, start + count); index += 1) {
+    if (block.messagePositions !== undefined && !Array.isArray(block.messagePositions)) continue;
+    const positions = block.messagePositions || Array.from({ length: Math.min(count, messageCount - start) }, (_, index) => start + index);
+    for (const index of positions.filter(index => Number.isInteger(index) && index >= 0 && index < messageCount)) {
       if (!result[index]) result[index] = typeof block.id === "string" ? block.id : null;
     }
   }
@@ -113,7 +115,9 @@ function buildStablePrefixMetadata(messages = [], blocks = []) {
     const start = Number(block?.messageStartPosition);
     const count = Number(block?.messageCount);
     if (!Number.isInteger(start) || !Number.isInteger(count) || start < 0 || count < 1) continue;
-    for (let position = start; position < Math.min(messages.length, start + count); position += 1) {
+    if (block.messagePositions !== undefined && !Array.isArray(block.messagePositions)) continue;
+    const positions = block.messagePositions || Array.from({ length: Math.min(count, messages.length - start) }, (_, index) => start + index);
+    for (const position of positions.filter(position => Number.isInteger(position) && position >= 0 && position < messages.length)) {
       coveredByPosition[position] = true;
       if (block.stable !== true) stableByPosition[position] = false;
     }

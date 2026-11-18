@@ -17,7 +17,7 @@ async function main() {
         assert.equal(typeof phrase, "string", `missing UI translation ${language}:${key}`);
         return phrase.replace(/\{\{(\w+)\}\}/g, (_all, name) => String(params[name]));
       };
-      let current = { available: true, bindingKey: "a".repeat(64), revision: 1, text: "A" };
+      let current = { available: true, bindingKey: "a".repeat(64), revision: 1, text: "A", limit: 5000 };
       let update, resolveRead, delayed = false, unsubscribed = 0;
       const writes = [];
       globalThis.window = { worldlineAPI: {
@@ -41,9 +41,10 @@ async function main() {
       const save = () => findNode(tree, node => node.type === "button" && nodeText(node) === catalog.worldBackground.save);
       assert.equal(textarea().props.value, "A");
       assert.equal(textarea().props.maxLength, undefined, "UTF-16 maxLength cannot reject valid Unicode code points");
-      textarea().props.onChange({ target: { value: "🐉".repeat(3001) } }); tree = rig.render();
+      assert(nodeText(tree).includes("5000"), "counter shows the new campaign background limit");
+      textarea().props.onChange({ target: { value: "🐉".repeat(5001) } }); tree = rig.render();
       assert.equal(save().props.disabled, true);
-      const full = "🐉".repeat(3000);
+      const full = "🐉".repeat(5000);
       textarea().props.onChange({ target: { value: full } }); tree = rig.render();
       assert.equal(save().props.disabled, false);
       await save().props.onClick(); tree = rig.render();

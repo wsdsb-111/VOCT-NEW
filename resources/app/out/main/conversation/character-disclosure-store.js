@@ -1,14 +1,16 @@
 "use strict";
 
-// Pair disclosure persistence only. Automatic facts come from verified spoken
-// messages, never a Worldline roster, realm membership or a model extraction.
+// Persist verified pair disclosures only. Selected-dialogue political facts
+// come from CK3's directed proofs and remain temporary, never a Worldline roster.
 const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 const crypto = require("node:crypto");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { normalizeTraitKey, resolveTraitVisibility } = require("../prompts/trait-visibility-policy");
 const { getAutomaticTraitAccess, isPublicCloseFamily } = require("../prompts/trait-profile-selector");
-const { sourceParagraphSegments, validateSourceItem } = require("../memory-system/finalization-visibility");
+const { getSocialRecognitionSource, hasSpecialRelationKnowledge, getSupernaturalPerception, isSupernaturalIdentity } = require("../prompts/social-recognition-policy");
+const { getSensedSpeciesTrait } = require("../prompts/trait-visibility-policy");
+const { sourceParagraphSegments, validateSourceItem, presentIds } = require("../memory-system/finalization-visibility");
 const { extractCharacterDisclosures, getDisclosureFactCandidates } = require("./character-disclosure-extraction");
 
 const hash = value => crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -39,6 +41,9 @@ class ConversationDisclosureStore {
   _frame(expected = {}) {
     const conversation = this.getCurrentConversation?.();
     const data = conversation?.gameData;
+    if (conversation?.recognitionPlayerId && Number(data?.playerID) !== conversation.recognitionPlayerId) {
+      throw new Error("character_knowledge_player_changed");
+    }
     if (!conversation?.isActive || !data || !conversation.id) throw new Error("character_knowledge_conversation_unavailable");
     if (typeof data.campaignToken !== "string" || !data.campaignToken.trim() || !normalizeGameDate(data.date)) {
       throw new Error("character_knowledge_campaign_unavailable");
@@ -119,9 +124,9 @@ class ConversationDisclosureStore {
       || !Array.isArray(evidence.audienceIds) || !evidence.audienceIds.map(String).includes(ownerId)
       || evidence.factSourceSnapshotId !== candidate.factSourceSnapshotId || !/^[a-f0-9]{64}$/.test(evidence.messageRevision || "")
       || state.sourceRevisions[JSON.stringify([evidence.conversationId, evidence.messageId])] !== evidence.messageRevision) return false;
-    // A relayed assertion needs the speaker's still-valid knowledge of this
-    // exact fact. Follow recorded pair proofs only; cycles grant no authority.
-    if (String(evidence.speakerId) !== targetId) {
+    // Name/title relays retain prior pair proof. An explicit trait statement
+    // is its own disclosure source under the in-scene sharing rule.
+    if (candidate.factType !== "TRAIT" && String(evidence.speakerId) !== targetId) {
       if (!/^[1-9]\d{0,19}$/.test(String(evidence.speakerId))) return false;
       const authority = this._facts(frame, String(evidence.speakerId), targetId, state, visited)
         .find(fact => fact.factType === candidate.factType && fact.factKey === candidate.factKey
@@ -140,7 +145,9 @@ class ConversationDisclosureStore {
       .map(secret => SECRET_TRAITS[secret.type]).filter(Boolean));
     const automatic = getAutomaticTraitAccess(owner, target, frame.data, { activeParticipantIds: frame.activeParticipantIds });
     const closeFamily = isPublicCloseFamily(Number(ownerId), Number(targetId), frame.data);
-    return getDisclosureFactCandidates(target).flatMap(candidate => {
+    const special = hasSpecialRelationKnowledge(frame.data, ownerId, targetId);
+    const social = getSocialRecognitionSource(frame.data, ownerId, targetId);
+    const facts = getDisclosureFactCandidates(target).flatMap(candidate => {
       const record = state.records.find(item => identity(item) === identity({ ...candidate, campaignToken: frame.scope.campaignToken,
         ownerRuntimeId: ownerId, targetRuntimeId: targetId }));
       const factSourceSnapshotId = `fact:${hash([frame.scope.campaignToken, targetId, candidate.factType, candidate.factKey, candidate.value, candidate.aliases])}`;
@@ -154,23 +161,43 @@ class ConversationDisclosureStore {
       const native = candidate.factType === "TRAIT" && nativeKnown.has(normalizeTraitKey(candidate.canonicalKey || candidate.factKey.slice(6)));
       const publicNickname = candidate.factType === "NICKNAME";
       const familyFact = closeFamily && ["NAME", "TITLE", "TRAIT"].includes(candidate.factType);
+      const specialFact = special && ["NAME", "TITLE", "TRAIT"].includes(candidate.factType);
+      const socialFact = social && ["NAME", "TITLE", "NICKNAME"].includes(candidate.factType);
       const intrinsic = manual?.status !== "MANUAL_HIDDEN"
-        && (publicNickname || familyFact || candidate.factType === "TRAIT" && automatic.traitKeys.includes(candidate.factKey));
+        && (publicNickname || familyFact || specialFact || socialFact || candidate.factType === "TRAIT" && automatic.traitKeys.includes(candidate.factKey));
       const status = intrinsic ? "AUTO_DISCLOSED" : manual?.status || (evidence.length || native ? "AUTO_DISCLOSED" : "UNKNOWN");
       const observable = candidate.factType === "TRAIT" && resolveTraitVisibility(candidate.canonicalKey || candidate.factKey.slice(6)).status === "OBSERVABLE";
       // The player can explicitly disclose their own traits. Other people's
       // undisclosed private traits are not exposed as a catalogue to manage.
       if (candidate.factType === "TRAIT" && !observable && targetId !== String(frame.data.playerID)
         && !intrinsic && !native && !evidence.length && !manual) return [];
-      return [{ ...candidate, status, effectiveKnown: status === "AUTO_DISCLOSED" || status === "MANUAL_KNOWN",
-        current: true, currentDirectObservation: intrinsic, hasDisclosureRecord: evidence.length > 0,
+      const speciesOnly = candidate.factType === "TRAIT" && isSupernaturalIdentity(candidate.factKey)
+        && ["SUPERNATURAL_RECOGNITION", "SOCIAL_RECOGNITION"].includes(automatic.source)
+        && !evidence.length && manual?.status !== "MANUAL_KNOWN";
+      const species = speciesOnly ? getSensedSpeciesTrait(candidate.factKey) : null;
+      return [{ ...candidate, ...(species ? { value: species.name, aliases: [species.name, species.traitId], speciesOnly: true } : {}),
+        status, effectiveKnown: status === "AUTO_DISCLOSED" || status === "MANUAL_KNOWN",
+        current: true, currentDirectObservation: intrinsic && (familyFact || publicNickname
+          || !specialFact && !socialFact && !["SOCIAL_RECOGNITION", "SUPERNATURAL_RECOGNITION"].includes(automatic.source)), hasDisclosureRecord: evidence.length > 0,
+        disclosurePhase: evidence.some(item => item.conversationId !== frame.conversation.id) ? "prior" : evidence.length ? "current" : null,
         source: intrinsic ? publicNickname ? evidence.length ? "CONVERSATION_DISCLOSURE" : "PUBLIC_NICKNAME"
-          : familyFact ? "PUBLIC_CLOSE_FAMILY" : automatic.source === "OBSERVABLE" ? "IN_PERSON_OBSERVATION" : automatic.source
+          : familyFact ? "PUBLIC_CLOSE_FAMILY" : specialFact ? "SPECIAL_RELATION" : socialFact ? "SOCIAL_RECOGNITION" : automatic.source === "OBSERVABLE" ? "IN_PERSON_OBSERVATION" : automatic.source
           : manual ? "MANUAL" : native ? "GAME_DATA_KNOWN_SECRET" : evidence.length ? "CONVERSATION_DISCLOSURE" : "UNDISCLOSED",
         sourceSnapshotId: frame.scope.sourceSnapshotId, factSourceSnapshotId,
         firstAcquiredDate: intrinsic ? evidence[0]?.gameDate || frame.data.date : manual?.acquiredDate || evidence[0]?.gameDate || (native ? frame.data.date : null),
         revision: record?.revision || 0, sourceStatus: record && !intrinsic && !manual && !evidence.length && !native ? "STALE" : "CURRENT" }];
     });
+    const perception = getSupernaturalPerception(owner, target, frame.data, { activeParticipantIds: frame.activeParticipantIds,
+      hiddenTraitKeys: facts.filter(fact => fact.status === "MANUAL_HIDDEN" && fact.factType === "TRAIT").map(fact => fact.factKey) });
+    if (perception.level === "SUPERNATURAL" && !facts.some(fact => fact.factType === "TRAIT" && fact.effectiveKnown && isSupernaturalIdentity(fact.factKey))) {
+      // A fixed coarse fact contains no original species ID, aliases or description.
+      facts.push({ factType: "PERCEPTION", factKey: "supernatural_presence", value: perception.cue,
+        aliases: [], status: "AUTO_DISCLOSED", effectiveKnown: true, current: true, currentDirectObservation: true,
+        source: "SUPERNATURAL_SENSE", sourceStatus: "CURRENT", hasDisclosureRecord: false,
+        sourceSnapshotId: frame.scope.sourceSnapshotId, factSourceSnapshotId: `fact:${hash([frame.scope.campaignToken, ownerId, targetId, "supernatural_presence", perception.group])}`,
+        firstAcquiredDate: frame.data.date, revision: 0 });
+    }
+    return facts;
   }
 
   getConversationView() {
@@ -200,10 +227,24 @@ class ConversationDisclosureStore {
   }
 
   getDisclosureProfile(payload = {}) {
+    return this._disclosureProfile(payload, () => this._read());
+  }
+
+  getDisclosureProfiles(payloads) {
+    let state, readError;
+    const readState = () => {
+      if (readError) throw readError;
+      try { return state ||= this._read(); }
+      catch (error) { readError = error; throw error; }
+    };
+    return payloads.map(payload => this._disclosureProfile(payload, readState));
+  }
+
+  _disclosureProfile(payload, readState) {
     try {
       const frame = this._frame(payload);
       const { ownerId, targetId } = this._pair(frame, payload.ownerRuntimeId, payload.targetRuntimeId, true);
-      const facts = this._facts(frame, ownerId, targetId, this._read()).filter(fact => fact.effectiveKnown || fact.status === "MANUAL_HIDDEN");
+      const facts = this._facts(frame, ownerId, targetId, readState()).filter(fact => fact.effectiveKnown || fact.status === "MANUAL_HIDDEN");
       return { status: "READY", scope: { ...frame.scope, ownerRuntimeId: ownerId, targetRuntimeId: targetId },
         checkpointAsOf: frame.data.date, facts };
     } catch (error) { return { status: "BLOCKED", facts: [], reason: error.message }; }
@@ -260,6 +301,7 @@ class ConversationDisclosureStore {
       for (const paragraph of sourceParagraphSegments(context, message) || []) {
         const proof = validateSourceItem(paragraph, context);
         if (!proof.success || proof.source !== "spoken") continue;
+        const traitAudienceIds = paragraph.visibility === "private" ? proof.audience : presentIds(context, Number(message.id));
         const speakerId = proof.speakers[0];
         const source = { conversationId: context.conversationId, messageId: message.id,
           messageRevision, gameDate: context.date, campaignToken: context.campaignToken, audienceIds: proof.audience };
@@ -267,7 +309,7 @@ class ConversationDisclosureStore {
           this._facts(frame, String(speakerId), String(targetId), state).filter(fact => fact.effectiveKnown)
             .map(fact => ({ ...fact, ownerRuntimeId: String(speakerId), targetRuntimeId: String(targetId) })));
         const result = extractCharacterDisclosures({ gameData: conversation.gameData, speakerId, text: paragraph.content,
-          audienceIds: proof.audience, candidateTargetIds: participantIds, knownFacts, source });
+          audienceIds: proof.audience, traitAudienceIds, candidateTargetIds: participantIds, knownFacts, source });
         for (const fact of result.disclosures || []) {
           const key = identity({ ...fact, campaignToken: context.campaignToken });
           let record = state.records.find(item => identity(item) === key);
@@ -282,7 +324,7 @@ class ConversationDisclosureStore {
           const factSourceSnapshotId = `fact:${hash([frame.scope.campaignToken, String(fact.targetRuntimeId), candidate.factType, candidate.factKey, candidate.value, candidate.aliases])}`;
           if (record.evidence.some(item => item.conversationId === source.conversationId && item.messageId === source.messageId
             && item.messageRevision === source.messageRevision && item.factSourceSnapshotId === factSourceSnapshotId)) continue;
-          record.evidence.push({ ...source, speakerId, factSourceSnapshotId });
+          record.evidence.push({ ...source, audienceIds: fact.factType === "TRAIT" ? traitAudienceIds : proof.audience, speakerId, factSourceSnapshotId });
           record.revision++;
           recorded++;
         }

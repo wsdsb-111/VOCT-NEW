@@ -1,6 +1,15 @@
+- [2026-11-18 V9.7.3 缓存、披露与信件验证](versions/v9/V9.7.md#provider-cache-v973-20261118)：服务商单独对照、姓名与特质在本场和新场的注入顺序、信件生成和模拟送达；见[当前状态](versions/v9/STATUS.md)。
+- [2026-11-18 V9.7.2 GLM官方缓存条件与安全追加候选](versions/v9/V9.7.md#glm-official-append-20261118)：官方条件、追加/保留思考API对照、当前消息纯置换、来源/状态变化回退。
+- [2026-11-14 PoD 个人背景故事与官方追忆](current/v9/POD_PERSONAL_BACKGROUND_20261114.md)：人物历史 ID 精确绑定、无传记兼容、上层稳定区、召回隐私与本地验证。
+- [2026-11-13 七类会面感知与对话生命周期](current/v9/PERCEPTION_GROUPS_20261113.md)：七类、同源精确互认、氏族／血脉不自动公开、动态名称遮盖与结束停用。
+- [2026-11-13 纯龙双向识别与特殊关系完整资料](current/v9/DRAGON_SPECIAL_KNOWLEDGE_20261113.md)：纯血龙族／龙王例外、关系来源、全资料与秘密／记忆边界、验证及手测。
+- [2026-11-13 超自然会面感知与种族互认](current/v9/SUPERNATURAL_PERCEPTION_20261113.md)：三方精确互认、其他超自然组合模糊感知、人类能力特质、在场及隐私边界。
+- [2026-11-11 社会认知、身份伪装与当前玩家隔离](current/v9/SOCIAL_RECOGNITION_20261111.md)：实际入场启用、定向政治识别、继承／主动换角、验证及手测清单。
+- [2026-11-11 人物认知本地修复与新披露规则](current/v9/KNOWLEDGE_BOUNDARY_FIX_20261111.md)：此前资料旁路、全体在场特质披露、手动认知及验收边界。
+
 # VOTC 文档索引
 
-**V9.7.1已本机安装**：[自主背景设定](versions/v9/V9.7.md#v971-custom-world-background) · [当前验收](versions/v9/STATUS.md)。按战役隔离、3000字符、下一场对话起冻结生效。下方V9.7为已验收基线。
+**V9.7.1已本机安装**：[自主背景设定](versions/v9/V9.7.md#v971-custom-world-background) · [当前验收](versions/v9/STATUS.md)。按战役隔离、当前上限5000字符（2026-11-16放宽）、下一场对话起冻结生效。下方V9.7为已验收基线。
 
 当前源码候选为 **V9.7.0 Legacy Decommission**；本机已按用户确认部署 V9.7.0。旧 Workshop 一体化分发路线已取消，Runtime / Workshop 独立维护，下一阶段为 V9.8 RC / Soak。
 

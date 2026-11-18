@@ -1,4 +1,6 @@
 "use strict";
+const { captureRecognitionEvidence } = require("../prompts/social-recognition-policy");
+const { captureCharacterBackgrounds } = require("./character-background");
 
 const { nonnegativeNumber } = require("../worldline/character-age-service");
 
@@ -45,6 +47,10 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
   async function parseLog(debugLogPath) {
     console.log(`parseLog: Processing debug log at path: ${debugLogPath}`);
     let gameData;
+    let recognitionRows = [];
+    let characterHistoryRows = [];
+    let characterBackgroundRows = [];
+    let pendingCharacterBackground = null;
     let multiLineTempStorage = [];
     let isWaitingForMultiLine = false;
     let multiLineType = "";
@@ -134,6 +140,24 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
     });
     for await (const rawLine of rl) {
       let line = rawLine;
+      if (pendingCharacterBackground && (line.includes("VOTC:") || /^\[.*\]\[.*\]/.test(line))) pendingCharacterBackground = null;
+      const backgroundStart = line.indexOf("VOTC:IN/;/character_background/;/");
+      if (pendingCharacterBackground || backgroundStart >= 0) {
+        if (!pendingCharacterBackground) {
+          const match = line.slice(backgroundStart).match(/^VOTC:IN\/;\/character_background\/;\/(\d+)\/;\/([A-Za-z0-9_]+)\/;\/([A-Za-z0-9_.]+)\/;\/STARTMULTILINE#([\s\S]*)$/);
+          if (!match || !gameData) continue;
+          pendingCharacterBackground = { ownerId: Number(match[1]), historyId: match[2], localizationKey: match[3], lines: [] };
+          line = match[4];
+        }
+        const end = line.indexOf("#ENDMULTILINE");
+        pendingCharacterBackground.lines.push(end < 0 ? line : line.slice(0, end));
+        if (end >= 0) {
+          const { lines, ...source } = pendingCharacterBackground;
+          characterBackgroundRows.push({ ...source, text: lines.join("\n") });
+          pendingCharacterBackground = null;
+        }
+        continue;
+      }
       if (pendingLetterLine) {
         if (line.includes("VOTC:") || /^\[.*\]\[.*\]/.test(line)) pendingLetterLine = null;
         else line = `${pendingLetterLine}\n${line}`;
@@ -224,6 +248,15 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
         switch (dataType) {
           case "init":
             gameData = new GameData(data);
+            recognitionRows = [];
+            characterHistoryRows = [];
+            characterBackgroundRows = [];
+            break;
+          case "character_history":
+            characterHistoryRows.push(data);
+            break;
+          case "social_recognition":
+            recognitionRows.push(data);
             break;
           case "character":
             let char = new Character(data);
@@ -547,10 +580,13 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
             }
             break;
           case "new_relations": {
+            // Native has_relation_to is queried target -> root. This flag
+            // proves a relationship between the pair, not a knowledge direction.
             const tmpTargetId = Number(data[1]);
             const ch = gameData.characters.get(rootID);
             if (!ch || Number.isNaN(tmpTargetId)) break;
-            const relObj = { id: tmpTargetId, relations: [] };
+            const relObj = { id: tmpTargetId, relations: [], hasSpecialRelation: data[2] === "yes" ? true : data[2] === "no" ? false : null,
+              source: "CK3_SPECIAL_RELATION", sourceOwnerId: rootID, campaignToken: gameData.campaignToken, sourceSnapshotId: getSourceSnapshotId() };
             ch.relationsToCharacters.push(relObj);
             const firstChunk = line.split("#")[1] ?? "";
             const cleaned = removeTooltip(firstChunk).trim();
@@ -1096,6 +1132,8 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
       value: !(isWaitingForMultiLine && ["relations", "new_relations"].includes(multiLineType)),
       configurable: true
     });
+    if (gameData) captureRecognitionEvidence(gameData, recognitionRows);
+    if (gameData) captureCharacterBackgrounds(gameData, characterHistoryRows, characterBackgroundRows);
     if (gameData && typeof onGameDataParsed === "function") await onGameDataParsed(gameData);
     console.log(gameData);
     return gameData;

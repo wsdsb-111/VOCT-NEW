@@ -402,6 +402,15 @@ function compatibilitySeparationRemainsIndependentAndLetterBridgeIsRetained() {
       return entry.isDirectory() ? visit(absolute) : [absolute];
     });
   }
+  const independentProjects = /CK3-Multiple-Mod-Compatibility-Mod|POP-dragon-compatible|Migration-Archive|\.build[\\/]+compat-v111/i;
+  const dispatchFiles = [
+    path.join(root, "package.json"),
+    ...["scripts", "build", ".github", "src/app", "resources/app/out/main"].flatMap(relative => visit(path.join(root, relative)))
+  ].filter(file => /\.(?:js|json|ya?ml|py|ps1)$/i.test(file) && !path.basename(file).startsWith("test-"));
+  for (const file of dispatchFiles) {
+    assert.doesNotMatch(fs.readFileSync(file, "utf8"), independentProjects,
+      `${path.relative(root, file)} must not dispatch or import either independent compatibility project`);
+  }
   for (const relativePath of [
     "compatibility-mods/VOTC_Three_Mod_Character_Name_Compatibility",
     "compatibility-patches/tianjia-benji-repair"

@@ -11,10 +11,11 @@ const token = "votc8c-123456789012";
 try {
   const store = new CampaignBackgroundStore(path.join(root, "background"));
   const empty = store.read(token);
+  assert.equal(empty.limit, 5000);
   assert.equal(empty.text, "");
   assert(!fs.existsSync(store.root), "reading a new campaign creates no persistent defaults");
   const request = text => ({ ...store.read(token), text });
-  const full = "龙".repeat(2999) + "🐉";
+  const full = "龙".repeat(4999) + "🐉";
   const saved = store.save(token, request(full));
   assert.equal(saved.text, full);
   assert.equal(new CampaignBackgroundStore(store.root).read(token).text, full, "restart preserves all characters");
@@ -46,7 +47,7 @@ try {
       const populated = build(context);
       const block = populated.blocks.find(item => item.block.id === "campaign-background-v9.7.1");
       assert.equal(block.block.lifecycle, "CONVERSATION_FROZEN");
-      assert(block.content.endsWith(full), "complete 3000-code-point background is preserved");
+      assert(block.content.endsWith(full), "complete 5000-code-point background is preserved");
       assert.equal(populated.messages.filter(message => message.content === backgroundPrompt(background)).length, 1);
       assert.equal(populated.messages.find(message => message.content === block.content).role, "system");
       const dynamicIndex = populated.blocks.findIndex(item => item.block.stable !== true);

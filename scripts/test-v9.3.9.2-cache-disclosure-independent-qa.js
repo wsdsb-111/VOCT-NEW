@@ -124,7 +124,7 @@ const sharedMemoryFields = {
 };
 
 function makeMemoryContext({ sourceFolderRevision = 3, frozenDynamicText = "V9392_DYNAMIC_FROZEN_V1" } = {}) {
-  const disclosure = buildCharacterDisclosureContext({ service: disclosureService, gameData, responderId: 2, targetIds: [1] });
+  const disclosure = buildCharacterDisclosureContext({ service: disclosureService, gameData, responderId: 2, targetIds: [1], audienceIds: [1, 2] });
   return { ...sharedMemoryFields, sourceFolderRevision, frozenDynamicText, ...disclosure };
 }
 

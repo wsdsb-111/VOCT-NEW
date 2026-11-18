@@ -12,7 +12,7 @@ export default {
     placeholder: "Describe the shared premise of this fictional world or alternate timeline.", count: "{{count}} / {{limit}} characters (including punctuation, spaces and line breaks)",
     save: "Save background", refresh: "Refresh campaign", reloadSaved: "Reload saved background (discard draft)", saved: "Saved. Applies to new conversations.", failed: "Unable to read or save. Refresh and try again.",
     world_background_campaign_changed: "The campaign changed. Refresh and enter the background in the correct save.",
-    world_background_revision_changed: "The background changed elsewhere. Refresh before saving.", world_background_too_long: "The background must be 3,000 characters or fewer.",
+    world_background_revision_changed: "The background changed elsewhere. Refresh before saving.", world_background_too_long: "The background must be 5,000 characters or fewer.",
     world_background_store_invalid: "Unable to read the background file. The original file is preserved."
   },
   letters: { title: "Letters", empty: "No letters in this scope." },
@@ -24,9 +24,9 @@ export default {
   errors: { STALE_CONTEXT: "Context changed. Refresh this view.", CAMPAIGN_CHANGED: "The campaign changed. Reload this view.", CONVERSATION_CHANGED: "The conversation changed. Reload this view.", REVISION_CONFLICT: "The source changed. Refresh before editing.", SOURCE_REVOKED: "This source is no longer available.", PERMISSION_DENIED: "This information is not authorized.", PROVIDER_UNAVAILABLE: "The provider is unavailable. Check its settings.", REQUEST_CANCELLED: "The request was cancelled.", EFFECT_UNKNOWN: "The effect is unknown. Check backend status before continuing.", IPC_UNAVAILABLE: "The application connection is unavailable.", VALIDATION_ERROR: "The submitted value is invalid.", UNKNOWN_ERROR: "The request failed. Refresh or check diagnostics." },
   legacyKnowledge: {
     common: { unknownName: "Name unavailable" },
-    kinds: { name: "Name", nickname: "Nickname", title: "Title", trait: "Trait" },
+    kinds: { perception: "Perception", name: "Name", nickname: "Nickname", title: "Title", trait: "Trait" },
     statuses: { known: "Known", autoDisclosed: "Disclosed in conversation", manualKnown: "Marked known", manualHidden: "Marked unknown", unknown: "Unconfirmed", stale: "Source changed", directKnown: "Directly known", unavailable: "Status unavailable" },
-    sources: { stale: "The original conversation source has changed", conversationDisclosure: "Original conversation disclosure", undisclosed: "No disclosure in the original conversation", manual: "Manual knowledge setting", gameDataKnownSecret: "Disclosure recorded in game data", inPersonObservation: "Visible appearance or body trait from the in-person whitelist", publicCloseFamily: "Public parent-child or sibling relationship", publicNickname: "Public nickname", unknown: "Unclassified source" },
+    sources: { stale: "The original conversation source has changed", conversationDisclosure: "Original conversation disclosure", undisclosed: "No disclosure in the original conversation", manual: "Manual knowledge setting", gameDataKnownSecret: "Disclosure recorded in game data", inPersonObservation: "Visible appearance or body trait from the in-person whitelist", publicCloseFamily: "Public parent-child or sibling relationship", supernaturalRecognition: "Species identity precisely recognized in person", supernaturalSense: "Supernatural presence sensed in person; species unidentified", specialRelation: "Current CK3-confirmed special relationship between the two characters", socialRecognition: "Liege, vassal or land-border recognition for this dialogue", publicNickname: "Public nickname", unknown: "Unclassified source" },
     ui: {
       factValue: "{{kind}}: {{value}}", hasDisclosureRecord: "Conversation disclosure recorded", acquiredAt: "Learned on: {{date}}", setUnknown: "Mark unknown", markKnown: "Mark known",
       setUnknownTooltip: "Only changes what the selected listener knows about this trait", markKnownTooltip: "Only marks this trait as explicitly known by the selected listener",

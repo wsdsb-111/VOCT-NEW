@@ -221,6 +221,8 @@ electron.contextBridge.exposeInMainWorld("providerDiagnosticsAPI", {
   saveV89Settings: (settings) => electron.ipcRenderer.invoke("providerDiagnostics:saveV89Settings", settings)
 });
 electron.contextBridge.exposeInMainWorld("worldlineAPI", {
+  getBackgroundSetting: () => electron.ipcRenderer.invoke("worldline:getBackgroundSetting"),
+  saveBackgroundSetting: (request) => electron.ipcRenderer.invoke("worldline:saveBackgroundSetting", request),
   getSettings: () => electron.ipcRenderer.invoke("worldline:getSettings"),
   getOfficialRecollection: (responderId) => electron.ipcRenderer.invoke("worldline:getOfficialRecollection", responderId),
   setRecallSettings: (settings) => electron.ipcRenderer.invoke("worldline:setRecallSettings", settings),

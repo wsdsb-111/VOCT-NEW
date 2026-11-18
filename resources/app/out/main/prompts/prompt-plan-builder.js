@@ -2,7 +2,7 @@
 
 const { SCHEMA_VERSION, fingerprint, planSeal } = require("./prompt-plan-contract");
 const { requirePlan } = require("./prompt-plan-errors");
-const { orderPlanBlocks, COMPAT_REVISION, STATIC_FIRST_REVISION } = require("./prompt-plan-layouts");
+const { orderPlanBlocks, canExtendHistoryPrefix, COMPAT_REVISION, STATIC_FIRST_REVISION, HISTORY_PREFIX_REVISION, COMPATIBLE_HISTORY_PREFIX_REVISION } = require("./prompt-plan-layouts");
 const { getPlanSourceBinding } = require("../memory-system/dynamic-summary-freeze");
 const writesByMessages = new WeakMap();
 const trustedMainSegments = new WeakMap();
@@ -161,14 +161,18 @@ function buildPromptPlanV9({ authorizedInputs, requestType = "chat", layoutId, p
     if (sourceBound) sourceBindingsByBlock.set(block, Object.freeze(bindings));
     return block;
   });
-  const ordered = orderPlanBlocks(blocks, { layoutId, mode }).map((block, order) => {
+  const extendHistoryPrefix = canExtendHistoryPrefix(blocks, { layoutId, mode, requestType, profile: authorizedInputs.promptProfile, providerConfig });
+  const ordered = orderPlanBlocks(blocks, { layoutId, mode, extendHistoryPrefix }).map((block, order) => {
     const orderedBlock = { ...block, order };
     if (sourceBindingsByBlock.has(block)) sourceBindingsByBlock.set(orderedBlock, sourceBindingsByBlock.get(block));
     return orderedBlock;
   });
   const messageGroups = ordered.flatMap(block => block.messages.map((message, index) => ({ parts: [{ blockId: block.id, index }], separator: "" })));
+  const compatibleHistory = extendHistoryPrefix && providerConfig?.providerType === "openai-compatible";
   const plan = { schemaVersion: SCHEMA_VERSION, planId: fingerprint([normalizedScope, inputRevisions, requestType]), requestType,
-    layoutId, promptProfileId, layoutRevision: mode === "v9" ? STATIC_FIRST_REVISION : COMPAT_REVISION,
+    layoutId, promptProfileId, layoutRevision: ordered.some(block => block.legacyType?.startsWith("character_disclosure_"))
+      ? `v9_7_3_disclosure_1:${mode === "v9" ? extendHistoryPrefix ? compatibleHistory ? "compatible_history_2" : "history" : "static" : "compat"}`
+      : compatibleHistory ? COMPATIBLE_HISTORY_PREFIX_REVISION : extendHistoryPrefix ? HISTORY_PREFIX_REVISION : mode === "v9" ? STATIC_FIRST_REVISION : COMPAT_REVISION,
     scope: normalizedScope, providerRoute: { providerType: providerConfig?.providerType || null,
       modelId: providerConfig?.defaultModel || null, routeKind: requestType }, inputRevisions,
     blocks: ordered, messageGroups,

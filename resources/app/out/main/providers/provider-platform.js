@@ -4,6 +4,8 @@ const { normalizeProviderResult, toLegacyResult } = require("./provider-result")
 const { assertCapabilityNotUnsupported } = require("./provider-capabilities");
 const { createRequestControl, awaitWithSignal, managedIterator } = require("./provider-cancellation");
 const { toProviderError } = require("./provider-errors");
+const OPENROUTER_FIRST_OUTPUT_MS = 90000;
+const OPENROUTER_OUTPUT_IDLE_MS = 45000;
 
 function observeChunk(state, chunk) {
   if (typeof chunk?.delta?.content === "string") state.content += chunk.delta.content;
@@ -64,10 +66,17 @@ class ProviderPlatformFacade {
 
   stream(source, config, options, control) {
     const iterator = source[Symbol.asyncIterator]();
+    const watchOutput = config.providerType === "openrouter" && control.requestType === "chat";
     const state = { content: "", reasoning: false, usage: undefined, id: "", finish: null, conflictingFinish: false };
     const generator = (async function*() {
         let completed = false, terminalEmitted = false, responseStarted = false;
+        let outputTimer;
+        const waitForOutput = milliseconds => {
+          clearTimeout(outputTimer);
+          if (watchOutput) outputTimer = setTimeout(() => control.timeout(), milliseconds);
+        };
         try {
+          waitForOutput(OPENROUTER_FIRST_OUTPUT_MS);
           while (true) {
             control.check();
             const step = await awaitWithSignal(iterator.next(), control.signal);
@@ -84,6 +93,9 @@ class ProviderPlatformFacade {
               terminalEmitted = true; completed = true; return legacy;
             }
             responseStarted = true;
+            // Router comments, role-only, reasoning and usage frames do not deliver a reply.
+            const delta = step.value?.delta;
+            if (typeof delta?.content === "string" && delta.content.trim() || delta?.tool_calls?.length) waitForOutput(OPENROUTER_OUTPUT_IDLE_MS);
             observeChunk(state, step.value);
             const chunk = { ...step.value };
             if (chunk.delta?.reasoning) chunk.delta = { ...chunk.delta, reasoning: true };
@@ -98,6 +110,7 @@ class ProviderPlatformFacade {
           terminalEmitted = true;
           throw toProviderError(error, { responseStarted, attemptCount: control.attemptCount });
         } finally {
+          clearTimeout(outputTimer);
           if (!completed) {
             control.cancel();
             try { await awaitWithSignal(iterator.return?.(), control.signal); } catch {}

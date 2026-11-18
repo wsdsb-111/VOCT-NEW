@@ -21,7 +21,7 @@ function isolateRelationshipCharacter(character) {
 
 function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics, llmManager, ActionPromptBuilder, ActionSandbox, ActionEffectWriter, CriticalActionRecallObserver = DefaultCriticalActionRecallObserver, buildStructuredResponseJsonSchema, buildStructuredResponseSchema, healJsonResponseWithLogging, resolveI18nString, logVerboseLLM, bridgeService = null }) {
   return class ActionEngine {
-    static async evaluateForCharacter(conv, npc, signal) {
+    static async evaluateForCharacter(conv, npc, signal, tracePhase = (_step, operation) => operation()) {
       try { bridgeService?.assertFeature("action"); }
       catch (error) {
         if (error?.code !== "bridge_feature_unavailable") throw error;
@@ -69,48 +69,55 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
           console.warn("[ActionRecallDiagnostics] initialization failed:", error);
           diagnosticsObserver = null;
         }
-        const available = [];
-        for (const action of loaded) {
-          if (signal?.aborted) return { autoApproved: [], needsApproval: [] };
-          try {
-            const checkResult = await action.definition.check({ gameData: conv.gameData, sourceCharacter: npc });
-            observeDiagnostics("observeCheck", action.id, checkResult);
-            if (!checkResult?.canExecute) continue;
-            const requiresTarget = !!(checkResult.validTargetCharacterIds && checkResult.validTargetCharacterIds.length > 0);
-            const args = typeof action.definition.args === "function" ? action.definition.args({ gameData: conv.gameData, sourceCharacter: npc }) : action.definition.args;
-            const resolvedArgs = args.map((arg) => ({ ...arg, description: resolveI18nString(arg.description, userLang) }));
-            const descriptionValue = typeof action.definition.description === "function" ? action.definition.description({ gameData: conv.gameData, sourceCharacter: npc }) : action.definition.description;
-            available.push({
-              signature: action.id,
-              args: resolvedArgs,
-              requiresTarget,
-              validTargetCharacterIds: checkResult.validTargetCharacterIds,
-              description: resolveI18nString(descriptionValue, userLang)
-            });
-          } catch (error) {
-            observeDiagnostics("observeCheckFailure", action.id);
-            actionRegistry.registerValidation(action.id, { valid: false, message: `check() threw: ${error instanceof Error ? error.message : String(error)}` });
+        const available = await tracePhase("action.checks", async () => {
+          const available = [];
+          for (const action of loaded) {
+            if (signal?.aborted) return [];
+            try {
+              const checkResult = await action.definition.check({ gameData: conv.gameData, sourceCharacter: npc });
+              observeDiagnostics("observeCheck", action.id, checkResult);
+              if (!checkResult?.canExecute) continue;
+              const requiresTarget = !!(checkResult.validTargetCharacterIds && checkResult.validTargetCharacterIds.length > 0);
+              const args = typeof action.definition.args === "function" ? action.definition.args({ gameData: conv.gameData, sourceCharacter: npc }) : action.definition.args;
+              const resolvedArgs = args.map((arg) => ({ ...arg, description: resolveI18nString(arg.description, userLang) }));
+              const descriptionValue = typeof action.definition.description === "function" ? action.definition.description({ gameData: conv.gameData, sourceCharacter: npc }) : action.definition.description;
+              available.push({
+                signature: action.id,
+                args: resolvedArgs,
+                requiresTarget,
+                validTargetCharacterIds: checkResult.validTargetCharacterIds,
+                description: resolveI18nString(descriptionValue, userLang)
+              });
+            } catch (error) {
+              observeDiagnostics("observeCheckFailure", action.id);
+              actionRegistry.registerValidation(action.id, { valid: false, message: `check() threw: ${error instanceof Error ? error.message : String(error)}` });
+            }
           }
-        }
+          return available;
+        });
+        if (signal?.aborted) return { autoApproved: [], needsApproval: [] };
         if (available.length === 0) {
           recordDiagnostics("no_available_action");
           return { autoApproved: [], needsApproval: [] };
         }
         if (signal?.aborted) return { autoApproved: [], needsApproval: [] };
-        const messages = ActionPromptBuilder.buildActionMessages(conv, npc, available, Math.max(8, conv.gameData.characters.size));
-        messages[0] = { ...messages[0], content: messages[0].content + RELATIONSHIP_RECALL_GUIDANCE };
-        const actionsConfig = settingsRepository.getActionsProviderConfig();
-        const useMinimizedSchema = actionsConfig?.useMinimizedActionsSchema !== undefined ? actionsConfig.useMinimizedActionsSchema : actionsConfig?.defaultModel?.toLowerCase().includes("gemini") ?? false;
-        console.log(`[DEBUG] ActionEngine: Using minimized schema: ${useMinimizedSchema}`);
-        const jsonSchema = buildStructuredResponseJsonSchema({ availableActions: available }, useMinimizedSchema);
-        const zodSchema = buildStructuredResponseSchema({ availableActions: available });
+        const { messages, actionsConfig, jsonSchema, zodSchema } = tracePhase("action.prompt", () => {
+          const messages = ActionPromptBuilder.buildActionMessages(conv, npc, available, Math.max(8, conv.gameData.characters.size));
+          messages[0] = { ...messages[0], content: messages[0].content + RELATIONSHIP_RECALL_GUIDANCE };
+          const actionsConfig = settingsRepository.getActionsProviderConfig();
+          const useMinimizedSchema = actionsConfig?.useMinimizedActionsSchema !== undefined ? actionsConfig.useMinimizedActionsSchema : actionsConfig?.defaultModel?.toLowerCase().includes("gemini") ?? false;
+          console.log(`[DEBUG] ActionEngine: Using minimized schema: ${useMinimizedSchema}`);
+          const jsonSchema = buildStructuredResponseJsonSchema({ availableActions: available }, useMinimizedSchema);
+          const zodSchema = buildStructuredResponseSchema({ availableActions: available });
+          return { messages, actionsConfig, jsonSchema, zodSchema };
+        });
         bridgeService?.assertFeature("action");
-        const output = await llmManager.sendActionsRequest(messages, "votc_actions", jsonSchema, signal, {
+        const output = await tracePhase("action.request", () => llmManager.sendActionsRequest(messages, "votc_actions", jsonSchema, signal, {
           characterId: npc.id,
           responderId: npc.id,
           conversationId: conv.id || null,
           trustedActionIntroSuffix: RELATIONSHIP_RECALL_GUIDANCE
-        });
+        }));
         if (signal?.aborted) return { autoApproved: [], needsApproval: [] };
         const result = await output;
         const outcome = validateGenerationOutcome(result, { providerType: actionsConfig?.providerType });
@@ -188,7 +195,7 @@ function createActionEngine({ actionRegistry, settingsRepository, usageAnalytics
               })
             });
           } else {
-            autoApproved.push(await this.runInvocation(conv, npc, invocation));
+            autoApproved.push(await tracePhase("action.execution", () => this.runInvocation(conv, npc, invocation)));
           }
         }
         recordDiagnostics("completed", parsed.actions, autoApproved, needsApproval);

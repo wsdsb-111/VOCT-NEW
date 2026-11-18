@@ -202,10 +202,13 @@ async function runRevocationCase(kind) {
   assert.equal(state.counts.retained.length, 0, `${kind}: failed requests cannot invoke the memory success callback`);
 }
 
-(async () => {
+async function main() {
   await runRewriteCase();
   await runContinuationCase();
   await runRevocationCase("date");
   await runRevocationCase("knowledge");
   console.log("PASS V9.4 Conversation Plan main chain (real PromptBuilder, narration instruction block, proof-preserving continuation, date and knowledge revocation before transport)");
-})().catch(error => { console.error(error.stack || error); process.exitCode = 1; });
+}
+
+if (require.main === module) main().catch(error => { console.error(error.stack || error); process.exitCode = 1; });
+module.exports = { makeConversation };

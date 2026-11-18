@@ -229,16 +229,16 @@ class BaseProvider {
       this.validateConfig(config);
       const testMessages = [{
         role: "user",
-        content: "Hi."
+        content: "Reply with exactly: OK"
       }];
       const response = await this.chatCompletion({
         model: config.defaultModel,
         messages: testMessages,
-        max_tokens: 10,
+        max_tokens: 2048,
         stream: false
       }, config, requestControl);
       checkRequestControl(requestControl);
-      if (!isStrictlyComplete(response, this.providerId)) {
+      if (!isStrictlyComplete(response, this.providerId) || typeof response.content !== "string" || !response.content.trim()) {
         return { success: false, error: "Provider returned an incomplete test response." };
       }
       return {
@@ -396,7 +396,8 @@ class OpenRouterProvider extends BaseProvider {
       ...request.response_format ? { response_format: request.response_format } : {},
       // OpenRouter-specific: exclude reasoning/thinking tokens from the response
       reasoning: {
-        exclude: true
+        exclude: true,
+        ...request.reasoning?.enabled === false ? { enabled: false } : {}
       }
     };
     if (requestParams.stream) {
@@ -546,14 +547,14 @@ class OpenRouterProvider extends BaseProvider {
       checkRequestControl(requestControl);
       const testRequest = {
         model: config.defaultModel || "openrouter/auto",
-        // Use a known cheap/fast model or user's default
-        messages: [{ role: "user", content: "Test" }],
-        max_tokens: 1,
+        messages: [{ role: "user", content: "Reply with exactly: OK" }],
+        max_tokens: 128,
+        reasoning: { enabled: false },
         stream: false
       };
       const response = await this.chatCompletion(testRequest, config, requestControl);
       checkRequestControl(requestControl);
-      if (isStrictlyComplete(response, "openrouter")) {
+      if (isStrictlyComplete(response, "openrouter") && typeof response.content === "string" && response.content.trim()) {
         return { success: true, message: `Successfully connected to OpenRouter. Received response ID: ${response.id}` };
       }
       return { success: false, error: "Test connection to OpenRouter failed to get a valid response." };
@@ -813,13 +814,13 @@ class OpenAICompatibleProvider extends BaseProvider {
       checkRequestControl(requestControl);
       const testRequest = {
         model: config.defaultModel || "gpt-3.5-turbo",
-        messages: [{ role: "user", content: "Test" }],
-        max_tokens: 1,
+        messages: [{ role: "user", content: "Reply with exactly: OK" }],
+        max_tokens: 2048,
         stream: false
       };
       const response = await this.chatCompletion(testRequest, config, requestControl);
       checkRequestControl(requestControl);
-      if (isStrictlyComplete(response, "openai-compatible")) {
+      if (isStrictlyComplete(response, "openai-compatible") && typeof response.content === "string" && response.content.trim()) {
         return { success: true, message: `Successfully connected to OpenAI-Compatible API. Received response ID: ${response.id}` };
       }
       return { success: false, error: "Test connection to OpenAI-Compatible API failed to get a valid response." };
@@ -979,11 +980,11 @@ class ZhipuProvider extends OpenAICompatibleProvider {
       const response = await this.chatCompletion({
         model: config.defaultModel || "glm-5.3-flash",
         messages: [{ role: "user", content: "Reply with exactly: OK" }],
-        max_tokens: 128,
+        max_tokens: 2048,
         stream: false
-      }, config, requestControl);
+      }, { ...config, glmReasoningEffort: "low" }, requestControl);
       checkRequestControl(requestControl);
-      return isStrictlyComplete(response, "zhipu") ? { success: true, message: `Successfully connected to 智谱 GLM. Received response ID: ${response.id}` } : { success: false, error: "Test connection to 智谱 GLM returned an incomplete response." };
+      return isStrictlyComplete(response, "zhipu") && typeof response.content === "string" && response.content.trim() ? { success: true, message: `Successfully connected to 智谱 GLM. Received response ID: ${response.id}` } : { success: false, error: "Test connection to 智谱 GLM returned an incomplete response." };
     } catch (error) {
       return testConnectionFailure(error, "zhipu", config?.defaultModel, requestControl);
     }
@@ -1430,13 +1431,13 @@ class Player2Provider extends BaseProvider {
       const testRequest = {
         model: "gpt-oss-120b",
         // Use a known cheap/fast model or user's default
-        messages: [{ role: "user", content: "Test" }],
-        max_tokens: 1,
+        messages: [{ role: "user", content: "Reply with exactly: OK" }],
+        max_tokens: 2048,
         stream: false
       };
       const response = await this.chatCompletion(testRequest, config, requestControl);
       checkRequestControl(requestControl);
-      if (isStrictlyComplete(response, "player2")) {
+      if (isStrictlyComplete(response, "player2") && typeof response.content === "string" && response.content.trim()) {
         return { success: true, message: `Successfully connected to Player2. Received response ID: ${response.id}` };
       }
       return { success: false, error: "Test connection to Player2 failed to get a valid response." };
@@ -1806,13 +1807,14 @@ IMPORTANT: Your response must be ONLY valid JSON. No prose, no code fences, no e
       checkRequestControl(requestControl);
       const testRequest = {
         model: config.defaultModel || "deepseek-v4-flash",
-        messages: [{ role: "user", content: "Test" }],
-        max_tokens: 1,
+        messages: [{ role: "user", content: "Reply with exactly: OK" }],
+        max_tokens: 128,
+        thinking: { type: "disabled" },
         stream: false
       };
       const response = await this.chatCompletion(testRequest, config, requestControl);
       checkRequestControl(requestControl);
-      if (isStrictlyComplete(response, "deepseek")) {
+      if (isStrictlyComplete(response, "deepseek") && typeof response.content === "string" && response.content.trim()) {
         return { success: true, message: `Successfully connected to Deepseek. Received response ID: ${response.id}` };
       }
       return { success: false, error: "Test connection to Deepseek failed to get a valid response." };
@@ -2255,13 +2257,13 @@ class GeminiProvider extends BaseProvider {
       checkRequestControl(requestControl);
       const testRequest = {
         model: config.defaultModel || "gemini-2.5-flash",
-        messages: [{ role: "user", content: "Hi" }],
-        max_tokens: 5,
+        messages: [{ role: "user", content: "Reply with exactly: OK" }],
+        max_tokens: 2048,
         stream: false
       };
       const response = await this.chatCompletion(testRequest, config, requestControl);
       checkRequestControl(requestControl);
-      if (isStrictlyComplete(response, "gemini")) {
+      if (isStrictlyComplete(response, "gemini") && typeof response.content === "string" && response.content.trim()) {
         return { success: true, message: `Successfully connected to Gemini. Received response ID: ${response.id}` };
       }
       return { success: false, error: "Test connection to Gemini returned an incomplete response." };

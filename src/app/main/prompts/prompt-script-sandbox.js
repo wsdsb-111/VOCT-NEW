@@ -36,6 +36,7 @@ class PromptScriptSandbox {
     // Adapt only the known English pList family entrypoints, never rewrite a
     // user file or change the participants/Action-target collection.
     if (/(?:^|[\\/])pListMccTest2(?:JE)?\.js$/i.test(scriptFilePath)) {
+      scriptCode = scriptCode.replace(/function mainPosition\(char\)\s*\{/, "function mainPosition(char) { if ([char.isRuler, char.isLandedRuler, char.isIndependentRuler, char.isKnight].every(value => value == null)) return null;");
       if (!scriptCode.includes("__votcFamilyLine")) scriptCode = scriptCode.replace(/function familyLine\(char\)\s*\{/, "function familyLine(char) { return __votcFamilyLine(char);");
       if (!scriptCode.includes("__votcFamilyReference")) scriptCode = scriptCode.replace(/function kinshipReferenceLine\(char\)\s*\{/, "function kinshipReferenceLine(char) { return __votcFamilyReference(char);");
       scriptCode = scriptCode.replace(/\$\{char\.age\}/g, "${__votcAge(char)}");

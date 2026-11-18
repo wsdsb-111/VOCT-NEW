@@ -4,7 +4,8 @@ const { inferGenderFromPronoun } = require("./character");
 const { createRelationshipResolver } = require("./relationship-resolver");
 const { resolveRelationshipCurrentTruth } = require("../worldline/relationship-current-truth");
 const { MEMORY_ENGINE_VERSION } = require("../version");
-const { buildOfficialRecollectionSummary } = require("../memory-system/official-recollection-provider");
+const { buildOfficialRecollectionSummary, hasOfficialRecollectionContent } = require("../memory-system/official-recollection-provider");
+const { getCharacterBackground } = require("./character-background");
 const { createProjectionLineage } = require("../memory-system/legacy-source-lineage");
 
 function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, getHistoricalReferenceByYear }) {
@@ -498,7 +499,9 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
         if (!summary) continue;
         const filePath = path.join(this.getCharacterFolderPath(character.id, character.shortName), "官方追忆摘要.json");
         try {
-          if (this.readConversationSummariesFile(filePath)?.[0]?.officialCaptureSessionId === sessionId) continue;
+          const previous = this.readConversationSummariesFile(filePath)?.[0];
+          if (previous?.officialCaptureSessionId === sessionId
+            && (previous.personalBackgroundFingerprint || null) === (summary.personalBackgroundFingerprint || null)) continue;
           this.writeConversationSummariesFile(filePath, [summary]);
           memoryEngine?.invalidateSummaryFolderCache([character.id]);
         } catch (error) {
@@ -515,7 +518,8 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
       const summary = this.readConversationSummariesFile(filePath)?.[0];
       return summary?.sourceType === "CK3_OFFICIAL_RECOLLECTION" && summary.playerId === character.id
         && summary.officialCaptureSessionId === sessionId && summary.campaignToken === (this.campaignToken || null)
-        && summary.memoryCount > 0 ? summary : null;
+        && hasOfficialRecollectionContent(summary)
+        && (summary.personalBackgroundFingerprint || null) === (getCharacterBackground(this, character.id)?.fingerprint || null) ? summary : null;
     }
 
     loadCharactersSummaries() {

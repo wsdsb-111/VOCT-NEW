@@ -6,6 +6,8 @@ const actionChecks = [];
 const followupChecks = [];
 
 const archivedChecks = [
+  // V8.3 diagnostics were removed; active Definition-ID binding is tested by v8.8.2-historical-one-to-one.
+  "test-v8.8-retired-v8.3-shadow-chain.js",
   // Historical Memory4 contracts; active Legacy and deployment replacements are registered below.
   "test-v8.15.1-retired-memory4-independent-qa.js",
   // Historical Memory4 contracts; active Legacy and deployment replacements are registered below.
@@ -176,6 +178,21 @@ const archivedChecks = [
 ];
 
 const releaseChecks = [
+  { group: "v9.7.3-provider-prefix", script: "test-v9.7.3-provider-prefix.js" },
+  { group: "v9.7.3-disclosure-lifecycle", script: "test-v9.7.3-disclosure-lifecycle.js" },
+  { group: "v9.7.4-openrouter-probe-layout", script: "test-v9.7.4-openrouter-probe-layout.js" },
+  { group: "v9.7.4-all-provider-probes", script: "test-v9.7.4-all-provider-probes.js" },
+  { group: "v9.7.2-glm-append-layout", script: "test-v9.7.2-glm-append-layout.js" },
+  { group: "v9.7.2-glm-append-independent-qa", script: "test-v9.7.2-glm-append-independent-qa.js" },
+  { group: "v9.7.4-deepseek-connection-probe", script: "test-v9.7.4-deepseek-connection-probe.js" },
+  { group: "v9.7.4-personal-background", script: "test-v9.7.4-personal-background.js" },
+  { group: "v9.7.3-perception-groups", script: "test-v9.7.3-perception-groups.js" },
+  { group: "v9.7.3-dragon-special-knowledge", script: "test-v9.7.3-dragon-special-knowledge.js" },
+  { group: "v9.7.3-supernatural-perception", script: "test-v9.7.3-supernatural-perception.js" },
+  { group: "v9.7.2-dialogue-performance", script: "test-v9.7.2-dialogue-performance.js" },
+  { group: "v9.7.2-stream-update-dedup", script: "test-v9.7.2-stream-update-dedup.js" },
+  { group: "v9.7.2-knowledge-boundaries", script: "test-v9.7.2-knowledge-boundaries.js" },
+  { group: "v9.7.2-social-recognition", script: "test-v9.7.2-social-recognition.js" },
   { group: "v9.7.1-background-ui", script: "test-v9.7.1-background-ui.js" },
   { group: "v9.7.1-campaign-background", script: "test-v9.7.1-campaign-background.js" },
   { group: "v9.7.1-background-independent-qa", script: "test-v9.7.1-background-independent-qa.js" },
@@ -584,7 +601,6 @@ const releaseChecks = [
   { group: "v8.8-kinship-secret-negative", script: "test-v8.8-kinship-secret-negative.js" },
   { group: "v8.8-cache-load-boundary", script: "test-v8.8-cache-load-boundary.js" },
   { group: "v8.8-relationship-kind-integrity", script: "test-v8.8-relationship-kind-integrity.js" },
-  { group: "v8.8-retired-v8.3-shadow-chain", script: "test-v8.8-retired-v8.3-shadow-chain.js" },
   { group: "v8.8.1-anchored-relation-resolution", script: "test-v8.8.1-anchored-relation-resolution.js" },
   { group: "v8.8.2-relation-younger", script: "test-v8.8.2-relation-younger.js" },
   { group: "v8.8.2-relation-older", script: "test-v8.8.2-relation-older.js" },

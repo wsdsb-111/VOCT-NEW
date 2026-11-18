@@ -51,18 +51,19 @@ export function CampaignBackgroundEditor({ react: R, t }) {
     }
   };
   const count = Array.from(text).length;
+  const limit = data?.limit ?? 5000;
   const available = data?.available === true;
   return h("section", { className: "worldline-card worldline-editor", "aria-busy": phase === "loading" || phase === "saving" },
     h("h4", null, tr("title")), h("p", { className: "muted-text" }, tr("help")),
     h("p", null, available ? tr("bound") : tr("unbound")),
     h("label", { htmlFor: "campaign-background-text" }, tr("content")),
     h("textarea", { id: "campaign-background-text", value: text, rows: 10, disabled: !available || phase !== "ready",
-      placeholder: tr("placeholder"), style: { width: "100%", resize: "vertical" }, "aria-invalid": count > 3000,
+      placeholder: tr("placeholder"), style: { width: "100%", resize: "vertical" }, "aria-invalid": count > limit,
       "aria-describedby": "campaign-background-count",
       onChange: event => { draft.current = event.target.value; setText(event.target.value); setNotice(""); } }),
-    h("p", { id: "campaign-background-count", role: count > 3000 ? "alert" : undefined }, tr("count", { count, limit: 3000 })),
+    h("p", { id: "campaign-background-count", role: count > limit ? "alert" : undefined }, tr("count", { count, limit })),
     h("div", { className: "worldline-actions" },
-      h("button", { type: "button", disabled: !available || phase !== "ready" || count > 3000 || text === data?.text, onClick: save }, tr("save")),
+      h("button", { type: "button", disabled: !available || phase !== "ready" || count > limit || text === data?.text, onClick: save }, tr("save")),
       h("button", { type: "button", disabled: phase === "loading" || phase === "saving", onClick: refresh }, tr("refresh"))),
     conflict && h("button", { type: "button", onClick: () => {
       if (loaded.current?.bindingKey !== conflict.bindingKey) return;

@@ -11,6 +11,7 @@ const { getCachedKinshipGraph } = require("../worldline/kinship-graph-cache");
 const { resolveAnchoredRelationMention } = require("../worldline/anchored-relation-resolver");
 const { buildDualTemporalIndex, selectDualTemporalExtras } = require("./summary-date-index");
 const turnRecall = require("./turn-recall");
+const { hasOfficialRecollectionContent } = require("./official-recollection-provider");
 const FROZEN_ALLOCATION = Object.freeze({ ledgerMinimumShare: 0.3, officialMinimumShare: 0.2,
   stableMaximumTokens: 256, dynamicReserveShare: 0.15, dynamicMaximumTokens: 512 });
 
@@ -25,8 +26,10 @@ function matchesCampaign(memory, campaignToken) {
 }
 
 function officialFingerprint(summary) {
-  return digest(summary ? [summary.sourceType, summary.playerId, summary.campaignToken,
-    summary.officialCaptureSessionId, summary.memoryCount, summary.content] : null);
+  const fields = summary ? [summary.sourceType, summary.playerId, summary.campaignToken,
+    summary.officialCaptureSessionId, summary.memoryCount, summary.content] : null;
+  if (summary?.personalBackgroundFingerprint) fields.push(summary.personalBackgroundFingerprint);
+  return digest(fields);
 }
 
 function forgetFingerprint(engine, ownerId) {
@@ -72,7 +75,7 @@ function buildBaseline(engine, options, memories, revision, identity, countToken
       || engine.getRouteMemoryKey(left).localeCompare(engine.getRouteMemoryKey(right)))
     .slice(0, options.fullTextRequired ? 2 : 1);
   const official = officialSummary?.sourceType === "CK3_OFFICIAL_RECOLLECTION"
-    && Number(officialSummary.playerId) === ownerId && officialSummary.memoryCount > 0
+    && Number(officialSummary.playerId) === ownerId && hasOfficialRecollectionContent(officialSummary)
     && officialSummary.campaignToken === campaignToken
     && officialSummary.officialCaptureSessionId === options.conversationId
     ? { memoryId: `official_${ownerId}`, type: "folder_summary", subtype: "official_recollection", content: officialSummary.content } : null;

@@ -59,7 +59,7 @@ try {
   conversation.messages.push({ id: 1, role: "user", speakerCharacterId: 1, name: "阿甲", content: "只对阿乙低声说：“我是巫师。”" });
   assert(service.recordConversation({ conversation, context: sourceContext() }).recorded > 0, "verified whisper is extracted");
   assert.equal(target(2, 1).facts.find(fact => fact.factKey === "trait_witch").effectiveKnown, true);
-  assert.equal(target(3, 1).facts.find(fact => fact.factKey === "trait_witch").effectiveKnown, false, "bystander does not hear a whisper");
+  assert.equal(target(3, 1).facts.find(fact => fact.factKey === "trait_witch").effectiveKnown, true, "trait disclosure is shared with everyone actually present");
   assert.equal(service.recordConversation({ conversation, context: sourceContext() }).recorded, 0, "source replay is idempotent");
   conversation.messages.push({ id: 2, role: "assistant", speakerCharacterId: 2, name: "阿乙", content: "阿甲是巫师。" });
   service.recordConversation({ conversation, context: sourceContext() });
@@ -68,8 +68,11 @@ try {
   assert.equal(target(2, 1).facts.find(fact => fact.factKey === "trait_witch").effectiveKnown, false, "changed fact content invalidates old automatic proof");
   characters.get(1).traits[0].name = "巫师";
   conversation.messages[0].content = "今天天气很好。";
-  assert.equal(target(2, 1).facts.find(fact => fact.factKey === "trait_witch").effectiveKnown, false, "edited source is rejected before next transport");
-  assert.equal(target(3, 1).facts.find(fact => fact.factKey === "trait_witch").effectiveKnown, false, "a relay cannot outlive its edited knowledge source");
+  assert.equal(target(2, 1).facts.find(fact => fact.factKey === "trait_witch").effectiveKnown, true, "the speaker's later affirmative trait statement is an independent source after the first message is edited");
+  assert.equal(target(3, 1).facts.find(fact => fact.factKey === "trait_witch").effectiveKnown, true, "the relayer's own explicit trait statement remains an independent disclosure source");
+  conversation.messages[1].content = "今天天气很好。";
+  assert.equal(target(2, 1).facts.find(fact => fact.factKey === "trait_witch").effectiveKnown, false, "editing every supporting utterance revokes automatic knowledge before transport");
+  assert.equal(target(3, 1).facts.find(fact => fact.factKey === "trait_witch").effectiveKnown, false, "all listeners lose the automatic proof when every supporting source is edited");
   service.recordConversation({ conversation, context: sourceContext() });
   conversation.id = "next-scene";
   conversation.messages = [];

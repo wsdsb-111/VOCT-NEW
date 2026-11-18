@@ -41,8 +41,8 @@ function createRequestControl({ signal, deadline, beforeSend, beforeTransport, o
   const abort = () => controller.abort(signal?.reason);
   if (signal?.aborted) abort(); else signal?.addEventListener("abort", abort, { once: true });
   let timer = null, attempts = 0, disposed = false;
+  const expire = () => { const error = new Error("provider_timeout"); error.name = "TimeoutError"; controller.abort(error); };
   if (deadlineAt != null) {
-    const expire = () => { const error = new Error("provider_timeout"); error.name = "TimeoutError"; controller.abort(error); };
     if (deadlineAt <= Date.now()) expire(); else timer = setTimeout(expire, Math.min(2147483647, deadlineAt - Date.now()));
   }
   const limit = Number.isSafeInteger(maxAttempts) && maxAttempts > 0 ? Math.min(maxAttempts, 2) : 2;
@@ -60,7 +60,7 @@ function createRequestControl({ signal, deadline, beforeSend, beforeTransport, o
       assertActive(controller.signal);
       if (disposed) throw new Error("provider_request_closed");
       if (deadlineAt != null && Date.now() >= deadlineAt) {
-        const error = new Error("provider_timeout"); error.name = "TimeoutError"; controller.abort(error); assertActive(controller.signal);
+        expire(); assertActive(controller.signal);
       }
     },
     beforeSend() {
@@ -107,6 +107,7 @@ function createRequestControl({ signal, deadline, beforeSend, beforeTransport, o
       return budget;
     },
     emit(event) { try { onEvent?.(event); } catch {} },
+    timeout: expire,
     cancel() { if (!controller.signal.aborted) controller.abort(cancellationError()); },
     dispose() {
       if (disposed) return;

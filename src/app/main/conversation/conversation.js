@@ -2,6 +2,7 @@
 
 const { getCharacterPersonalName } = require("../memory-system/character-identity");
 const { buildCharacterDisclosureContext } = require("./character-disclosure-context");
+const { activateSocialRecognition, deactivateSocialRecognition, preserveSocialRecognition } = require("../prompts/social-recognition-policy");
 const { memoryMatchesCampaign } = require("../memory-system/memory-types");
 const { MentionTracker } = require("../memory-system/mention-tracker");
 const { createConversationRuntime } = require("./conversation-runtime");
@@ -18,6 +19,7 @@ const { validateGenerationOutcome } = require("../providers/generation-outcome")
 const { planRequestBudget } = require("../providers/request-budget");
 const { preflightPromptPlan, extendContinuationProof } = require("../prompts/prompt-plan-compat");
 const { fingerprint: planFingerprint } = require("../prompts/prompt-plan-contract");
+const { prepareGlmAppendLayout } = require("../prompts/glm-append-layout");
 const { PLAYER_CENTERED_RECALL_ENABLED, DEFAULT_MEMORY_BUDGET_POLICY_REVISION,
   resolveMemoryBudget } = require("../memory-system/memory-budget-policy");
 
@@ -66,19 +68,19 @@ function traceOperation(trace, step, fields, operation) {
   try {
     result = operation();
   } catch (error) {
-    finishTraceSpan(finish, { result: "ERROR", errorCode: "initialization_error" });
+    finishTraceSpan(finish, { result: fields?.signal?.aborted || error?.name === "AbortError" ? "CANCELLED" : "ERROR", errorCode: "initialization_error" });
     throw error;
   }
   if (result && typeof result.then === "function") {
     return result.then((value) => {
-      finishTraceSpan(finish, { result: "OK" });
+      finishTraceSpan(finish, { result: fields?.signal?.aborted ? "CANCELLED" : "OK" });
       return value;
     }, (error) => {
-      finishTraceSpan(finish, { result: error instanceof Error && error.message === "AbortError: Message cancelled" ? "CANCELLED" : "ERROR", errorCode: "initialization_error" });
+      finishTraceSpan(finish, { result: fields?.signal?.aborted || error?.name === "AbortError" || error instanceof Error && error.message === "AbortError: Message cancelled" ? "CANCELLED" : "ERROR", errorCode: "initialization_error" });
       throw error;
     });
   }
-  finishTraceSpan(finish, { result: "OK" });
+  finishTraceSpan(finish, { result: fields?.signal?.aborted ? "CANCELLED" : "OK" });
   return result;
 }
 
@@ -149,13 +151,13 @@ class Conversation {
     const hasExplicitStability = (promptBuild.blocks || []).some(({ block }) => block?.stable !== undefined);
     const messages = Array.isArray(promptBuild.messages) ? promptBuild.messages : [];
     let messageCursor = 0;
-    const blocks = (promptBuild.blocks || []).map(({ block, content, tokens, messageSpan }, index) => {
+    const blocks = (promptBuild.blocks || []).map(({ block, content, tokens, messageSpan, messagePositions }, index) => {
       let messageStartPosition = null;
       let messageCount = 0;
       const blockContent = typeof content === "string" ? content : "";
       if (messageSpan) {
         messageStartPosition = messageSpan.start;
-        messageCount = messageSpan.end - messageSpan.start;
+        messageCount = messagePositions ? messagePositions.length : messageSpan.end - messageSpan.start;
         messageCursor = messageSpan.end;
       } else for (let end = messageCursor + 1; blockContent && end <= messages.length; end += 1) {
         const candidate = messages.slice(messageCursor, end);
@@ -175,6 +177,7 @@ class Conversation {
         position: index,
         messageStartPosition,
         messageCount,
+        ...(messagePositions ? { messagePositions } : {}),
         tokens,
         fingerprint: createPromptFingerprint(content),
         stable: hasExplicitStability ? block.stable === true : null,
@@ -208,6 +211,7 @@ class Conversation {
     this.summaryParticipantProfiles = /* @__PURE__ */ new Map();
     this.stableProfileCache = /* @__PURE__ */ new Map();
     this.stableDescriptionCache = /* @__PURE__ */ new Map();
+    this.glmAppendReceipts = /* @__PURE__ */ new Map();
     this.cacheV2FrozenSnapshots = { conversation: null, responders: /* @__PURE__ */ new Map() };
     this.cacheV2FrozenSnapshots.prefixByResponder = /* @__PURE__ */ new Map();
     this.frozenWorldlineByResponder = /* @__PURE__ */ new Map();
@@ -1089,7 +1093,8 @@ class Conversation {
   getCharacterDisclosureContext(npc, additionalTargets = []) {
     return buildCharacterDisclosureContext({
       service: applicationServices?.characterKnowledge, gameData: this.gameData, responderId: npc.id,
-      targetIds: [this.gameData.playerID, ...(this.selectedCharacterIds || []), ...additionalTargets]
+      targetIds: [this.gameData.playerID, ...(this.selectedCharacterIds || []), ...additionalTargets],
+      audienceIds: this.getActiveConversationCharacters().map(character => character.id)
     });
   }
   recordCharacterDisclosures() {
@@ -1127,6 +1132,8 @@ class Conversation {
     const requested = Array.isArray(initialPresentIds) ? initialPresentIds.map(Number).filter((characterId) => this.selectedCharacterIds.has(characterId)) : defaultPresentIds;
     const initialIds = requested.length > 0 ? requested : defaultPresentIds;
     this.presentCharacterIds = new Set(initialIds);
+    this.recognitionPlayerId = Number(this.gameData.playerID);
+    activateSocialRecognition(this.gameData, [this.gameData.playerID, ...initialIds]);
     this.waitingCharacterIds = new Set(selectedIds.filter((characterId) => !this.presentCharacterIds.has(characterId)));
     this.temporarilyAbsentCharacterIds = new Map();
     this.departedCharacterIds = new Set();
@@ -1283,6 +1290,7 @@ class Conversation {
     this.captureSummaryParticipantProfiles([character]);
     this.waitingCharacterIds.delete(numericId);
     this.presentCharacterIds.add(numericId);
+    activateSocialRecognition(this.gameData, [this.gameData.playerID, numericId]);
     const message = createMessage({ id: this.nextId++, role: "system", kind: "presence_join", characterId: numericId, content: `【${character.shortName || character.fullName}入内】` });
     this.messages.push(message);
     memoryEngine?.observeParticipants(this, [numericId], message.id);
@@ -1510,19 +1518,22 @@ class Conversation {
     this.emitUpdate();
     let wasCancelled = false;
     let streamCompleted = false;
+    let glmAppendCandidate = null;
     let settleContextUsageAfterFailure = null;
     try {
-      await bridgeService?.redetect();
-      bridgeService?.assertFeature("conversation");
-      bridgeEvidence?.projectGameData(this.gameData);
-      const memoryContext = await this.checkAndSummarizeIfNeeded(npc, diagnosticsContext);
+      const memoryContext = await traceOperation(performanceTrace, "conversation.prepare", { attribution: "MAIN", context: diagnosticsContext, signal: controller.signal }, async () => {
+        await bridgeService?.redetect();
+        bridgeService?.assertFeature("conversation");
+        bridgeEvidence?.projectGameData(this.gameData);
+        return this.checkAndSummarizeIfNeeded(npc, diagnosticsContext);
+      });
       if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
       const promptBuildStartedAt = Date.now();
       const activeConfig = settingsRepository.getActiveProviderConfig();
       const promptGameRevision = () => planFingerprint([this.gameData.campaignToken, this.gameData.date, this.gameData.totalDays,
         this.gameData.scene, this.gameData.location, this.gameData.locationController]);
       const builtGameRevision = promptGameRevision();
-      const promptBuild = traceOperation(performanceTrace, "prompt.build", { attribution: "MAIN", context: diagnosticsContext }, () => PromptBuilder.buildMessagesWithTokenCount(
+      const canonicalPromptBuild = traceOperation(performanceTrace, "prompt.build", { attribution: "MAIN", context: diagnosticsContext }, () => PromptBuilder.buildMessagesWithTokenCount(
         this.getPromptHistoryForCharacter(npc.id),
         npc,
         this.gameData,
@@ -1533,6 +1544,10 @@ class Conversation {
             responderId: Number(npc.id), playerId: Number(this.gameData.playerID), conversationEpoch: this.conversationEpoch, logicalTurnEpoch: turnEpoch },
           ...(narrationTarget ? { currentTurnInstructions: "请只重新表达你在本轮的最后一条台词，不要续写新一轮，也不要重新回应其后的发言。已经发生的游戏动作及其结果保持不变；不得撤销、重复或新增动作，只输出替换台词。" } : {}) }
       ));
+      glmAppendCandidate = prepareGlmAppendLayout(canonicalPromptBuild, activeConfig,
+        this.glmAppendReceipts?.get(Number(npc.id)), { disabled: !!narrationTarget });
+      this.glmAppendReceipts?.delete(Number(npc.id));
+      const promptBuild = glmAppendCandidate.build;
       const promptBuildMs = Date.now() - promptBuildStartedAt;
       const llmMessages = promptBuild.messages;
       const chatPlanProof = promptBuild.promptPlan ? { plan: promptBuild.promptPlan, serialized: promptBuild.serialized, ownerEvidence: true } : null;
@@ -1553,7 +1568,6 @@ class Conversation {
       logVerboseLLM(`[Conversation][verbose] Prompt for ${npc.fullName}:`, llmMessages);
       const estimatedTokenCount = traceOperation(performanceTrace, "tokenEstimate", { attribution: "MAIN", context: diagnosticsContext, count: llmMessages.length }, () => this.estimateTokenCount(llmMessages));
       console.log(`[TOKEN_COUNT] Message from ${npc.fullName}:`, estimatedTokenCount);
-      const isOpenRouter = activeConfig?.providerType === "openrouter";
       const contextDiagnostics = this.contextBudgetDiagnostics || {};
       const contextWindowTokens = tokenCountOrNull(contextDiagnostics.contextWindow);
       const providerMaxOutputTokens = tokenCountOrNull(contextDiagnostics.providerMaxOutputTokens);
@@ -1627,6 +1641,7 @@ class Conversation {
       };
       publishContextUsage("request_snapshot", true);
       const onContinuationRequest = (messages) => {
+        glmAppendCandidate = null;
         if (chatPlanProof) {
           extendContinuationProof(chatPlanProof, messages, items => this.estimateTokenCount(items));
           chatRequestMetadata.cacheDiagnosticContext.messageSpans = chatPlanProof.serialized.messageSpans;
@@ -1805,7 +1820,7 @@ class Conversation {
       bridgeService?.assertFeature("conversation");
       const result = await llmManager.sendChatRequest(
         llmMessages,
-        isOpenRouter ? void 0 : controller.signal,
+        controller.signal,
         void 0,
         chatRequestMetadata
       );
@@ -1814,69 +1829,29 @@ class Conversation {
         try {
           const streamIterator = result;
           let finalResponse = null;
-          if (isOpenRouter) {
-            const streamPromise = (async () => {
-              const iterator = streamIterator[Symbol.asyncIterator]();
-              while (true) {
-                const step = await iterator.next();
-                if (step.done) { finalResponse = step.value; break; }
-                const chunk = step.value;
-                if (wasCancelled || controller.signal.aborted || !this.isResponseCurrent(responseState, npc)) {
-                  wasCancelled = true;
-                  continue;
-                }
-                if (chunk.delta?.reasoning) {
-                  placeholder.streamStatus = "thinking";
-                  this.emitUpdate();
-                }
-                if (chunk.delta?.content) {
-                  placeholder.streamStatus = "generating";
-                  placeholder.content += chunk.delta.content;
-                  this.emitUpdate();
-                  const enteringStream = requestPhase !== "streaming";
-                  requestPhase = "streaming";
-                  publishContextUsage("streaming", enteringStream);
-                }
-              }
-            })();
-            const checkCancellation = async () => {
-              while (!streamCompleted && !wasCancelled) {
-                if (controller.signal.aborted || !this.isResponseCurrent(responseState, npc)) {
-                  wasCancelled = true;
-                  console.log("[OpenRouter] Cancellation detected - stream will continue in background");
-                  streamPromise.catch((err) => console.error("[OpenRouter] Background stream error:", err));
-                  throw new Error("AbortError: Message cancelled");
-                }
-                await new Promise((resolve) => setTimeout(resolve, 100));
-              }
-            };
-            await Promise.race([streamPromise, checkCancellation()]);
-            streamCompleted = true;
-          } else {
-            const iterator = streamIterator[Symbol.asyncIterator]();
-            while (true) {
-              const step = await iterator.next();
-              if (step.done) { finalResponse = step.value; break; }
-              const chunk = step.value;
-              if (controller.signal.aborted || !this.isResponseCurrent(responseState, npc)) {
-                wasCancelled = true;
-                throw new Error("AbortError: Message cancelled");
-              }
-              if (chunk.delta?.reasoning) {
-                placeholder.streamStatus = "thinking";
-                this.emitUpdate();
-              }
-              if (chunk.delta?.content) {
-                placeholder.streamStatus = "generating";
-                placeholder.content += chunk.delta.content;
-                this.emitUpdate();
-                const enteringStream = requestPhase !== "streaming";
-                requestPhase = "streaming";
-                publishContextUsage("streaming", enteringStream);
-              }
+          const iterator = streamIterator[Symbol.asyncIterator]();
+          while (true) {
+            const step = await iterator.next();
+            if (step.done) { finalResponse = step.value; break; }
+            const chunk = step.value;
+            if (controller.signal.aborted || !this.isResponseCurrent(responseState, npc)) {
+              wasCancelled = true;
+              throw new Error("AbortError: Message cancelled");
             }
-            streamCompleted = true;
+            if (chunk.delta?.reasoning && placeholder.streamStatus !== "thinking") {
+              placeholder.streamStatus = "thinking";
+              this.emitUpdate();
+            }
+            if (chunk.delta?.content) {
+              placeholder.streamStatus = "generating";
+              placeholder.content += chunk.delta.content;
+              this.emitUpdate();
+              const enteringStream = requestPhase !== "streaming";
+              requestPhase = "streaming";
+              publishContextUsage("streaming", enteringStream);
+            }
           }
+          streamCompleted = true;
           const outcome = validateGenerationOutcome(finalResponse);
           chatCachedTokens = outcome.cachedTokens;
           if (outcome.truncated) {
@@ -1902,7 +1877,7 @@ class Conversation {
         delete placeholder.streamStatus;
         if (streamCompleted && !wasCancelled && !narrationTarget) {
           this.getGenerationManager().markPhase(responseState, "evaluating_actions");
-          await this.evaluateCompletedActions(npc, msgId, placeholder, responseState);
+          await this.evaluateCompletedActions(npc, msgId, placeholder, responseState, diagnosticsContext);
         }
       } else if (result && typeof result === "object" && "content" in result && typeof result.content === "string") {
         if (!this.isResponseCurrent(responseState, npc)) throw new Error("AbortError: Message cancelled");
@@ -1925,13 +1900,17 @@ class Conversation {
         streamCompleted = true;
         if (!narrationTarget) {
           this.getGenerationManager().markPhase(responseState, "evaluating_actions");
-          await this.evaluateCompletedActions(npc, msgId, placeholder, responseState);
+          await this.evaluateCompletedActions(npc, msgId, placeholder, responseState, diagnosticsContext);
         }
       } else {
         throw new Error("Bad LLM response format");
       }
       if (this.isResponseCurrent(responseState, npc)) this.retainDynamicSummaryRecall(npc.id,
         narrationTarget ? narrationRewriteOf : msgId, promptBuild, turnEpoch);
+      if (streamCompleted && !wasCancelled && this.isResponseCurrent(responseState, npc)
+        && glmAppendCandidate?.receipt && chatPlanProof?.serialized.serializedFingerprint === glmAppendCandidate.receipt.serializedFingerprint) {
+        this.glmAppendReceipts?.set(Number(npc.id), glmAppendCandidate.receipt);
+      }
       if (chatCachedTokens != null) memoryEngine.trace.record("provider_cache_usage", { characterId: npc.id, conversationId: this.id, cachedTokens: chatCachedTokens });
       if (narrationTarget) {
         if (!this.isResponseCurrent(responseState, npc) || !this.messages.includes(narrationTarget)
@@ -1982,14 +1961,16 @@ class Conversation {
     if (narrationTarget) return narrationCommitted ? { success: true, mode: "NARRATION_ONLY" }
       : { success: false, error: "台词重新生成未完成，原回复与动作结果已保留。" };
   }
-  async evaluateCompletedActions(npc, npcMessageId, npcMessage, responseState) {
+  async evaluateCompletedActions(npc, npcMessageId, npcMessage, responseState, diagnosticsContext = null) {
     if (!this.isResponseCurrent(responseState, npc)) {
       this.recordGenerationSkipped(responseState, responseState?.staleReason || "stale_action_evaluation");
       return;
     }
     const generationAttempt = this.generationAttemptsByMessageId.get(npcMessageId);
     if (generationAttempt) generationAttempt.actionEvaluationPending = true;
-    const actionResults = await ActionEngine.evaluateForCharacter(this, npc, responseState.controller.signal);
+    const tracePhase = (step, operation) => traceOperation(performanceTrace, step,
+      { attribution: step === "action.request" ? "PROVIDER" : "MAIN", context: diagnosticsContext, signal: responseState.controller.signal }, operation);
+    const actionResults = await tracePhase("action.evaluate", () => ActionEngine.evaluateForCharacter(this, npc, responseState.controller.signal, tracePhase));
     if (!this.isResponseCurrent(responseState, npc)) {
       this.recordGenerationSkipped(responseState, responseState?.staleReason || "stale_action_evaluation");
       return;
@@ -1999,7 +1980,7 @@ class Conversation {
       generationAttempt.hasActionOutcome = (actionResults?.autoApproved?.length || 0) > 0
         || (actionResults?.needsApproval?.length || 0) > 0;
     }
-    await this.handleActionResults(npcMessageId, npc, actionResults);
+    await tracePhase("action.results", () => this.handleActionResults(npcMessageId, npc, actionResults));
   }
   async completeTruncatedResponse(originalMessages, partialContent, responseState, npc, diagnosticsContext = null,
     initialRequestMetadata = {}, onContinuationRequest = null, onContinuationOutcome = null) {
@@ -2122,6 +2103,10 @@ class Conversation {
     const ck3DebugPath = settingsRepository.getCK3DebugLogPath();
     if (!ck3DebugPath) throw new Error("ck3_debug_log_path_not_configured");
     const gameData = await this.parseCK3GameData(ck3DebugPath);
+    if (Number(gameData.playerID) !== Number(this.gameData.playerID) || gameData.campaignToken !== this.gameData.campaignToken) {
+      throw new Error("conversation_player_or_campaign_changed_start_new_dialogue");
+    }
+    preserveSocialRecognition(this.gameData, gameData);
     gameData.loadCharactersSummaries();
     gameData.syncOfficialRecollectionSummaries?.(this.id);
     this.gameData = gameData;
@@ -2129,6 +2114,7 @@ class Conversation {
     this.gameData.gameDataRevision = this.gameDataRevision;
     this.stableProfileCache.clear();
     this.stableDescriptionCache.clear();
+    this.glmAppendReceipts?.clear();
     this.cacheV2FrozenSnapshots.responders.clear();
     this.cacheV2FrozenSnapshots.prefixByResponder.clear();
     return this.gameData;
@@ -2713,9 +2699,11 @@ class Conversation {
   }
   clearHistory() {
     this.messages = [];
+    this.glmAppendReceipts?.clear();
   }
   end() {
     this.isActive = false;
+    deactivateSocialRecognition(this.gameData);
     this.clearHistory();
     this.generationAttemptsByMessageId?.clear();
     this.memoryAttemptDiagnosticsByOwner?.clear();

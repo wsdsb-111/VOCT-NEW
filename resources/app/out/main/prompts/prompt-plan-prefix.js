@@ -4,12 +4,19 @@ const { fingerprint } = require("./prompt-plan-contract");
 
 function calculatePlanPrefix(plan, serialized) {
   const blocks = new Map(plan.blocks.map(block => [block.id, block]));
+  const byPosition = new Map();
+  for (const span of serialized.messageSpans) {
+    for (const { messagePosition } of span.contributions) {
+      if (!byPosition.has(messagePosition)) byPosition.set(messagePosition, new Set());
+      byPosition.get(messagePosition).add(span.blockId);
+    }
+  }
   let messageCount = 0;
   const prefixBlocks = new Set();
   for (let position = 0; position < serialized.messages.length; position++) {
-    const contributors = serialized.messageSpans.filter(span => span.contributions.some(part => part.messagePosition === position));
-    if (!contributors.length || contributors.some(span => !blocks.get(span.blockId).cache.prefixEligible)) break;
-    contributors.forEach(span => prefixBlocks.add(span.blockId));
+    const contributors = byPosition.get(position);
+    if (!contributors || [...contributors].some(id => !blocks.get(id).cache.prefixEligible)) break;
+    contributors.forEach(id => prefixBlocks.add(id));
     messageCount++;
   }
   const tokens = plan.blocks.filter(block => prefixBlocks.has(block.id)).reduce((sum, block) => sum + block.tokens.estimated, 0);

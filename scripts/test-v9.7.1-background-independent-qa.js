@@ -84,6 +84,57 @@ async function main() {
   // A newer partial INIT invalidates an earlier complete export immediately.
   assert.equal(probe(load("session_new_03"), init, marker(A), "VOTC:IN/;/init/;/partial").campaignToken, null);
 
+  // CK3 can append over 1 MiB between turns without a new dialogue export.
+  const largeLog = log(load("session_long_01"), init, marker(A));
+  const longScene = conversation(A);
+  longScene.captureWorldBackground();
+  const originalSession = service.getLiveState().loadSessionId;
+  fs.appendFileSync(largeLog, "unrelated CK3 log noise\n".repeat(60000));
+  assert.equal(readLiveProbe({ fs, debugLogPath: largeLog }).campaignToken, A,
+    "a cold probe must recover identity beyond the old 1 MiB tail");
+  assert.equal(service.getLiveState().loadSessionId, originalSession, "log growth must not change the branch session");
+  assert.equal(longScene.captureWorldBackground().text, "A 的更新背景", "an existing scene remains usable after log growth");
+  fs.appendFileSync(largeLog, load("session_long_02") + "\nVOTC:DATE/;/2/;/1066.9.16\n");
+  assert.throws(() => longScene.captureWorldBackground(), /campaign_changed/, "a real load still fences the old scene");
+  fs.appendFileSync(largeLog, init + "\n" + marker(A) + "\n");
+  assert.equal(longScene.captureWorldBackground().text, "A 的更新背景", "a fresh matching export restores the verified campaign");
+
+  // Partial records must be re-read; a cached old token must not survive a new INIT.
+  fs.appendFileSync(largeLog, "VOTC:IN/;/init/;/partial");
+  assert.equal(service.getLiveState().campaignToken, null);
+  fs.appendFileSync(largeLog, "\n" + init + "\n" + marker(B));
+  assert.equal(service.getLiveState().campaignToken, B);
+  assert.throws(() => longScene.captureWorldBackground(), /campaign_changed/);
+  fs.writeFileSync(largeLog, init + "\n" + marker(A) + "\n");
+  assert.equal(service.getLiveState().campaignToken, A, "truncation resets the incremental identity");
+  fs.writeFileSync(largeLog, init + "\n" + marker(B) + "\n");
+  assert.equal(service.getLiveState().campaignToken, B, "same-size replacement cannot retain A");
+
+  // UTF-8 prefixes and chunk splits must preserve the absolute session offset.
+  const splitLog = log("字".repeat(21842), load("session_split_01"), init, marker(A));
+  const cold = readLiveProbe({ fs, debugLogPath: splitLog });
+  fs.appendFileSync(splitLog, "unrelated\n".repeat(150000));
+  assert.equal(service.getLiveState().campaignToken, A);
+  assert.equal(service.getLiveState().loadSessionId, cold.loadSessionId);
+  let readBytes = 0;
+  const trackedFs = Object.create(fs);
+  trackedFs.readSync = (...args) => { const count = fs.readSync(...args); readBytes += count; return count; };
+  service.fs = trackedFs;
+  fs.appendFileSync(splitLog, "new log line\n");
+  assert.equal(service.getLiveState().campaignToken, A);
+  assert(readBytes < 1024 * 1024 + 2048, "warm probe reads the bounded date tail plus new identity bytes, not the whole log");
+  readBytes = 0;
+  service.getLiveState();
+  assert.equal(readBytes, 0, "an unchanged file reuses the live probe");
+
+  // Split the marker labels themselves, not only the surrounding UTF-8 line.
+  for (const label of [load("session_chunk_01"), init, marker(A)]) {
+    const before = label === init ? load("session_chunk_02") + "\n" : label === marker(A) ? init + "\n" : "";
+    const padding = "x".repeat(65536 - Buffer.byteLength(before) - 7);
+    const split = probe(before + padding + label, label === marker(A) ? "" : init, marker(A));
+    assert.equal(split.campaignToken, A, "marker labels spanning the read chunk still bind");
+  }
+
   console.log("V9.7.1 independent background QA passed");
 }
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => fs.rmSync(dir, { recursive: true, force: true }));

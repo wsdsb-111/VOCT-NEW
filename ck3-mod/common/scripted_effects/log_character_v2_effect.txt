@@ -33,6 +33,7 @@
 
 	log_relatives = yes
 	log_persona_numbers = yes
+	votc_log_social_recognition = yes
 }
 
 log_persona_numbers = {
@@ -614,6 +615,93 @@ log_relatives = {
 
 }
 
+# Read-only directed eligibility for this export's small conversation candidate
+# list. VOTC activates it only when the player actually selects a participant.
+votc_log_social_recognition = {
+	save_scope_as = votc_recognition_observer
+	save_scope_as = votc_recognition_realm_anchor
+	if = {
+		limit = { highest_held_title_tier < tier_barony exists = court_owner }
+		court_owner = { save_scope_as = votc_recognition_realm_anchor }
+	}
+	every_in_global_list = {
+		variable = mcc_characters_list_v2
+		limit = { NOT = { this = scope:votc_recognition_observer } }
+		votc_log_recognition_pair = yes
+	}
+	scope:actor = {
+		if = {
+			limit = { NOT = { this = scope:votc_recognition_observer } }
+			votc_log_recognition_pair = yes
+		}
+	}
+}
+
+votc_log_recognition_pair = {
+	save_scope_as = votc_recognition_target
+	if = {
+		limit = {
+			highest_held_title_tier >= tier_barony
+			scope:votc_recognition_observer = { is_courtier_of = scope:votc_recognition_target }
+		}
+		debug_log = "VOTC:IN/;/social_recognition/;/[scope:votc_recognition_observer.Char.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/OWN_COURT_LORD"
+	}
+	else_if = {
+		limit = {
+			highest_held_title_tier >= tier_kingdom
+			scope:votc_recognition_observer = {
+				highest_held_title_tier >= tier_barony
+				any_liege_or_above = { this = scope:votc_recognition_target }
+			}
+		}
+		debug_log = "VOTC:IN/;/social_recognition/;/[scope:votc_recognition_observer.Char.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/HIGH_LIEGE"
+	}
+	else_if = {
+		limit = {
+			highest_held_title_tier >= tier_barony
+			NOT = { this = scope:votc_recognition_target.top_liege }
+			scope:votc_recognition_observer = {
+				highest_held_title_tier >= tier_barony
+				NOT = { this = scope:votc_recognition_observer.top_liege }
+				top_liege = {
+					this = scope:votc_recognition_target.top_liege
+					highest_held_title_tier >= tier_kingdom
+				}
+			}
+		}
+		debug_log = "VOTC:IN/;/social_recognition/;/[scope:votc_recognition_observer.Char.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/REALM_PEERS"
+	}
+	else_if = {
+		limit = {
+			highest_held_title_tier >= tier_barony
+			this = scope:votc_recognition_target.top_liege
+			scope:votc_recognition_realm_anchor.top_liege = { character_is_land_realm_neighbor = scope:votc_recognition_target }
+		}
+		debug_log = "VOTC:IN/;/social_recognition/;/[scope:votc_recognition_observer.Char.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/NEIGHBORING_SOVEREIGN"
+	}
+	else_if = {
+		limit = {
+			highest_held_title_tier >= tier_barony
+			scope:votc_recognition_observer = {
+				highest_held_title_tier >= tier_barony
+				character_is_land_realm_neighbor = scope:votc_recognition_target
+			}
+		}
+		debug_log = "VOTC:IN/;/social_recognition/;/[scope:votc_recognition_observer.Char.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/BORDERING_RULERS"
+	}
+}
+
 log_characterr = {
+	votc_log_character_background = yes
 	debug_log = "VOTC:IN/;/character/;/[THIS.Char.GetID]/;/[THIS.Char.GetTitledFirstNameNoTooltip]/;/[THIS.Char.GetFullNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetPrimaryTitle.GetNameNoTooltip]/;/[THIS.Char.GetSheHe]/;/[THIS.Char.GetAge]/;/[THIS.Char.GetGold]/;/[THIS.Char.GetOpinionOf(GetPlayer)]/;/[THIS.Char.GetSexuality]/;/[THIS.Char.GetAIPersonalityNoTooltip]/;/[THIS.Char.GetAIGreed]/;/[THIS.Char.IsIndependentRuler]/;/[THIS.Char.GetLiege.GetFullNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetConsort.GetFullNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetCulture.GetName]/;/[THIS.Char.GetFaith.GetName]/;/[THIS.Char.GetHouse.GetName]/;/[THIS.Char.IsRuler]/;/[THIS.Char.GetFirstNameNoTooltip]/;/[THIS.Char.GetCapitalLocation.GetNameNoTooltip]/;/[THIS.Char.GetTopLiege]/;/[THIS.Char.GetProwess]/;/[THIS.Char.IsKnight]/;/[THIS.Char.GetLiege.GetActiveLawInGroupWithFlag('realm_law').GetNameNoTooltip]/;/[THIS.Char.IsLandedRuler]/;/[THIS.Char.GetHeldCourtAndCouncilPositionsString]/;/[THIS.Char.GetPrimaryTitle.GetRankConcept]"
+}
+
+# Optional localized biography keys used by PoD's own character lore buttons.
+# Missing keys are ignored by the app; ordinary/newborn characters need no story.
+votc_log_character_background = {
+	debug_log = "VOTC:IN/;/character_history/;/[THIS.Char.GetID]/;/[THIS.Char.GetHistoryId]"
+	debug_log = "VOTC:IN/;/character_background/;/[THIS.Char.GetID]/;/[THIS.Char.GetHistoryId]/;/POD_investigate.desc.[THIS.Char.GetHistoryId]/;/STARTMULTILINE#[Localize(Concatenate('POD_investigate.desc.', THIS.Char.GetHistoryId))]#ENDMULTILINE"
+	debug_log = "VOTC:IN/;/character_background/;/[THIS.Char.GetID]/;/[THIS.Char.GetHistoryId]/;/POD_persistentpodlore.desc.[THIS.Char.GetHistoryId]/;/STARTMULTILINE#[Localize(Concatenate('POD_persistentpodlore.desc.', THIS.Char.GetHistoryId))]#ENDMULTILINE"
+	debug_log = "VOTC:IN/;/character_background/;/[THIS.Char.GetID]/;/[THIS.Char.GetHistoryId]/;/POD_podlore.100.desc.[THIS.Char.GetHistoryId]/;/STARTMULTILINE#[Localize(Concatenate('POD_podlore.100.desc.', THIS.Char.GetHistoryId))]#ENDMULTILINE"
+	debug_log = "VOTC:IN/;/character_background/;/[THIS.Char.GetID]/;/[THIS.Char.GetHistoryId]/;/POD_patronlore.100.desc.[THIS.Char.GetHistoryId]/;/STARTMULTILINE#[Localize(Concatenate('POD_patronlore.100.desc.', THIS.Char.GetHistoryId))]#ENDMULTILINE"
 }

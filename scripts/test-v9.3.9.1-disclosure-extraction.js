@@ -106,12 +106,12 @@ const disclosedSecret = extract("丁是私生子。", { gameData: gameData(secre
 assert(fact(disclosedSecret, 1, 4, "TRAIT", "私生子"), "a speaker's own matching knownSecret permits a third-person secret disclosure");
 const wrongSecretOwner = new Map(secretSpeaker);
 wrongSecretOwner.set(2, { ...secretSpeaker.get(2), knownSecrets: [{ type: "secret_bastard", ownerId: 3 }] });
-assert.deepEqual(extract("丁是私生子。", { gameData: gameData(wrongSecretOwner), candidateTargetIds: [4] }), [],
-  "a secret known about another target cannot authorize this target");
+assert(fact(extract("丁是私生子。", { gameData: gameData(wrongSecretOwner), candidateTargetIds: [4] }), 1, 4, "TRAIT", "私生子"),
+  "an explicit correctly targeted trait statement discloses the actual trait without a prior-secret prerequisite");
 const listenerSecret = new Map(characters);
 listenerSecret.set(1, { ...characters.get(1), knownSecrets: [{ type: "secret_bastard", ownerId: 4 }] });
-assert.deepEqual(extract("丁是私生子。", { gameData: gameData(listenerSecret), candidateTargetIds: [4] }), [],
-  "a listener's knownSecret cannot be borrowed as the speaker's knowledge");
+assert(fact(extract("丁是私生子。", { gameData: gameData(listenerSecret), candidateTargetIds: [4] }), 1, 4, "TRAIT", "私生子"),
+  "the directed spoken statement itself supplies trait disclosure; another listener's secret is not required");
 assert(fact(extract("我乃私生子。"), 1, 2, "TRAIT", "私生子"),
   "a character may directly disclose their own current secret trait");
 
@@ -190,8 +190,8 @@ whisperCharacters.set(2, { ...characters.get(2), fullName: "阿乙", firstName: 
 const whispered = extract("只对阿乙低声说：“我是巫师。”", { gameData: gameData(whisperCharacters), speakerId: 1,
   audienceIds: [1, 2, 3], candidateTargetIds: [1, 2, 3] });
 assert(fact(whispered, 2, 1, "TRAIT", "巫师"), "a source-validated whispered self-disclosure reaches its named addressee");
-assert.equal(whispered.some(row => row.ownerRuntimeId === 3), false,
-  "a whisper addressed only to one listener never transfers to another in-scene listener");
+assert.equal(whispered.some(row => row.ownerRuntimeId === 3), true,
+  "the revised trait rule shares an affirmative trait disclosure with all in-scene listeners");
 assert.deepEqual(extract("丙说道：“我是巫师。”", { gameData: gameData(whisperCharacters), speakerId: 1,
   audienceIds: [1, 2, 3], candidateTargetIds: [1, 2, 3] }), [],
   "a quote attributed to another character is not relabeled as the message speaker's disclosure");

@@ -12,6 +12,7 @@ const { KnowledgeService } = require("./knowledge-service");
 const { RollingSummaryManager } = require("./rolling-summary-manager");
 const { MemoryConsolidator } = require("./memory-consolidator");
 const { MemoryTrace } = require("./memory-trace");
+const { hasOfficialRecollectionContent } = require("./official-recollection-provider");
 const { MentionTracker } = require("./mention-tracker");
 const { getCharacterMentionAliases } = require("./character-identity");
 const { buildPerspectiveSummaryMap, validatePerspectiveSummaryMap, validateSummarySegmentPresenceBoundaries, validatePerspectiveCoverage, isMemoryRelevantToPair } = require("./perspective-projector");
@@ -1821,7 +1822,7 @@ class MemoryEngine {
     if (ownerValid) responderCache.folderSummaryRevision = currentFolderRevision;
     const officialMemory = memoryEngine3Enabled && officialSummary?.sourceType === "CK3_OFFICIAL_RECOLLECTION"
       && memoryMatchesResolvedCampaign({ provenance: { campaignToken: officialSummary.campaignToken, campaignBinding: officialSummary.campaignBinding } }, campaignToken)
-      && Number(officialSummary.playerId) === ownerId && officialSummary.memoryCount > 0 ? createMemoryRecord({
+      && Number(officialSummary.playerId) === ownerId && hasOfficialRecollectionContent(officialSummary) ? createMemoryRecord({
         memoryId: `official_${ownerId}`, type: "folder_summary", subtype: "official_recollection",
         content: officialSummary.content, importance: 0.95, confidence: 1, source: "game_fact",
         participants: [ownerId], knownBy: [ownerId], visibility: "private",

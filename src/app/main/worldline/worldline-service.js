@@ -158,15 +158,62 @@ function latestHistoryHolder(title, afterDate, beforeDate) {
   return (title.history || []).filter((entry) => entry.holder && (dateValue(entry.date) || 0) > (dateValue(afterDate) || 0) && (dateValue(entry.date) || 0) <= (dateValue(beforeDate) || Number.MAX_SAFE_INTEGER)).at(-1) || null;
 }
 
-function readTail(fs, filePath, maxBytes = 1024 * 1024) {
-  const stat = fs.statSync(filePath);
+function readProbeIdentity(fs, filePath, fd, stat, cache) {
+  const key = `${filePath}:${stat.dev}:${stat.ino}:${stat.birthtimeMs}`;
+  const read = (offset, length) => {
+    const buffer = Buffer.alloc(length);
+    if (fs.readSync(fd, buffer, 0, length, offset) !== length) throw new Error("live_probe_short_read");
+    return buffer;
+  };
+  const previous = cache.state;
+  const reusable = previous?.key === key && stat.size >= previous.size
+    && (stat.size !== previous.size || stat.mtimeMs === previous.mtimeMs && stat.ctimeMs === previous.ctimeMs)
+    && read(previous.size - previous.anchor.length, previous.anchor.length).equals(previous.anchor)
+    && read(0, previous.head.length).equals(previous.head);
+  let position = reusable ? previous.offset : 0;
+  let lineOffset = position;
+  let carry = Buffer.alloc(0);
+  const markers = reusable ? { ...previous.markers } : {};
+  const consume = (buffer, offset, target) => {
+    const line = buffer.toString("utf8");
+    const match = /VOTC:(LOAD_SESSION\/;\/|IN\/;\/init\b|CAMPAIGN\/)/.exec(line);
+    if (!match) return;
+    const marker = { text: line.slice(match.index).replace(/\r$/, ""), offset: offset + Buffer.byteLength(line.slice(0, match.index)) };
+    if (match[1] === "LOAD_SESSION/;/") {
+      target.load = marker; delete target.init; delete target.campaign;
+    } else if (match[1].startsWith("IN")) {
+      target.init = marker; delete target.campaign;
+    } else target.campaign = marker;
+  };
+  while (position < stat.size) {
+    const chunk = read(position, Math.min(64 * 1024, stat.size - position));
+    position += chunk.length;
+    carry = Buffer.concat([carry, chunk]);
+    let start = 0, end;
+    while ((end = carry.indexOf(10, start)) !== -1) {
+      consume(carry.subarray(start, end), lineOffset + start, markers);
+      start = end + 1;
+    }
+    lineOffset += start;
+    carry = carry.subarray(start);
+  }
+  cache.state = { key, size: stat.size, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs, offset: lineOffset, markers: { ...markers },
+    head: read(0, Math.min(256, stat.size)), anchor: read(Math.max(0, stat.size - 256), Math.min(256, stat.size)) };
+  // Observe a partially written INIT/LOAD immediately, but re-read that line on the next append.
+  consume(carry, lineOffset, markers);
+  return markers;
+}
+
+function readTail(fs, filePath, identityCache, maxBytes = 1024 * 1024) {
   const fd = fs.openSync(filePath, "r");
   try {
+    const stat = fs.fstatSync(fd);
     const size = Math.min(maxBytes, stat.size);
     const buffer = Buffer.alloc(size);
     fs.readSync(fd, buffer, 0, size, Math.max(0, stat.size - size));
     return {
       text: buffer.toString("utf8"),
+      identity: readProbeIdentity(fs, filePath, fd, stat, identityCache),
       startOffset: Math.max(0, stat.size - size),
       fileIdentity: Number.isFinite(stat.birthtimeMs) ? Math.trunc(stat.birthtimeMs) : Number.isFinite(stat.ctimeMs) ? Math.trunc(stat.ctimeMs) : 0
     };
@@ -175,30 +222,30 @@ function readTail(fs, filePath, maxBytes = 1024 * 1024) {
   }
 }
 
-function readLiveProbe({ fs, debugLogPath }) {
+function readLiveProbe({ fs, debugLogPath, identityCache = {} }) {
   if (!debugLogPath || !fs.existsSync(debugLogPath)) return { connected: false, gameDate: null, totalDays: null, characters: [], loadSessionId: null };
   try {
-    const tail = readTail(fs, debugLogPath);
+    const tail = readTail(fs, debugLogPath, identityCache);
     const text = tail.text;
-    const loadMatches = [...text.matchAll(/VOTC:LOAD_SESSION\/;\/([A-Za-z0-9_.-]{8,160})(?:\/;\/[^\r\n]*)?/g)];
-    const boundary = loadMatches.at(-1)?.index ?? -1;
+    const identity = tail.identity;
+    const boundary = identity.load && identity.load.offset >= tail.startOffset ? text.lastIndexOf(identity.load.text) : -1;
+    const afterBoundary = match => match.index > boundary;
     // init uses the same positional fields as GameData: date at 4, totalDays at 8.
-    const inMatches = [...text.matchAll(/VOTC:IN\/;\/init\/;\/([^\r\n]+)/g)].filter(match => match.index > boundary).map(match => {
+    const inMatches = [...(identity.init?.text || "").matchAll(/VOTC:IN\/;\/init\/;\/([^\r\n]+)/g)].map(match => {
       const fields = match[1].split("/;/");
-      return { index: match.index, gameDate: fields[4]?.trim(), totalDays: /^\d+$/.test(fields[8]?.trim()) ? Number(fields[8].trim()) : null, complete: fields.length >= 9 };
+      return { index: identity.init.offset < tail.startOffset ? -1 : text.lastIndexOf(identity.init.text), gameDate: fields[4]?.trim(), totalDays: /^\d+$/.test(fields[8]?.trim()) ? Number(fields[8].trim()) : null, complete: fields.length >= 9 };
     }).filter(marker => marker.complete && marker.gameDate);
-    const clockMatches = [...text.matchAll(/VOTC:DATE\/;\/(\d+)\/;\/([^\r\n]+)/g)].filter(match => match.index > boundary);
-    const dateMatches = [...text.matchAll(/VOTC:TEST_DATE\/;\/([^/\r\n]+)\/;\/(?:days=)?(\d+)/g)].filter(match => match.index > boundary);
-    const characterMatches = [...text.matchAll(/VOTC:TEST_CHAR\/;\/runtime=([^/\r\n]+)\/;\/history=([^/\r\n]*)\/;\/date=([^/\r\n]+)(?:\/;\/days=(\d+))?/g)].filter(match => match.index > boundary);
+    const clockMatches = [...text.matchAll(/VOTC:DATE\/;\/(\d+)\/;\/([^\r\n]+)/g)].filter(afterBoundary);
+    const dateMatches = [...text.matchAll(/VOTC:TEST_DATE\/;\/([^/\r\n]+)\/;\/(?:days=)?(\d+)/g)].filter(afterBoundary);
+    const characterMatches = [...text.matchAll(/VOTC:TEST_CHAR\/;\/runtime=([^/\r\n]+)\/;\/history=([^/\r\n]*)\/;\/date=([^/\r\n]+)(?:\/;\/days=(\d+))?/g)].filter(afterBoundary);
     const latestCharacterById = new Map();
     for (const match of characterMatches) latestCharacterById.set(match[1].trim(), { runtimeId: match[1].trim(), historyId: match[2].trim() || null, gameDate: match[3].trim(), totalDays: match[4] ? Number(match[4]) : null });
     const latestDate = dateMatches.at(-1);
     const latestIn = inMatches.at(-1);
-    const latestRawInit = [...text.matchAll(/VOTC:IN\/;\/init(?:\/;\/([^\r\n]*))?/g)].filter(match => match.index > boundary).at(-1);
+    const latestRawInit = /VOTC:IN\/;\/init(?:\/;\/([^\r\n]*))?/.exec(identity.init?.text || "");
     const initFields = latestRawInit?.[1]?.split("/;/") || [];
     const backgroundInitComplete = initFields.length >= 9 && !!initFields[4]?.trim() && /^\d+$/.test(initFields[8]?.trim());
-    const campaignMarkers = [...text.matchAll(/VOTC:CAMPAIGN\/([^\r\n]*)/g)].filter(match => backgroundInitComplete && match.index > latestRawInit.index);
-    const campaignToken = campaignMarkers.at(-1)?.[1]?.trim() || null;
+    const campaignToken = backgroundInitComplete ? /^VOTC:CAMPAIGN\/([^\r\n]*)/.exec(identity.campaign?.text || "")?.[1]?.trim() || null : null;
     const latestClock = clockMatches.at(-1);
     const latestCharacter = characterMatches.at(-1);
     const markers = [
@@ -215,7 +262,8 @@ function readLiveProbe({ fs, debugLogPath }) {
       gameDate: latestMarker?.gameDate || null,
       totalDays: latestDayMarker?.totalDays ?? null,
       characters: [...latestCharacterById.values()],
-      loadSessionId: loadMatches.length ? `session-${nodeCrypto.createHash("sha256").update(JSON.stringify([tail.fileIdentity, tail.startOffset + loadMatches.at(-1).index, loadMatches.at(-1)[1]])).digest("hex").slice(0, 32)}` : null
+      loadSessionId: identity.load ? `session-${nodeCrypto.createHash("sha256").update(JSON.stringify([tail.fileIdentity, identity.load.offset,
+        /^VOTC:LOAD_SESSION\/;\/([A-Za-z0-9_.-]{8,160})/.exec(identity.load.text)?.[1] || "unconfirmed"])).digest("hex").slice(0, 32)}` : null
     };
   } catch (_error) {
     return { connected: false, gameDate: null, totalDays: null, characters: [], loadSessionId: null };
@@ -272,6 +320,7 @@ class WorldlineService {
       supplementalRevision: 0
     };
     this.liveCache = { key: null, value: null };
+    this.liveIdentityCache = {};
     this.localizationResolver = new LocalizationWorkerClient({
       getCK3UserFolderPath: () => this.settingsRepository.getCK3UserFolderPath?.() || null,
       onUpdated: () => {
@@ -758,9 +807,9 @@ class WorldlineService {
     const debugLogPath = this.settingsRepository.getCK3DebugLogPath?.() || null;
     try {
       const stat = debugLogPath ? this.fs.statSync(debugLogPath) : null;
-      const key = stat ? `${debugLogPath}:${stat.size}:${stat.mtimeMs}` : String(debugLogPath || "unconfigured");
+      const key = stat ? `${debugLogPath}:${stat.dev}:${stat.ino}:${stat.birthtimeMs}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}` : String(debugLogPath || "unconfigured");
       if (this.liveCache.key === key && this.liveCache.value) return clone(this.liveCache.value);
-      const value = readLiveProbe({ fs: this.fs, debugLogPath });
+      const value = readLiveProbe({ fs: this.fs, debugLogPath, identityCache: this.liveIdentityCache });
       this.liveCache = { key, value };
       return clone(value);
     } catch (_error) {

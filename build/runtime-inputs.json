@@ -1,6 +1,8 @@
 {
   "schemaVersion": 1,
   "files": [
+    { "source": "main/prompts/glm-append-layout.js", "target": "out/main/prompts/glm-append-layout.js" },
+    { "source": "main/prompts/social-recognition-policy.js", "target": "out/main/prompts/social-recognition-policy.js" },
     { "source": "main/worldline/campaign-background.js", "target": "out/main/worldline/campaign-background.js" },
     { "source": "renderer/campaign-background-editor.js", "target": "out/renderer/campaign-background-editor.js" },
     {
@@ -418,6 +420,10 @@
     {
       "source": "main/game-data/legacy-historical-reference.js",
       "target": "out/main/game-data/legacy-historical-reference.js"
+    },
+    {
+      "source": "main/game-data/character-background.js",
+      "target": "out/main/game-data/character-background.js"
     },
     {
       "source": "main/game-data/log-parser.js",

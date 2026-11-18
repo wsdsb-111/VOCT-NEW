@@ -18,6 +18,10 @@
     IN_PERSON_OBSERVATION: "在场可见的外貌／身体白名单特质",
     PUBLIC_CLOSE_FAMILY: "已公开的父母子女／亲兄弟姐妹关系",
     PUBLIC_NICKNAME: "公开称号",
+    SOCIAL_RECOGNITION: "本次对话的领主／封臣／领地邻接关系",
+    SPECIAL_RELATION: "当前CK3确认的双方特殊关系",
+    SUPERNATURAL_RECOGNITION: "当面精确认出的种族身份",
+    SUPERNATURAL_SENSE: "当面感到超自然气息，具体种族未辨明",
     SOURCE_STALE: "对应的原始对话来源已变化"
   };
 
@@ -96,7 +100,11 @@
       GAME_DATA_KNOWN_SECRET: "gameDataKnownSecret",
       IN_PERSON_OBSERVATION: "inPersonObservation",
       PUBLIC_CLOSE_FAMILY: "publicCloseFamily",
-      PUBLIC_NICKNAME: "publicNickname"
+      PUBLIC_NICKNAME: "publicNickname",
+      SOCIAL_RECOGNITION: "socialRecognition",
+      SPECIAL_RELATION: "specialRelation",
+      SUPERNATURAL_RECOGNITION: "supernaturalRecognition",
+      SUPERNATURAL_SENSE: "supernaturalSense"
     };
     return localized(translate, `sources.${keys[fact.source] || "unknown"}`, SOURCE_LABELS[fact.source] || "来源未分类");
   }
@@ -104,8 +112,8 @@
   function renderFact(fact, onChange, disabled, translate) {
     const row = element("article", "character-knowledge-fact");
     const title = element("div", "character-knowledge-fact-heading");
-    const kindKey = fact.factType === "NAME" ? "name" : fact.factType === "NICKNAME" ? "nickname" : fact.factType === "TITLE" ? "title" : "trait";
-    const kindFallback = fact.factType === "NAME" ? "姓名" : fact.factType === "NICKNAME" ? "称号" : fact.factType === "TITLE" ? "头衔" : "特质";
+    const kindKey = fact.factType === "PERCEPTION" ? "perception" : fact.factType === "NAME" ? "name" : fact.factType === "NICKNAME" ? "nickname" : fact.factType === "TITLE" ? "title" : "trait";
+    const kindFallback = fact.factType === "PERCEPTION" ? "感知" : fact.factType === "NAME" ? "姓名" : fact.factType === "NICKNAME" ? "称号" : fact.factType === "TITLE" ? "头衔" : "特质";
     const kind = localized(translate, `kinds.${kindKey}`, kindFallback);
     const value = fact.value || localized(translate, "common.unknownName", "名称未载入");
     title.append(element("strong", "", localized(translate, "ui.factValue", `${kind}：${value}`, { kind, value })));

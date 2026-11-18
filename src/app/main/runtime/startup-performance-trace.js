@@ -31,6 +31,13 @@ const STEPS = new Set([
   "worldline.frozenPrefetch",
   "memoryRecovery.pending",
   "conversation.turn",
+  "conversation.prepare",
+  "action.evaluate",
+  "action.checks",
+  "action.prompt",
+  "action.request",
+  "action.execution",
+  "action.results",
   "memory.recall",
   "worldline.turnQuery",
   "prompt.build",
@@ -134,7 +141,7 @@ function phaseForStep(step, requestedPhase) {
   if (step === "app.launch" || step === "settings.load" || step === "prompt.seed" || step === "runqueue.recovery" || step === "worldline.start" || step === "letterReader.start" || step === "pendingReceipt.recovery" || step === "renderer.firstReady") return "APP_START";
   if (step === "ck3.gameLoad" || step === "bridge.date" || step === "runfile.consumer" || step.startsWith("background.")) return "CK3_LOAD";
   if (step === "conversation.open" || step === "gameData.logParse" || step === "summary.load" || step === "knowledge.disclosureSnapshot" || step === "knowledge.directObservation" || step === "officialRecollection.sync" || step === "worldline.frozenPrefetch" || step === "memoryRecovery.pending") return "CONVERSATION_OPEN";
-  if (step === "conversation.turn" || step === "memory.recall" || step === "worldline.turnQuery" || step === "prompt.build" || step === "tokenEstimate" || step === "serialization" || step.startsWith("provider.") || step.startsWith("renderer.") || step === "postTurn.work") return "TURN";
+  if (step === "conversation.turn" || step === "conversation.prepare" || step.startsWith("action.") || step === "memory.recall" || step === "worldline.turnQuery" || step === "prompt.build" || step === "tokenEstimate" || step === "serialization" || step.startsWith("provider.") || step.startsWith("renderer.") || step === "postTurn.work") return "TURN";
   return "IDLE";
 }
 

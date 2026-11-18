@@ -20,7 +20,7 @@ const KNOWN_SECRET_TRAITS = Object.freeze({
   secret_adulterer: "adulterer"
 });
 
-const UNCERTAIN = /[?？]|吗|么|可否|能否|是不是|是否|不是|并非|并不|未必|没有|从未|不曾|未曾|不再是|不属实|否认|听说|据说|传闻|传言|谣言|相传|声称|自称|据传|可能|也许|或许|似乎|疑似|假如|如果|要是|倘若|将来|未来|明年|后年|终将|迟早|尚未|未证实|曾经|曾是|曾为|曾任|当年|昔日|往日|过去|以前|原先|玩笑|虚构|误传|我猜|猜测|我想|以为|怀疑|认为|觉得|心想|暗想|心里|内心|心中|暗自|旁白|叙述|描写|\b(?:not|never|rumou?r|heard|alleged|claims?|said|might|may|perhaps|possibly|suppose|think|thought|thinking|believe|seem|if|whether|unless|will|would|future|intends?|intention|joking|fiction|unconfirmed|narration|aside)\b/i;
+const UNCERTAIN = /[?？]|吗|么|可否|能否|是不是|是否|不是|并非|并不|未必|没有|从未|不曾|未曾|不再是|不属实|否认|听说|据说|传闻|传言|谣言|相传|声称|自称|据传|可能|也许|或许|似乎|疑似|假如|如果|要是|倘若|将来|未来|明年|后年|终将|迟早|尚未|未证实|曾经|曾是|曾为|曾任|当年|昔日|往日|过去|以前|原先|玩笑|虚构|误传|只是故事|故事里的|故事中|假的|虚假|谎言|骗你|我猜|猜测|我想|以为|怀疑|认为|觉得|心想|暗想|心里|内心|心中|暗自|旁白|叙述|描写|\b(?:not|never|rumou?r|heard|alleged|claims?|said|might|may|perhaps|possibly|suppose|think|thought|thinking|believe|seem|if|whether|unless|will|would|future|intends?|intention|joking|fiction|unconfirmed|narration|aside)\b/i;
 const DISCOURSE = /说|告诉|提到|声称|认为|觉得|怀疑|听说|据说|传闻|引用|否认|谣传/;
 const FUTURE_MODAL = /(?:即将|将要|将会|将是|将为|将成为|将任|将担任|会成为|会是|会任|会担任|马上要|快要|准备|打算|计划|想要|要成为|\b(?:will|intend(?:s)?\s+to|plan(?:s)?\s+to|be\s+going\s+to|about\s+to)\b)/iu;
 const FUTURE_TIME = /(?:明天|明日|后天|下月|下个月|来月|来年|以后|之后|届时|未来|将来)/iu;
@@ -32,7 +32,7 @@ const SELF_LABELED_FACT_HEAD = /^(?:的)?(?:头衔|身份|职位|官职|特质|�
 const ENGLISH_SELF_ASSERTION_HEAD = /^(?:i\s*(?:am|'m)|myself\s+(?:am|is|are|have|has|possess(?:es)?|born|very)\b)/i;
 const RELATIONAL_FACT_SUFFIX = /^\s*(?:(?:的|之|地)\s*[\p{L}\p{N}_]|['’]s\s*[\p{L}\p{N}_])/iu;
 const ACTION_NARRATION = /看着|看向|望着|注视|凝视|瞥向|转向|转过身|走向|走进|走出|来到|离开|行礼|鞠躬|拔出|拿起|举起|微笑|冷笑|皱眉|叹息|沉默|正在|开始|继续|thought|thinking|looked|watched|walked|turned|bowed|smiled|laughed|sighed|narration|stage direction/i;
-const INNER_THOUGHT_OR_REPORT = /心想|心道|心知|心里|内心|暗自|想着|想起|想到|思忖|思量|琢磨|以为|觉得|认为|怀疑|听说|听闻|耳闻|闻说|听到|据说|传闻|传言|谣言|相传|旁白|叙述|描写|有人说|别人说|他人说|他说|她说|他们说|某人说|被告知|转述|引用|thought|thinking|believed|thought to|heard|rumou?r|report|according to|someone said|he said|she said/iu;
+const INNER_THOUGHT_OR_REPORT = /心想|心道|心知|心里|内心|暗自|想着|想起|想到|思忖|思量|琢磨|以为|觉得|认为|怀疑|听说|听闻|耳闻|闻说|听到|据说|传闻|传言|谣言|相传|旁白|叙述|描写|有人说|别人说|他人说|他告诉|她告诉|他告知|她告知|他说|她说|他们说|某人说|被告知|转述|引用|thought|thinking|believed|thought to|heard|rumou?r|report|according to|someone said|he said|she said/iu;
 const WRITTEN_QUOTE = /写下|写道|写着|书写|记下|刻下|刻有|题写|纸上|纸条|字条|碑文|字迹|牌匾|\b(?:wrote|written|writes?|inscribed|inscription)\b/iu;
 const REPORTED_SPEECH = /听[^。.!！?？;；，,\r\n]{0,24}(?:说(?:道|过)?|曰|道|表示|宣称|转述|闻|到)|耳闻|闻说/u;
 const QUOTE_CLOSE = new Map([["“", "”"], ["‘", "’"], ["「", "」"], ["『", "』"], ['"', '"']]);
@@ -245,7 +245,7 @@ function matchedFacts(text, facts) {
   return new Set(longest.filter(row => spans.get(`${row.start}:${row.end}`)?.size === 1).map(row => row.factId));
 }
 
-function assertedBetween(text, targetAliases, factAliases, otherTargetAliases = []) {
+function assertedBetween(text, targetAliases, factAliases, otherTargetAliases = [], bareTrait = false) {
   for (const targetAlias of targetAliases) for (const target of occurrences(text, targetAlias)) {
     for (const factAlias of factAliases) for (const fact of occurrences(text, factAlias)) {
       if (fact.start < target.end || fact.start - target.end > 40) continue;
@@ -255,10 +255,70 @@ function assertedBetween(text, targetAliases, factAliases, otherTargetAliases = 
       if (otherTargetAliases.some(alias => occurrences(between, alias).length) || DISCOURSE.test(between)
         || /不|未|没|非|无/.test(between)) continue;
       if (FUTURE_MODAL.test(text) || FUTURE_TIME.test(text)) continue;
-      if (PREDICATES.test(between)) return true;
+      if (PREDICATES.test(between) || bareTrait && !between.trim()) return true;
     }
   }
   return false;
+}
+
+function traitMentionAssertions(sentence, profiles, speakerId, recipientIds, presentIds, addresseeId = null) {
+  if (INNER_THOUGHT_OR_REPORT.test(sentence) || WRITTEN_QUOTE.test(sentence) || ACTION_NARRATION.test(sentence)
+    || FUTURE_MODAL.test(sentence) || FUTURE_TIME.test(sentence)
+    || /如果|假如|要是|倘若|否认|假的|虚假|谎言|骗你|只是故事|故事里的|故事中|编出来|\b(?:if|unless|fiction|false|lie|joking)\b/iu.test(sentence)) return [];
+  const result = [];
+  const others = [...new Set(presentIds)].filter(id => id !== speakerId && profiles.has(id));
+  const recipients = [...new Set(recipientIds)].filter(id => id !== speakerId && profiles.has(id));
+  let namedSubject = null;
+  let previousSubject = null;
+  for (const clause of sentence.split(/[,，、]/u).map(text => text.trim()).filter(Boolean)) {
+    if (UNCERTAIN.test(clause) || DISCOURSE.test(clause)) { previousSubject = null; continue; }
+    const names = [...profiles].flatMap(([id, profile]) => identityAliases(profile.character)
+      .filter(alias => clause.startsWith(alias)).map(alias => ({ id, alias })));
+    const longest = Math.max(0, ...names.map(row => row.alias.length));
+    const named = names.filter(row => row.alias.length === longest);
+    const namedIds = [...new Set(named.map(row => row.id))];
+    let targetId = namedIds.length === 1 ? namedIds[0] : null;
+    let alias = targetId ? named.find(row => row.id === targetId).alias : null;
+    const pronoun = clause.match(/^(我|吾|朕|寡人|孤|本王|在下|鄙人|本人|你|您|他|她)(?!们)|^(i|myself|you|he|she)\b/iu)?.[0];
+    if (!targetId && pronoun) {
+      alias = pronoun;
+      if (SPEAKER_SELF_ALIASES.includes(pronoun)) targetId = speakerId;
+      else if (["你", "您", "you"].includes(pronoun)) {
+        targetId = addresseeId && profiles.has(addresseeId) ? addresseeId
+          : namedSubject && namedSubject !== speakerId ? namedSubject
+            : recipients.length === 1 ? recipients[0] : others.length === 1 ? others[0] : null;
+      } else {
+        const gender = person => {
+          const value = String(person?.gender || person?.sheHe || "").toLowerCase();
+          return ["male", "he", "他"].includes(value) ? "male" : ["female", "she", "她"].includes(value) ? "female" : null;
+        };
+        const expected = pronoun === "她" || pronoun === "she" ? "female" : "male";
+        const matching = others.filter(id => gender(profiles.get(id).character) === expected);
+        targetId = namedSubject || (others.length === 1 ? others[0]
+          : others.every(id => gender(profiles.get(id).character)) && matching.length === 1 ? matching[0] : null);
+      }
+    }
+    let assertionText = clause;
+    const bareTrait = previousSubject && profiles.get(previousSubject).facts.some(fact => fact.factType === "TRAIT"
+      && aliasesForFact(fact).some(alias => clause.startsWith(alias)));
+    if (!targetId && !pronoun && previousSubject && (SELF_ATTRIBUTE_HEAD.test(clause) || bareTrait)) {
+      targetId = previousSubject;
+      alias = "本人";
+      assertionText = alias + clause;
+    }
+    if (!targetId || !alias) { if (pronoun || namedIds.length > 1) previousSubject = null; continue; }
+    previousSubject = targetId;
+    if (namedIds.length === 1) namedSubject = targetId;
+    const remainder = clause.slice(alias.length);
+    if (/^(?:和|与|及|跟|同)|^(?:的)?(?:父亲|母亲|儿子|女儿|丈夫|妻子|兄弟|姐妹|朋友|部下|族人|家人)/u.test(remainder)) continue;
+    const profile = profiles.get(targetId);
+    const traits = profile.facts.filter(fact => fact.factType === "TRAIT");
+    const matches = matchedFacts(clause, traits);
+    const otherNames = [...profiles].flatMap(([id, row]) => id === targetId ? [] : identityAliases(row.character));
+    for (const fact of traits) if (matches.has(fact.factType + ":" + fact.factKey)
+      && assertedBetween(assertionText, [alias], aliasesForFact(fact), otherNames, true)) result.push({ targetId, fact });
+  }
+  return result;
 }
 
 function explicitSelfAssertion(text) {
@@ -445,7 +505,8 @@ function splitSentences(text) {
   const pieces = text.split(/([。.!！?？;；\r\n]+)/u);
   const sentences = [];
   for (let index = 0; index < pieces.length; index += 2) {
-    const sentence = normalizedText(`${pieces[index] || ""}${pieces[index + 1] || ""}`);
+    const sentence = normalizedText(`${pieces[index] || ""}${pieces[index + 1] || ""}`)
+      .replace(/^(?:(?:我|吾|朕|寡人|本人)(?:现在|郑重)?(?:告诉|告知)你(?:们)?|告诉你(?:们)?)(?:吧)?[，,:：]\s*/u, "");
     if (sentence) sentences.push(sentence);
   }
   return sentences;
@@ -453,6 +514,8 @@ function splitSentences(text) {
 
 function clauseAliasResolution(clause, profiles, speakerId) {
   const normalized = normalizedText(clause);
+  const self = normalized.match(SELF_PRONOUN_PREFIX);
+  if (self && /^(?:对|说|道|曰|表示|宣称|问|答|回答|回应|喊|低声|轻声|悄声|小声)/u.test(normalized.slice(self[0].length))) return { kind: "self" };
   const matches = [];
   for (const [id, profile] of profiles) for (const alias of identityAliases(profile.character)) {
     if (normalized.startsWith(alias)) matches.push({ id, alias });
@@ -469,7 +532,7 @@ function clauseAliasResolution(clause, profiles, speakerId) {
 }
 
 function recipientDirectedSpeechClause(clause, profiles) {
-  const normalized = normalizedText(clause).replace(/[：:,，]+$/u, "").trim();
+  const normalized = normalizedText(clause).replace(/[：:,，]+$/u, "").trim().replace(/^(?:我|吾|朕|寡人|本人)\s*(?=对)/u, "");
   const prefix = normalized.match(/^(?:(?:只|仅)\s*)?对/u);
   if (!prefix) return null;
   const remainder = normalized.slice(prefix[0].length);
@@ -510,7 +573,7 @@ function quoteContextIsSpeakerSpeech(text, start, end, profiles, speakerId, audi
     const recipientIds = [...new Set(recipientClauses.map(row => row.recipientRuntimeId))];
     if (recipientIds.length !== 1 || !audienceIds.includes(recipientIds[0])) return false;
     const exclusive = recipientClauses.some(row => row.exclusive);
-    return { accepted: true, recipientIds: exclusive ? recipientIds : audienceIds };
+    return { accepted: true, recipientIds: exclusive ? recipientIds : audienceIds, addresseeId: recipientIds[0] };
   }
   if (resolutions.some(row => row.kind === "self")) return { accepted: true, recipientIds: audienceIds };
   if (clauses.some(clause => ATTRIBUTION_WORDS.test(clause))) return false;
@@ -533,7 +596,7 @@ function spokenTexts(text, profiles, speakerId, audienceIds) {
           const end = index;
           if (!active.nested && text.slice(start, end).trim()) {
             const context = quoteContextIsSpeakerSpeech(text, active.start + 1, end, profiles, speakerId, audienceIds);
-            if (context?.accepted) spans.push({ text: text.slice(start, end), recipientIds: context.recipientIds });
+            if (context?.accepted) spans.push({ text: text.slice(start, end), recipientIds: context.recipientIds, addresseeId: context.addresseeId });
           }
         }
         continue;
@@ -556,10 +619,21 @@ function spokenTexts(text, profiles, speakerId, audienceIds) {
   if (stack.length) return [];
   if (sawQuote) return spans;
   if (ACTION_NARRATION.test(text) || WRITTEN_QUOTE.test(text)) return [];
+  const boundary = text.search(/[,，:：]/u);
+  if (boundary >= 0) {
+    const prefix = text.slice(0, boundary);
+    const direction = recipientDirectedSpeechClause(prefix, profiles);
+    if (direction) {
+      if (!audienceIds.includes(direction.recipientRuntimeId)) return [];
+      return [{ text: text.slice(boundary + 1), addresseeId: direction.recipientRuntimeId,
+        recipientIds: direction.exclusive ? [direction.recipientRuntimeId] : audienceIds }];
+    }
+    if (ATTRIBUTION_WORDS.test(prefix) && clauseAliasResolution(prefix, profiles, speakerId).kind === "other") return [];
+  }
   return [{ text, recipientIds: audienceIds }];
 }
 
-function extractCharacterDisclosures({ gameData, speakerId: speakerValue, text, audienceIds = [], candidateTargetIds = [],
+function extractCharacterDisclosures({ gameData, speakerId: speakerValue, text, audienceIds = [], traitAudienceIds = audienceIds, candidateTargetIds = [],
   knownFacts = [], source } = {}) {
   const speakerId = runtimeId(speakerValue);
   const identity = sourceIdentity(source, gameData);
@@ -576,15 +650,18 @@ function extractCharacterDisclosures({ gameData, speakerId: speakerValue, text, 
   if (!profiles.has(speakerId)) return { disclosures: [] };
   const audience = [...new Set((Array.isArray(audienceIds) ? audienceIds : []).map(runtimeId)
     .filter(id => id !== null && id !== speakerId))].sort((left, right) => left - right);
-  if (!audience.length) return { disclosures: [] };
+  const traitAudience = [...new Set((Array.isArray(traitAudienceIds) ? traitAudienceIds : []).map(runtimeId)
+    .filter(id => id !== null))].sort((left, right) => left - right);
+  if (!audience.length && !traitAudience.length) return { disclosures: [] };
 
   const frozenAudience = [...new Set((Array.isArray(audienceIds) ? audienceIds : []).map(runtimeId)
     .filter(id => id !== null))].sort((left, right) => left - right);
   const collected = new Map();
   const record = (targetId, candidate, recipientIds) => {
-    if (targetId !== speakerId && !knownFactMatches(knownFacts, speakerId, targetId, candidate)
+    if (candidate.factType !== "TRAIT" && targetId !== speakerId && !knownFactMatches(knownFacts, speakerId, targetId, candidate)
       && !knownSecretMatches(speakersCharacter, targetId, candidate)) return;
-    for (const ownerRuntimeId of recipientIds.filter(id => audience.includes(id))) {
+    const recipients = candidate.factType === "TRAIT" ? traitAudience : recipientIds.filter(id => audience.includes(id));
+    for (const ownerRuntimeId of recipients) {
       if (ownerRuntimeId === targetId) continue;
       const row = { ownerRuntimeId, targetRuntimeId: targetId, factType: candidate.factType,
         factKey: candidate.factKey, value: candidate.value, aliases: [...candidate.aliases],
@@ -599,6 +676,8 @@ function extractCharacterDisclosures({ gameData, speakerId: speakerValue, text, 
     for (const sentence of splitSentences(spokenText.text)) {
       for (const assertion of explicitIdentityIntroductionAssertions(sentence, profiles, speakerId))
         record(assertion.targetId, assertion.fact, spokenText.recipientIds);
+      for (const assertion of traitMentionAssertions(sentence, profiles, speakerId, spokenText.recipientIds, traitAudience, spokenText.addresseeId))
+        record(assertion.targetId, assertion.fact, traitAudience);
       if (UNCERTAIN.test(sentence) || DISCOURSE.test(sentence) || INNER_THOUGHT_OR_REPORT.test(sentence)
         || WRITTEN_QUOTE.test(sentence) || ACTION_NARRATION.test(sentence)) continue;
 
@@ -613,7 +692,7 @@ function extractCharacterDisclosures({ gameData, speakerId: speakerValue, text, 
         if (!profile) continue;
         if (targetId === speakerId && !explicitSelfAssertion(sentence)) continue;
         for (const candidate of profile.facts) {
-          if (["NAME", "NICKNAME"].includes(candidate.factType)
+          if (["NAME", "NICKNAME", "TRAIT"].includes(candidate.factType)
             || !matchedFactKeysById.get(targetId)?.has(`${candidate.factType}:${candidate.factKey}`)) continue;
           if (!assertedBetween(sentence, [...aliases], aliasesForFact(candidate), allOtherTargetAliases)) continue;
           record(targetId, candidate, spokenText.recipientIds);

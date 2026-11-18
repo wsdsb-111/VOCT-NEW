@@ -86,6 +86,63 @@ const hiddenAliases = [
   ["journaller", "Journaller", "写日记者"], ["confider", "Confider", "倾诉者"]
 ];
 
+// Canonical identity IDs, never localized labels or personality categories.
+// PoD splats (excluding mortal/chargen) and Wyvern identity traits are data
+// vocabulary only; no compatibility repository is imported or built here.
+const SUPERNATURAL_GROUPS = {
+  BLOOD: "vampire ghoul revenant dhampir turnedhunter",
+  BEAST: "werewolf ajaba ananasi apis bastet camazotz corax grondr gurahl kitsune mokole nagah nuwisha ratkin rokea entomos abomination kinfolk",
+  LEGEND: "fae changeling kinain kueijin dhampyr mummy asekh_sen",
+  HELL: "demon laham nephilim wraith",
+  SPIRIT: "spirit laibon_spirit fomori drone gorgon kami",
+  SUPERNATURAL: "automaton alien zombu mindless_clone wight the_hollow pod_asakku_soul_infection pod_asakku_asakku pod_asakku_iryi_ascendant pod_asakku_elioud pod_asakku_lich mm_asc_dragon_body myv_wyvern myv_wyvern_tamed myv_wyvern_legendary mm_royal_dragon_king mm_royal_complete mm_royal_white_empress mm_royal_black_emperor mm_royal_fire_king mm_royal_earth_king mm_royal_sea_king mm_royal_sky_king",
+  HUNTER: "mage supehunter shih psychic sorcerer theurgist rune_wise"
+};
+const groupByIdentity = new Map(Object.entries(SUPERNATURAL_GROUPS).flatMap(([group, ids]) => ids.split(" ").map(id => [id, group])));
+const SPECIES_NAMES = {
+  vampire: "吸血鬼", ghoul: "血仆", revenant: "遗传血仆", dhampir: "半吸血鬼", turnedhunter: "被转化的猎人",
+  mage: "法师", supehunter: "超自然猎人", shih: "士", psychic: "超能力者", sorcerer: "术士", theurgist: "神通术师", rune_wise: "符文之智",
+  fae: "妖精", changeling: "换生灵", kinain: "妖精亲族", kueijin: "鬼人", dhampyr: "半鬼人", mummy: "木乃伊", asekh_sen: "阿塞赫子民",
+  demon: "恶魔", laham: "拉罕", nephilim: "拿非利人", wraith: "死灵", spirit: "灵", laibon_spirit: "莱本之灵",
+  fomori: "堕妖", drone: "机蜂", gorgon: "戈尔贡", kami: "社神", automaton: "自动人形", alien: "异类", zombu: "还魂尸",
+  mindless_clone: "复制体", wight: "尸妖", the_hollow: "虚空", pod_asakku_soul_infection: "灵魂感染", pod_asakku_asakku: "阿萨克",
+  pod_asakku_iryi_ascendant: "Iryi Ascendant", pod_asakku_elioud: "以利乌德", pod_asakku_lich: "巫妖",
+  werewolf: "狼人", ajaba: "阿迦巴", ananasi: "阿南西", apis: "阿皮斯", bastet: "芭丝特", camazotz: "卡玛佐兹", corax: "科拉克斯",
+  grondr: "格隆迪尔", gurahl: "古拉赫勒", kitsune: "狐妖", mokole: "莫科莱", nagah: "娜迦", nuwisha: "努维狭", ratkin: "鼠族",
+  rokea: "罗基阿", entomos: "虫族", abomination: "恶煞", kinfolk: "兽嫡", mm_asc_dragon_body: "龙躯",
+  myv_wyvern: "纯血龙族", myv_wyvern_tamed: "纯血龙族", myv_wyvern_legendary: "纯血龙族", mm_royal_dragon_king: "龙王",
+  mm_royal_complete: "龙王", mm_royal_white_empress: "白龙女皇", mm_royal_black_emperor: "黑龙皇帝", mm_royal_fire_king: "火龙王",
+  mm_royal_earth_king: "地龙王", mm_royal_sea_king: "海龙王", mm_royal_sky_king: "天龙王"
+};
+// Transformed identities take precedence over retained base traits. Caste and
+// clan details never override race, grant sensing, or become automatic facts.
+const IDENTITY_OVERRIDES = ("abomination turnedhunter fomori drone gorgon kami laibon_spirit automaton alien zombu mindless_clone wight the_hollow pod_asakku_soul_infection pod_asakku_asakku pod_asakku_iryi_ascendant pod_asakku_elioud pod_asakku_lich").split(" ");
+const SUPERNATURAL_DETAILS = new Set(("assamite baali brujah cacophony caitiff cappadocian gangrel gargoyle giovanni harbingersofskulls hecata kiasyd impundulu lamia lasombra maeghar malkavian nagaraja nosferatu oldclantzimisce ravnos samedi salubri setite toreador tremere truebrujah tzimisce ventrue custom_bloodline chibo monomi kishu kizoku bushi kuntilanak sangun anh banpaia risen spectre ferryman shadow shemsuheru banemummy cabiri custom_mummy_dynasty wutian wukuei sidhe boggan clurichaun eshu ghilledhu nocker piskey pooka troll redcap riverhag satyr sluagh swanmaiden wichtel selkie ifrit lilin qareen shaytan qadistu biloko djedi kuino obambo okubili chuihyu chujung fuhsi hanumen hengpo houchi komuko nyan suijen tanuki glome kubera ondine paroseme solimond mannikin eshieho mishaho bahaesh ishihambi iqhawe umakhi umlimi umbulali umhloli injiki kstyw salubri_healer salubri_warrior salubri_watcher").split(" "));
+
+function isSupernaturalIdentity(trait) {
+  return groupByIdentity.has(normalizeTraitKey(trait));
+}
+
+function getSupernaturalGroup(traits) {
+  const ids = new Set((traits || []).map(normalizeTraitKey));
+  const override = IDENTITY_OVERRIDES.find(id => ids.has(id));
+  if (override) return groupByIdentity.get(override);
+  // Native splats precede supplemental human powers, independent of trait order.
+  return Object.keys(SUPERNATURAL_GROUPS).find(group => [...ids].some(id => groupByIdentity.get(id) === group)) || null;
+}
+
+function getSupernaturalSpecies(traits) {
+  const ids = [...new Set((traits || []).map(normalizeTraitKey))];
+  const override = IDENTITY_OVERRIDES.find(id => ids.includes(id));
+  const group = getSupernaturalGroup(ids);
+  return override ? [override] : ids.filter(id => groupByIdentity.get(id) === group);
+}
+
+function getSensedSpeciesTrait(trait) {
+  const traitId = normalizeTraitKey(trait);
+  return { traitId, name: SPECIES_NAMES[traitId], desc: "" };
+}
+
 const normalizeAlias = value => String(value ?? "").normalize("NFKC").trim().toLowerCase().replace(/^trait[_\s-]/, "").replace(/[\s_-]+/g, "");
 const normalizeCanonicalId = value => String(value ?? "").normalize("NFKC").trim().toLowerCase().replace(/^trait[_\s-]/, "");
 const aliases = new Map();
@@ -135,6 +192,7 @@ function resolveTraitVisibility(trait) {
   const identity = rawIdentity(trait);
   const identityKey = identity === undefined || identity === null ? "" : normalizeCanonicalId(identity);
   const canonicalKey = normalizeTraitKey(trait);
+  if (isSupernaturalIdentity(trait) || SUPERNATURAL_DETAILS.has(canonicalKey)) return { status: "NON_OBSERVABLE", canonicalKey, reason: "SUPERNATURAL_IDENTITY" };
   const identityAlias = identityKey && (canonicalAliases.get(identityKey) || aliases.get(normalizeAlias(identity)));
   if (identityAlias) {
     const key = identityAlias;
@@ -159,4 +217,4 @@ function resolveTraitVisibility(trait) {
   return { status: "UNKNOWN", canonicalKey, reason: "UNRESOLVED" };
 }
 
-module.exports = { NON_OBSERVABLE_TO_OTHERS, OBSERVABLE_TO_OTHERS, normalizeTraitKey, getTraitAliases, resolveTraitVisibility };
+module.exports = { isSupernaturalIdentity, getSupernaturalGroup, getSupernaturalSpecies, getSensedSpeciesTrait, NON_OBSERVABLE_TO_OTHERS, OBSERVABLE_TO_OTHERS, normalizeTraitKey, getTraitAliases, resolveTraitVisibility };

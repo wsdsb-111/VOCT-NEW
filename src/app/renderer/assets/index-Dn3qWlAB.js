@@ -60,7 +60,7 @@ function V95UiSettings() {
     error && jsxRuntimeExports.jsx("p", { role: "status", children: error })
   ] });
 }
-const VOTC_FEATURE_VERSION = "V9.7.1";
+const VOTC_FEATURE_VERSION = "V9.7.3";
 const VOTC_WORKSHOP_MOD_VERSION = "2.0.5";
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -16701,7 +16701,8 @@ const useConversationEntries = () => {
               content: entry.content,
               datetime: new Date(entry.datetime),
               // Ensure Date object
-              isStreaming: entry.isStreaming
+              isStreaming: entry.isStreaming,
+              streamStatus: entry.streamStatus
             };
           } else if (entry.type === "action-feedback") {
             return {
@@ -16757,7 +16758,8 @@ const useConversationEntries = () => {
             content: entry.content,
             datetime: new Date(entry.datetime),
             // Ensure Date object
-            isStreaming: entry.isStreaming
+            isStreaming: entry.isStreaming,
+            streamStatus: entry.streamStatus
           };
         } else if (entry.type === "action-feedback") {
           return {
