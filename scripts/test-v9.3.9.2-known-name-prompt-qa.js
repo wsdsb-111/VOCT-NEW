@@ -141,10 +141,9 @@ function buildPrompt(service, memoryContext, layout) {
 }
 
 function knownNameBlock(prompt) {
-  const gameFacts = prompt.blocks.find(entry => entry.block?.id === "responder-game-facts")?.content || "";
   const heading = "=== 本角色已获知的姓名 ===";
-  if (!gameFacts.includes(heading)) return "";
-  return gameFacts.slice(gameFacts.indexOf(heading));
+  return prompt.blocks.filter(entry => ["responder-disclosures-current", "responder-disclosures-frozen", "responder-game-facts"]
+    .includes(entry.block?.id) && entry.content?.includes(heading)).map(entry => entry.content).join("\n");
 }
 
 function assertPublicNameBoundAndPrivateSourcesExcluded(prompt, layout) {
@@ -157,8 +156,10 @@ function assertPublicNameBoundAndPrivateSourcesExcluded(prompt, layout) {
   for (const name of ["私语姓名丁", "迟到姓名己", "未披露姓名庚"]) {
     assert(!nameBlock.includes(name), `${layout}: ${name} is absent from the known-name block`);
   }
-  assert(prompt.messages.some(message => message.role === "system" && message.content === prompt.blocks.find(entry =>
-    entry.block?.id === "responder-game-facts")?.content), `${layout}: this block is present in the final outbound messages`);
+  const current = prompt.blocks.find(entry => entry.block?.id === "responder-disclosures-current");
+  assert(current?.content.includes("公开姓名丙"), `${layout}: this conversation disclosure remains in the dynamic block`);
+  assert(prompt.messages.some(message => message.role === "system" && message.content === current.content),
+    `${layout}: this block is present in the final outbound messages`);
 }
 
 try {
