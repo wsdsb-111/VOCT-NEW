@@ -115,7 +115,11 @@ try {
       contextVersion: "fixture"
     });
     const featureVersion = JSON.parse(source.match(/const VOTC_FEATURE_VERSION = ("[^"]+");/)[1]);
-    const render = new Function("reactExports", "jsxRuntimeExports", "useTranslation", "useV95ReadBoundary", "V95PageVisuals", "v95Runtime", "window", "navigator", "WorldMemoryEditor", "VOTC_FEATURE_VERSION", `${component}; return WorldlineView;`)(react, jsx, () => ({i18n:{language:"zh-CN"}}), useV95ReadBoundary, { Icon: () => null, StatusBadge: () => null }, { t: key => key }, { VOTCWorldlinePlayerPresentation: presentation }, {}, () => null, featureVersion);
+    const render = new Function("reactExports", "jsxRuntimeExports", "useTranslation", "useV95ReadBoundary",
+      "V95PageVisuals", "v95Runtime", "window", "navigator", "WorldMemoryEditor", "CampaignBackgroundEditor", "VOTC_FEATURE_VERSION",
+      `${component}; return WorldlineView;`)(react, jsx, () => ({ i18n: { language: "zh-CN" } }), useV95ReadBoundary,
+      { Icon: () => null, StatusBadge: () => null }, { t: key => key }, { VOTCWorldlinePlayerPresentation: presentation },
+      {}, () => null, () => null, featureVersion);
     render();
     assert.ok(nodes < 1500, `created ${nodes} nodes`);
   });
