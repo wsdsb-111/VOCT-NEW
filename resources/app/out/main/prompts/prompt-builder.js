@@ -1272,6 +1272,13 @@ ${nameAccessRule}
       if (v813Layout) insertCacheV2Frozen();
       const v813FrozenBlockCount = v813Layout ? blocksWithTokens.length : 0;
       appendDisclosures("current", "Names and Traits Disclosed in This Conversation", PROMPT_LIFECYCLE.DYNAMIC);
+      if (memoryMode !== "exclude" && memoryContext?.turnTimingText) {
+        const content = memoryContext.turnTimingText;
+        llmMessages.push({ role: "system", content });
+        blocksWithTokens.push({ block: { id: "memory-roleplay-turn-timing", type: "memory_roleplay_turn_timing",
+          label: "Current Turn Game Time", role: "system", stable: false, lifecycle: PROMPT_LIFECYCLE.DYNAMIC },
+          content, tokens: TokenCounter.estimateTokens(content) });
+      }
       for (const block of blocks) {
         if (!block.enabled) continue;
         if (memoryMode === "exclude" && (String(block.id || "").startsWith("memory-")

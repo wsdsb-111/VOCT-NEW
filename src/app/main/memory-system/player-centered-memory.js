@@ -11,6 +11,7 @@ const { getCachedKinshipGraph } = require("../worldline/kinship-graph-cache");
 const { resolveAnchoredRelationMention } = require("../worldline/anchored-relation-resolver");
 const { buildDualTemporalIndex, selectDualTemporalExtras } = require("./summary-date-index");
 const turnRecall = require("./turn-recall");
+const { buildTurnTiming } = require("./roleplay-turn-timing");
 const { hasOfficialRecollectionContent } = require("./official-recollection-provider");
 const FROZEN_ALLOCATION = Object.freeze({ ledgerMinimumShare: 0.3, officialMinimumShare: 0.2,
   stableMaximumTokens: 256, dynamicReserveShare: 0.15, dynamicMaximumTokens: 512 });
@@ -586,6 +587,11 @@ function retrievePlayerCenteredMemory(engine, options) {
     }
     throw new Error("player_memory_formatted_budget_exceeded");
   }
+  const timing = buildTurnTiming({ trustedPlayerTurn: options.trustedPlayerTurn, currentGameDate, ownerId, playerId,
+    direct: baseline.direct, items: baseline.items });
+  const timedTokens = timing ? countMemoryBlocks([...Object.values(baseline.texts), dynamic.text, timing], countTokens) : 0;
+  const turnTimingText = timing && timedTokens <= budget ? timing : null;
+  if (turnTimingText) metrics.finalInjectedTokens = timedTokens;
   engine.trace.record("player_memory_retrieval", { responderId: ownerId, playerAnchorId: playerId,
     conversationIdHash: digest(conversationId), campaignHash: digest(campaignToken),
     responderIdHash: digest(ownerId), playerAnchorIdHash: digest(playerId), memoryBudgetPlan: options.memoryBudgetPlan,
@@ -628,6 +634,7 @@ function retrievePlayerCenteredMemory(engine, options) {
         .map(entry => dynamicFreeze.projectPlanSource(entry, { ownerId, campaignToken, conversationId, playerId }))
     } : {}),
     frozenDynamicText, temporalExtraText: (frozenPolicy ? dynamic.nonSummaryText : dynamic.text) || null, mentionedSnapshotText: null, mentionedText: null, entityTargetText: null,
+    ...(turnTimingText ? { turnTimingText } : {}),
     topicPatchText: null, relevantText: null, tokenBudget: budget, selectedTokens: metrics.finalInjectedTokens,
     routing: { ownerId, playerAnchorId: playerId, directCounterpartIds: [playerId], activeParticipantIds: options.activeParticipantIds || [],
       budgets: { fixed: baseline.formattedTokens, extra: Math.max(0, budget - baseline.formattedTokens) } } };

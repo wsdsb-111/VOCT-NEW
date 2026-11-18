@@ -674,6 +674,10 @@
       "target": "out/main/memory-system/temporal-anchor-extractor.js"
     },
     {
+      "source": "main/memory-system/roleplay-turn-timing.js",
+      "target": "out/main/memory-system/roleplay-turn-timing.js"
+    },
+    {
       "source": "main/memory-system/third-party-evidence.js",
       "target": "out/main/memory-system/third-party-evidence.js"
     },

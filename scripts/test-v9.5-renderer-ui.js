@@ -93,7 +93,7 @@ function mockPreloadSource({ presentationEnabled = false } = {}) {
         "setRecallSettings", "setAutosavePath", "validateAutosavePath", "selectAutosaveFile",
         "rebuildCheckpoint", "temporalArchive", "mutateCanon", "migrateLegacySupplemental",
         "confirmCanonBranch", "forkCanonBranch", "resumeCanonBranch", "createSupplemental",
-        "updateSupplemental", "deleteSupplemental", "testCanonRecall"
+        "updateSupplemental", "deleteSupplemental", "testCanonRecall", "saveBackgroundSetting"
       ]),
       characterKnowledgeAPI: new Set(["setManualStatus"])
     };
@@ -201,6 +201,10 @@ function mockPreloadSource({ presentationEnabled = false } = {}) {
     });
     const worldlineAPI = api("worldlineAPI", {
       getSettings: async () => { read("worldlineAPI", "getSettings"); return { settings: { autosavePath: null, lastValidationStatus: "UNCONFIGURED" } }; },
+      getBackgroundSetting: async () => {
+        read("worldlineAPI", "getBackgroundSetting");
+        return { available: false, bindingKey: null, revision: 0, text: "", limit: 5000 };
+      },
       getCheckpointStatus: async () => { read("worldlineAPI", "getCheckpointStatus"); return { checkpoint: { status: "UNCONFIGURED" } }; },
       getOverview: async () => { read("worldlineAPI", "getOverview"); return { overview: { importantWars: 0, deltaPending: 0 } }; },
       getAnnualDelta: async () => {
