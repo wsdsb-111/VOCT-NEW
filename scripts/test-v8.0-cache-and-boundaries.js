@@ -11,7 +11,8 @@ const promptBuilderPath = path.join(root, "resources", "app", "out", "main", "pr
 const hash = (value) => crypto.createHash("sha256").update(value).digest("hex");
 
 const prompt = fs.readFileSync(defaultPromptPath, "utf8").replace(/\r\n/g, "\n");
-assert.strictEqual(hash(prompt), "de9fb902bfe148048a5b7049545001add79ee42dd7beb618db2e3b60cf69eea2", "default.hbs changed during v8.0");
+assert.strictEqual(hash(prompt), "da1e0f88f4b3d3853e39442f5ac4ff54cb8f64e15f6794e61db6c42e93719c0b",
+  "bundled default.hbs must match the reviewed V9.8 world-context template");
 const markers = [...prompt.matchAll(/\{\{! VOTC_SEGMENT:([a-z_]+) \}\}/g)];
 assert.deepStrictEqual(markers.map((match) => match[1]), ["stable_global", "stable_history_rp", "world_context", "character_base", "character_state"]);
 const segments = {};
