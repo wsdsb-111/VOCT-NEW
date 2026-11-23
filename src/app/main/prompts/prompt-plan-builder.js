@@ -98,12 +98,25 @@ function classifyBlock(definition, memoryContext) {
 /** Consume only the authorized build's explicit spans; this module performs no source reads or commits. */
 function buildPromptPlanV9({ authorizedInputs, requestType = "chat", layoutId, promptProfileId,
   scope = {}, revisionSnapshot = {}, providerConfig = {}, promptSettings = {}, memoryContext = null,
-  mode = "legacy", estimateTokens = text => Math.ceil(text.length / 4) }) {
+  glmProfileParts, mode = "legacy", estimateTokens = text => Math.ceil(text.length / 4) }) {
   const { messages, blocks: entries } = authorizedInputs;
   const inputRevisions = { promptSettings: fingerprint(promptSettings), conversation: null, memory: null,
     knowledge: null, worldline: null, source: null, ...revisionSnapshot };
   const normalizedScope = { campaignToken: null, conversationId: null, ownerId: null, responderId: null,
     playerId: null, conversationEpoch: null, logicalTurnEpoch: null, sourceSnapshotId: null, ...scope };
+  // Only real chat messages with verified ownership may cross the history boundary.
+  // These parts still come from the current projection on every build and retry.
+  const splitProfile = glmProfileParts?.has("character-description-live") && mode === "v9" && layoutId === "v813" && requestType === "chat"
+    && providerConfig.providerType === "zhipu" && providerConfig.defaultModel === "glm-5.3-flash"
+    && authorizedInputs.promptProfile?.adapterEnabled && normalizedScope.campaignToken && normalizedScope.conversationId
+    && normalizedScope.ownerId === normalizedScope.responderId && Number.isSafeInteger(normalizedScope.ownerId)
+    && normalizedScope.ownerId > 0 && Number.isSafeInteger(normalizedScope.playerId) && normalizedScope.playerId > 0
+    && entries.filter(entry => entry.block.type === "instruction" && entry.messageSpan.end === entry.messageSpan.start + 1
+      && messages[entry.messageSpan.start]?.role === "user").length === 1
+    && entries.every(({ block, messageSpan }) => !["glm-responder-profile", "glm-identity-rules"].includes(block.id)
+      && (["history", "current_user", "instruction"].includes(block.type)
+        || messages.slice(messageSpan.start, messageSpan.end).every(message => message.role === "system")));
+  const profilePrefixIds = new Set();
   const expanded = [];
   let originalCursor = 0;
   for (const entry of entries) {
@@ -114,6 +127,16 @@ function buildPromptPlanV9({ authorizedInputs, requestType = "chat", layoutId, p
     const definition = entry.block;
     const ownedMessages = messages.slice(span.start, span.end).map(message => ({ ...message }));
     if ((entry.error || entry.deferredAccountingOnly === true) && ownedMessages.length === 0) continue;
+    const parts = splitProfile && glmProfileParts.get(definition.id);
+    if (parts && ownedMessages.length === 1 && ownedMessages[0].role === "system"
+      && ownedMessages[0].content === parts.content && entry.content === parts.content) {
+      for (const [id, content] of [[parts.id, parts.profile], [definition.id, parts.live]]) {
+        expanded.push({ entry: { ...entry, content, tokens: estimateTokens(content), block: { ...definition, id, label: id === parts.id ? parts.label : definition.label } },
+          ownedMessages: [{ ...ownedMessages[0], content }], kind: "DYNAMIC_WORLDLINE" });
+      }
+      profilePrefixIds.add(parts.id);
+      continue;
+    }
     const committed = memoryContext?.committedDynamicPlanSources;
     const pending = memoryContext?.pendingDynamicPlanSources;
     if (mode === "v9" && definition.type === "memory_dynamic_frozen" && Array.isArray(committed) && Array.isArray(pending)) {
@@ -162,7 +185,7 @@ function buildPromptPlanV9({ authorizedInputs, requestType = "chat", layoutId, p
     return block;
   });
   const extendHistoryPrefix = canExtendHistoryPrefix(blocks, { layoutId, mode, requestType, profile: authorizedInputs.promptProfile, providerConfig });
-  const ordered = orderPlanBlocks(blocks, { layoutId, mode, extendHistoryPrefix }).map((block, order) => {
+  const ordered = orderPlanBlocks(blocks, { layoutId, mode, extendHistoryPrefix, profilePrefixIds }).map((block, order) => {
     const orderedBlock = { ...block, order };
     if (sourceBindingsByBlock.has(block)) sourceBindingsByBlock.set(orderedBlock, sourceBindingsByBlock.get(block));
     return orderedBlock;
@@ -170,7 +193,7 @@ function buildPromptPlanV9({ authorizedInputs, requestType = "chat", layoutId, p
   const messageGroups = ordered.flatMap(block => block.messages.map((message, index) => ({ parts: [{ blockId: block.id, index }], separator: "" })));
   const compatibleHistory = extendHistoryPrefix && providerConfig?.providerType === "openai-compatible";
   const plan = { schemaVersion: SCHEMA_VERSION, planId: fingerprint([normalizedScope, inputRevisions, requestType]), requestType,
-    layoutId, promptProfileId, layoutRevision: ordered.some(block => block.legacyType?.startsWith("character_disclosure_"))
+    layoutId, promptProfileId, layoutRevision: profilePrefixIds.size ? "v9_8_1_glm_profile_1" : ordered.some(block => block.legacyType?.startsWith("character_disclosure_"))
       ? `v9_7_3_disclosure_1:${mode === "v9" ? extendHistoryPrefix ? compatibleHistory ? "compatible_history_2" : "history" : "static" : "compat"}`
       : compatibleHistory ? COMPATIBLE_HISTORY_PREFIX_REVISION : extendHistoryPrefix ? HISTORY_PREFIX_REVISION : mode === "v9" ? STATIC_FIRST_REVISION : COMPAT_REVISION,
     scope: normalizedScope, providerRoute: { providerType: providerConfig?.providerType || null,

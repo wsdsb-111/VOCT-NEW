@@ -32,11 +32,11 @@ function canExtendHistoryPrefix(blocks, { layoutId, mode, requestType, profile, 
     || index === instruction || block.messages.every(message => message.role === "system"));
 }
 
-function orderPlanBlocks(blocks, { layoutId, mode, extendHistoryPrefix }) {
+function orderPlanBlocks(blocks, { layoutId, mode, extendHistoryPrefix, profilePrefixIds }) {
   requirePlan(LAYOUT_IDS.includes(layoutId), "PLAN_LAYOUT_UNSUPPORTED");
   if (mode !== "v9") return blocks;
   const rank = block => block.kind === "GLOBAL_STATIC" ? 0 : block.kind === "CONVERSATION_FROZEN" ? 1
-    : block.kind === "RESPONDER_FROZEN" ? 2 : block.kind === "APPEND_ONLY_HISTORY" ? 3
+    : block.kind === "RESPONDER_FROZEN" ? 2 : profilePrefixIds?.has(block.id) ? 2.5 : block.kind === "APPEND_ONLY_HISTORY" ? 3
     : block.id === "responder-disclosures-current" ? 4 : extendHistoryPrefix && block.legacyType === "current_user" ? 5 : 6;
   // Stable sort retains every role, message and relative position within a category.
   return [...blocks].sort((left, right) => rank(left) - rank(right));

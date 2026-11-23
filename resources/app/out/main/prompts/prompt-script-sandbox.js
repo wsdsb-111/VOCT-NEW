@@ -30,9 +30,23 @@ class PromptScriptSandbox {
    * Execute a description script (pList) in a sandboxed VM context
    * Expected to return a string
    */
-  static executeDescription(scriptFilePath, context) {
-    let scriptCode = adaptLegacyGenderLabels(fs__namespace.readFileSync(scriptFilePath, "utf-8"));
+  static executeDescription(scriptFilePath, context, sourceText, itemCapture) {
+    let scriptCode = adaptLegacyGenderLabels(typeof sourceText === "string" ? sourceText : fs__namespace.readFileSync(scriptFilePath, "utf-8"));
     const sandbox = this.createBaseSandbox();
+    if (itemCapture) {
+      const currentItemsCall = "buildCharacterItems(current, gameData, true).join";
+      const currentItemsIndex = scriptCode.indexOf(currentItemsCall);
+      if (currentItemsIndex >= 0 && currentItemsIndex === scriptCode.lastIndexOf(currentItemsCall)) {
+        scriptCode = scriptCode.replace(currentItemsCall, "__votcCaptureCharacterItems(current, buildCharacterItems(current, gameData, true)).join");
+        sandbox.__votcCaptureCharacterItems = (character, items) => {
+          if (!itemCapture.items && Array.isArray(items)) {
+            itemCapture.characterId = character?.id;
+            itemCapture.items = Array.from(items);
+          }
+          return items;
+        };
+      }
+    }
     // Adapt only the known English pList family entrypoints, never rewrite a
     // user file or change the participants/Action-target collection.
     if (/(?:^|[\\/])pListMccTest2(?:JE)?\.js$/i.test(scriptFilePath)) {
