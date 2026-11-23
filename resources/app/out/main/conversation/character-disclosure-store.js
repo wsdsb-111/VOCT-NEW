@@ -8,7 +8,8 @@ const crypto = require("node:crypto");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { normalizeTraitKey, resolveTraitVisibility } = require("../prompts/trait-visibility-policy");
 const { getAutomaticTraitAccess, isPublicCloseFamily } = require("../prompts/trait-profile-selector");
-const { getSocialRecognitionSource, hasSpecialRelationKnowledge, getSupernaturalPerception, isSupernaturalIdentity } = require("../prompts/social-recognition-policy");
+const { getSocialRecognitionSource, hasSpecialRelationKnowledge, getSupernaturalPerception, isSupernaturalIdentity,
+  getPublicRealmIdentities, hasPublicRealmIdentity } = require("../prompts/social-recognition-policy");
 const { getSensedSpeciesTrait } = require("../prompts/trait-visibility-policy");
 const { sourceParagraphSegments, validateSourceItem, presentIds } = require("../memory-system/finalization-visibility");
 const { extractCharacterDisclosures, getDisclosureFactCandidates } = require("./character-disclosure-extraction");
@@ -20,6 +21,10 @@ const id = value => {
   return text;
 };
 const identity = fact => JSON.stringify([fact.campaignToken, String(fact.ownerRuntimeId), String(fact.targetRuntimeId), fact.factType, fact.factKey]);
+const hidesRealmIdentity = (record, campaignToken, ownerId, currentDay) => record.campaignToken === campaignToken
+  && record.ownerRuntimeId === ownerId && ["NAME", "TITLE", "NICKNAME"].includes(record.factType)
+  && record.manual?.status === "MANUAL_HIDDEN"
+  && (normalizeGameDate(record.manual.acquiredDate)?.serial ?? -Infinity) <= currentDay;
 const name = character => {
   const value = String(character?.shortName || character?.firstName || character?.name || character?.fullName || "").trim();
   return value && !/^\d+$/.test(value) ? value : "姓名未载入";
@@ -169,13 +174,17 @@ class ConversationDisclosureStore {
     const closeFamily = isPublicCloseFamily(Number(ownerId), Number(targetId), frame.data);
     const special = hasSpecialRelationKnowledge(frame.data, ownerId, targetId);
     const social = getSocialRecognitionSource(frame.data, ownerId, targetId);
+    const currentDay = normalizeGameDate(frame.data.date).serial;
+    const publicIdentity = social || hasPublicRealmIdentity(frame.data, ownerId, targetId)
+      && !state.records.some(record => record.targetRuntimeId === targetId
+        && hidesRealmIdentity(record, frame.scope.campaignToken, ownerId, currentDay));
     const facts = getDisclosureFactCandidates(target).flatMap(candidate => {
       const record = state.records.find(item => identity(item) === identity({ ...candidate, campaignToken: frame.scope.campaignToken,
         ownerRuntimeId: ownerId, targetRuntimeId: targetId }));
       const factSourceSnapshotId = `fact:${hash([frame.scope.campaignToken, targetId, candidate.factType, candidate.factKey, candidate.value, candidate.aliases])}`;
       const manualDate = normalizeGameDate(record?.manual?.acquiredDate);
-      const manual = record?.manual?.factSourceSnapshotId === factSourceSnapshotId && manualDate
-        && manualDate.serial <= normalizeGameDate(frame.data.date).serial ? record.manual : null;
+      const manual = record?.manual?.factSourceSnapshotId === factSourceSnapshotId
+        && (manualDate ? manualDate.serial <= currentDay : record.manual.status === "MANUAL_HIDDEN") ? record.manual : null;
       const proofKey = identity({ ...candidate, campaignToken: frame.scope.campaignToken, ownerRuntimeId: ownerId, targetRuntimeId: targetId });
       const nextVisited = new Set(visited).add(proofKey);
       const evidence = visited.has(proofKey) ? [] : (record?.evidence || []).filter(item =>
@@ -187,7 +196,8 @@ class ConversationDisclosureStore {
       const publicNickname = candidate.factType === "NICKNAME";
       const familyFact = closeFamily && ["NAME", "TITLE", "TRAIT"].includes(candidate.factType);
       const specialFact = special && ["NAME", "TITLE", "TRAIT"].includes(candidate.factType);
-      const socialFact = social && ["NAME", "TITLE", "NICKNAME"].includes(candidate.factType);
+      const socialFact = publicIdentity
+        && ["NAME", "TITLE", "NICKNAME"].includes(candidate.factType);
       const intrinsic = manual?.status !== "MANUAL_HIDDEN"
         && (publicNickname || familyFact || specialFact || socialFact || candidate.factType === "TRAIT" && automatic.traitKeys.includes(candidate.factKey));
       const status = intrinsic ? "AUTO_DISCLOSED" : manual?.status || (evidence.length || native ? "AUTO_DISCLOSED" : "UNKNOWN");
@@ -253,6 +263,22 @@ class ConversationDisclosureStore {
 
   getDisclosureProfile(payload = {}) {
     return this._disclosureProfile(payload, () => this._read());
+  }
+
+  getPublicRealmProfile({ gameData, ownerRuntimeId }) {
+    const rows = getPublicRealmIdentities(gameData, ownerRuntimeId);
+    if (!rows.length) return [];
+    try {
+      const frame = this._frame({ campaignToken: gameData.campaignToken });
+      const ownerId = id(ownerRuntimeId);
+      if (frame.data !== gameData || !frame.participantIds.includes(ownerId)) return [];
+      const current = normalizeGameDate(gameData.date).serial;
+      const hidden = new Set(this._read().records.filter(record => hidesRealmIdentity(record, gameData.campaignToken, ownerId, current))
+        .map(record => Number(record.targetRuntimeId)));
+      return rows.filter(row => !hidden.has(row.targetId));
+    } catch {
+      return [];
+    }
   }
 
   getDisclosureProfiles(payloads) {

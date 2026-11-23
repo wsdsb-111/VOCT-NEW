@@ -12,11 +12,11 @@
     "verifiedVersions": []
   },
   "fileCount": 97,
-  "totalBytes": 13001214,
+  "totalBytes": 13002022,
   "treeHashRule": "SHA-256 of UTF-8 relativePath + NUL + decimal size + NUL + lowercase file SHA-256 + LF, sorted by relativePath.localeCompare(en).",
-  "sourceRevision": "bec4d280e7b44a614752b3877a596ddcf80282d559088d75581c5f5416f92138",
-  "modPayloadTreeSha256": "bec4d280e7b44a614752b3877a596ddcf80282d559088d75581c5f5416f92138",
-  "artifactSha256": "bec4d280e7b44a614752b3877a596ddcf80282d559088d75581c5f5416f92138",
+  "sourceRevision": "bab236a9e58d153eea3581febd52f9c67aa654b1e78e40372c98ac7062de5af6",
+  "modPayloadTreeSha256": "bab236a9e58d153eea3581febd52f9c67aa654b1e78e40372c98ac7062de5af6",
+  "artifactSha256": "bab236a9e58d153eea3581febd52f9c67aa654b1e78e40372c98ac7062de5af6",
   "artifactHashScope": "mod-payload-tree; no archive or ZIP is implied",
   "files": [
     {
@@ -101,8 +101,8 @@
     },
     {
       "relativePath": "common/scripted_effects/log_character_v2_effect.txt",
-      "size": 30021,
-      "sha256": "1d9e9f5ee8e7aedaf1a21da7d6e66127c38ffad61d51eb4d13aa3642e586bff2"
+      "size": 30829,
+      "sha256": "1836bdc4b88dbac5555cdd234f5a49f7cd19ea81392f575b978c2cbc7e031121"
     },
     {
       "relativePath": "common/scripted_effects/log_gamedata_v3_effect.txt",

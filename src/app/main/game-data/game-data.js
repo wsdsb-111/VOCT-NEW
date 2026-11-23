@@ -6,6 +6,7 @@ const { resolveRelationshipCurrentTruth } = require("../worldline/relationship-c
 const { MEMORY_ENGINE_VERSION } = require("../version");
 const { buildOfficialRecollectionSummary, hasOfficialRecollectionContent } = require("../memory-system/official-recollection-provider");
 const { getCharacterBackground } = require("./character-background");
+const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { createProjectionLineage } = require("../memory-system/legacy-source-lineage");
 
 function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, getHistoricalReferenceByYear }) {
@@ -55,12 +56,12 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
      * 注意：不使用硬编码的真实历史皇帝，而是从游戏实际数据获取
      */
     parseHistoricalContext() {
-      // 从日期字符串提取年份，例如 "976年5月3日" -> 976
-      const yearMatch = this.date.match(/(\d+)年/);
-      this.year = yearMatch ? parseInt(yearMatch[1]) : 976;
+      this.year = normalizeGameDate(this.date)?.year ?? null;
       
       // 根据年份判断朝代
-      if (this.year < 907) {
+      if (this.year == null) {
+        this.dynasty = null;
+      } else if (this.year < 907) {
         this.dynasty = '唐朝';
       } else if (this.year < 960) {
         this.dynasty = '五代十国';
@@ -80,7 +81,7 @@ function createGameData({ fs, path, memorySystem, memoryEngine, summariesDir, ge
       
       // 历史背景：根据年份提供真实历史的参考信息
       // 这些是"历史知识"，即使游戏中历史改变了，这些人物和事件仍作为背景知识存在
-      this.historicalReferenceInfo = getHistoricalReferenceByYear(this.year);
+      this.historicalReferenceInfo = this.year == null ? null : getHistoricalReferenceByYear(this.year);
     }
     
     /**

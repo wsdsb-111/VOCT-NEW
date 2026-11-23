@@ -48,6 +48,8 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
     console.log(`parseLog: Processing debug log at path: ${debugLogPath}`);
     let gameData;
     let recognitionRows = [];
+    let realmIdentityRows = [];
+    let reignEraRows = [];
     let characterHistoryRows = [];
     let characterBackgroundRows = [];
     let pendingCharacterBackground = null;
@@ -249,6 +251,8 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
           case "init":
             gameData = new GameData(data);
             recognitionRows = [];
+            realmIdentityRows = [];
+            reignEraRows = [];
             characterHistoryRows = [];
             characterBackgroundRows = [];
             break;
@@ -257,6 +261,12 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
             break;
           case "social_recognition":
             recognitionRows.push(data);
+            break;
+          case "realm_identity":
+            realmIdentityRows.push(data);
+            break;
+          case "reign_era":
+            reignEraRows.push(data);
             break;
           case "character":
             let char = new Character(data);
@@ -1132,7 +1142,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
       value: !(isWaitingForMultiLine && ["relations", "new_relations"].includes(multiLineType)),
       configurable: true
     });
-    if (gameData) captureRecognitionEvidence(gameData, recognitionRows);
+    if (gameData) captureRecognitionEvidence(gameData, recognitionRows, realmIdentityRows, reignEraRows);
     if (gameData) captureCharacterBackgrounds(gameData, characterHistoryRows, characterBackgroundRows);
     if (gameData && typeof onGameDataParsed === "function") await onGameDataParsed(gameData);
     console.log(gameData);

@@ -133,6 +133,7 @@ function knownTitle(observer, target, value, context) {
       || /^concept_/.test(value) && fact.aliases?.includes(normalize(value).toLowerCase())));
   if (facts.some(fact => fact.status === "MANUAL_HIDDEN")) return "";
   if (fullProfileKnown(observer, target, context) || getSocialRecognitionSource(context.gameData, observer.id, target.id)
+    || context.publicRealmProfile?.some(row => row.targetId === Number(target.id))
     || facts.some(fact => fact.effectiveKnown === true)) return value;
   return "";
 }
@@ -144,7 +145,9 @@ function knownPersonalName(observer, target, context) {
   const normalize = value => String(value || "").normalize("NFKC").trim();
   const aliases = new Set([personalName, source.name, source.firstName, source.shortName, source.fullName].filter(Boolean).map(normalize));
   const facts = scopedDisclosureFacts(observer, target, context).filter(fact => fact.factType === "NAME" && aliases.has(normalize(fact.value)));
-  if (getSocialRecognitionSource(context.gameData, observer.id, target.id) && !isNameManuallyHidden(observer, target, context)) return personalName;
+  if ((getSocialRecognitionSource(context.gameData, observer.id, target.id)
+    || context.publicRealmProfile?.some(row => row.targetId === Number(target.id)))
+    && !isNameManuallyHidden(observer, target, context)) return personalName;
   const known = facts.find(fact => fact.effectiveKnown === true && fact.status !== "MANUAL_HIDDEN"
     && !facts.some(hidden => hidden.status === "MANUAL_HIDDEN" && normalize(hidden.value) === normalize(fact.value)));
   return known ? normalize(known.value) : null;
@@ -341,7 +344,8 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
       }
     }
     const fullIdentity = Number(person.id) === Number(observer.id)
-      || (fullProfileKnown(observer, person, knowledge) || getSocialRecognitionSource(identityData, observer.id, person.id))
+      || (fullProfileKnown(observer, person, knowledge) || getSocialRecognitionSource(identityData, observer.id, person.id)
+        || knowledge.publicRealmProfile?.some(row => row.targetId === Number(person.id)))
         && !isNameManuallyHidden(observer, person, knowledge);
     for (const alias of [person.name, person.firstName, person.shortName, person.fullName].filter(value => typeof value === "string" && value.length > 1)) {
       const names = relationAliases.get(alias) || new Set();

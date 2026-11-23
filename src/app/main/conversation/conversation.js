@@ -12,6 +12,7 @@ const { buildPresenceObservationFacts } = require("../worldline/direct-observati
 const { resolveWorldlineTurnBudget, shouldTrimMemoryTurnRecall } = require("../worldline/worldline-context-budget");
 const { SUPPLEMENTAL_MAX_TOKENS } = require("../worldline/supplemental-retriever");
 const { backgroundCampaignKey } = require("../worldline/campaign-background");
+const { normalizeGameDate } = require("../worldline/character-temporal-facts");
 const { parseTimeHint } = require("../worldline/world-query-planner");
 const { buildFrozenCoverageManifest, hasFrozenCoverage, buildCoveragePatchKey } = require("../worldline/frozen-coverage-manifest");
 const { verifyActionConfirmation, settleActionResult } = require("../actions/action-confirmation");
@@ -356,6 +357,8 @@ class Conversation {
     }
     try {
       this.gameData = await traceOperation(performanceTrace, "gameData.logParse", { attribution: "MAIN" }, () => this.parseCK3GameData(ck3DebugPath));
+      const openingDate = normalizeGameDate(this.gameData.date);
+      this.openingGameDate = Object.freeze({ date: openingDate?.canonical ?? null, year: openingDate?.year ?? null });
       this.captureWorldBackground();
       this.gameDataRevision += 1;
       this.gameData.gameDataRevision = this.gameDataRevision;
@@ -1069,6 +1072,7 @@ class Conversation {
       thirdPartyEvidenceReason: thirdPartyEvidence.reason,
       thirdPartyEvidenceConflict: thirdPartyEvidence.conflict,
       activeParticipantIds,
+      openingGameDate: this.openingGameDate,
       stableProfileCache: this.stableProfileCache,
       stableDescriptionCache: this.stableDescriptionCache,
       cacheV2FrozenSnapshots: this.cacheV2FrozenSnapshots,
@@ -1092,11 +1096,15 @@ class Conversation {
    * Estimate token count (simple approximation)
    */
   getCharacterDisclosureContext(npc, additionalTargets = []) {
-    return buildCharacterDisclosureContext({
-      service: applicationServices?.characterKnowledge, gameData: this.gameData, responderId: npc.id,
+    const service = applicationServices?.characterKnowledge;
+    const context = buildCharacterDisclosureContext({
+      service, gameData: this.gameData, responderId: npc.id,
       targetIds: [this.gameData.playerID, ...(this.selectedCharacterIds || []), ...additionalTargets],
       audienceIds: this.getActiveConversationCharacters().map(character => character.id)
     });
+    const publicRealmProfile = service?.getPublicRealmProfile?.({ gameData: this.gameData, ownerRuntimeId: npc.id });
+    return publicRealmProfile?.length ? { ...context, publicRealmProfile,
+      characterKnowledgeRevision: planFingerprint([context.characterKnowledgeRevision, publicRealmProfile]) } : context;
   }
   recordCharacterDisclosures() {
     const service = applicationServices?.characterKnowledge;

@@ -622,8 +622,34 @@ votc_log_social_recognition = {
 	save_scope_as = votc_recognition_realm_anchor
 	if = {
 		limit = { highest_held_title_tier < tier_barony exists = court_owner }
-		court_owner = { save_scope_as = votc_recognition_realm_anchor }
+		court_owner = {
+			save_scope_as = votc_recognition_realm_anchor
+			votc_log_public_realm_identity = { RELATION = COURT_LORD }
+		}
 	}
+	scope:votc_recognition_realm_anchor = {
+		every_liege_or_above = {
+			limit = { NOT = { this = scope:votc_recognition_realm_anchor.top_liege } }
+			votc_log_public_realm_identity = { RELATION = LIEGE }
+		}
+		top_liege = {
+			if = {
+				limit = { exists = primary_title }
+				votc_log_public_realm_identity = { RELATION = SOVEREIGN }
+				if = {
+					limit = {
+						OR = {
+							has_character_flag = hanfan_nianhao_flag
+							has_variable = hanfan_nianhao_new
+							has_variable = hanfan_nianhao_date
+						}
+					}
+					debug_log = "VOTC:IN/;/reign_era/;/[scope:votc_recognition_observer.Char.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/[GetCurrentDate.GetDateAsTotalDays]/;/[THIS.Char.Custom('hanfan_nianhao')]/;/[THIS.Char.Custom('hanfan_nianhao_year')]"
+				}
+			}
+		}
+	}
+	every_vassal = { votc_log_public_realm_identity = { RELATION = DIRECT_VASSAL } }
 	every_in_global_list = {
 		variable = mcc_characters_list_v2
 		limit = { NOT = { this = scope:votc_recognition_observer } }
@@ -659,21 +685,6 @@ votc_log_recognition_pair = {
 	else_if = {
 		limit = {
 			highest_held_title_tier >= tier_barony
-			NOT = { this = scope:votc_recognition_target.top_liege }
-			scope:votc_recognition_observer = {
-				highest_held_title_tier >= tier_barony
-				NOT = { this = scope:votc_recognition_observer.top_liege }
-				top_liege = {
-					this = scope:votc_recognition_target.top_liege
-					highest_held_title_tier >= tier_kingdom
-				}
-			}
-		}
-		debug_log = "VOTC:IN/;/social_recognition/;/[scope:votc_recognition_observer.Char.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/REALM_PEERS"
-	}
-	else_if = {
-		limit = {
-			highest_held_title_tier >= tier_barony
 			this = scope:votc_recognition_target.top_liege
 			scope:votc_recognition_realm_anchor.top_liege = { character_is_land_realm_neighbor = scope:votc_recognition_target }
 		}
@@ -684,11 +695,16 @@ votc_log_recognition_pair = {
 			highest_held_title_tier >= tier_barony
 			scope:votc_recognition_observer = {
 				highest_held_title_tier >= tier_barony
+				NOT = { top_liege = scope:votc_recognition_target.top_liege }
 				character_is_land_realm_neighbor = scope:votc_recognition_target
 			}
 		}
 		debug_log = "VOTC:IN/;/social_recognition/;/[scope:votc_recognition_observer.Char.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/BORDERING_RULERS"
 	}
+}
+
+votc_log_public_realm_identity = {
+	debug_log = "VOTC:IN/;/realm_identity/;/[scope:votc_recognition_observer.Char.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/[GetCurrentDate.GetDateAsTotalDays]/;/$RELATION$/;/[THIS.Char.GetFullNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetPrimaryTitle.GetNameNoTooltip]/;/[THIS.Char.GetTitleTierName]"
 }
 
 log_characterr = {

@@ -74,9 +74,9 @@
             当前世界与历史背景
 ═══════════════════════════════════════════════════════
 
-【时间与朝代】
-时间：{{gameData.date}}（{{gameData.year}}年）
-朝代：{{gameData.dynasty}}
+【本场时间】
+{{#if gameData.date}}时间：{{gameData.date}}（{{gameData.year}}年）{{else}}时间：未能确认{{/if}}
+{{#if gameData.dynasty}}朝代：{{gameData.dynasty}}{{/if}}
 {{#if gameData.currentEmperor}}
 在位：{{gameData.currentEmperorTitle}} {{gameData.currentEmperor}}
 {{#if gameData.currentEraName}}年号：{{gameData.currentEraName}}{{/if}}
@@ -84,6 +84,7 @@
 当前政局：（从游戏角色信息中动态获取）
 {{/if}}
 
+{{#if gameData.historicalReferenceInfo}}
 【真实历史参考】
 历史时期：{{gameData.historicalReferenceInfo.period}}
 时代特征：{{gameData.historicalReferenceInfo.context}}
@@ -92,6 +93,7 @@
 {{/if}}
 {{#if gameData.historicalReferenceInfo.notableFigures}}
 历史人物：{{#each gameData.historicalReferenceInfo.notableFigures}}{{this}}{{#unless @last}}、{{/unless}}{{/each}}
+{{/if}}
 {{/if}}
 
 {{! VOTC_SEGMENT:character_base }}

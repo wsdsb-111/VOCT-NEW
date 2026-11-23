@@ -302,6 +302,8 @@ function createPromptBuilder({
         disclosureTargetIds: memoryContext.disclosureTargetIds,
         presenceText: memoryContext.presenceText,
         confirmedActionText: memoryContext.confirmedActionText,
+        openingGameDate: memoryContext.openingGameDate,
+        publicRealmProfile: memoryContext.publicRealmProfile,
         cacheV2FrozenSnapshots: null
       };
       for (const key of worldlineKeys) {
@@ -538,9 +540,9 @@ ${nameAccessRule}
         + "\n本场冻结的世界线只代表对话开场时该角色获准知晓的事实。对话期间经 CK3 回读确认的新状态与本轮在场信息优先；不得把冻结的旧状态当作当前状态。";
     }
 
-    static getCacheV2Snapshots(gameData, char, memoryContext, freezeResponder = false) {
+    static getCacheV2Snapshots(gameData, char, memoryContext, freezeResponder = false, openingCalendar = null) {
       const cache = memoryContext?.cacheV2FrozenSnapshots;
-      const conversationSource = {
+      const conversationSource = openingCalendar || {
         date: gameData?.date || null,
         year: gameData?.year ?? null,
         dynasty: gameData?.dynasty || null,
@@ -566,6 +568,13 @@ ${nameAccessRule}
     }
 
     static formatConversationFrozen(snapshot) {
+      if (Object.hasOwn(snapshot, "historicalRoleplay")) {
+        const calendar = ["=== 本场 CK3 日期 ===", `日期：${snapshot.date || "未能确认"}`];
+        if (snapshot.historicalRoleplay) {
+          calendar.push("以该日期为角色历史见闻的上限，按场景地区、角色文化、身份和场合采用当地此时已通行的语气、称呼、礼数、行为与衣着。年代常识按真实年份，政权、在位者和年号依下文获准的 CK3 存档事实。使用此时已经出现且角色有机会知悉的人物、作品和事迹。别人提到陌生名字只表示你听到其说法。时间、知情或礼制细节不确定就保守回应，勿预知后世。台词保持自然，尊卑亲疏按场合变化。");
+        }
+        return calendar.join("\n");
+      }
       return `=== Conversation Frozen Date / Era ===\n- 日期：${snapshot.date || "未知"}\n- 年份：${snapshot.year ?? "未知"}\n- 朝代：${snapshot.dynasty || "未知"}\n- 时代／年号：${snapshot.era || "未知"}`;
     }
     /**
@@ -871,6 +880,8 @@ ${nameAccessRule}
       llmMessages.push({ role: "system", content: anchorTokenBlock.content });
       blocksWithTokens.push(anchorTokenBlock);
       const backgroundText = backgroundPrompt(memoryContext?.worldBackground);
+      const openingCalendar = memoryContext?.openingGameDate
+        ? { ...memoryContext.openingGameDate, historicalRoleplay: !backgroundText } : null;
       if (backgroundText) {
         llmMessages.push({ role: "system", content: backgroundText });
         blocksWithTokens.push({ block: { id: "campaign-background-v9.7.1", type: "campaign_background", label: "Player-defined World Background",
@@ -884,6 +895,13 @@ ${nameAccessRule}
           period: "当前年代未确认", context: "游戏为先，历史为次。年代与当前事实缺失时明确未知，不得以历史传记补全人物生死、行踪或战争。", notableEvents: [], notableFigures: []
         } };
       }
+      if (openingCalendar && !glmCacheV2 && !v813Layout) {
+        const content = this.formatConversationFrozen(openingCalendar);
+        llmMessages.push({ role: "system", content });
+        blocksWithTokens.push({ block: { id: "conversation-frozen", type: "conversation_frozen",
+          label: "Conversation Frozen Date / Era", stable: true, lifecycle: PROMPT_LIFECYCLE.CONVERSATION_FROZEN },
+        content, tokens: TokenCounter.estimateTokens(content) });
+      }
       const disclosures = formatCharacterDisclosureBlocks(memoryContext, ageAuthorityGameData, Number(char.id));
       const appendDisclosures = (phase, label, lifecycle) => {
         const content = disclosures[phase];
@@ -893,8 +911,9 @@ ${nameAccessRule}
           label, lifecycle, stable: lifecycle !== PROMPT_LIFECYCLE.DYNAMIC }, content, tokens: TokenCounter.estimateTokens(content) });
       };
       appendDisclosures("frozen", "Previously Disclosed Names and Traits", PROMPT_LIFECYCLE.RESPONDER_FROZEN);
-      const promptGameData = memoryContext?.historicalReferenceInfo ? Object.assign(Object.create(Object.getPrototypeOf(gameData)), gameData, {
-        historicalReferenceInfo: memoryContext.historicalReferenceInfo,
+      const promptGameData = openingCalendar || memoryContext?.historicalReferenceInfo ? Object.assign(Object.create(Object.getPrototypeOf(gameData)), gameData, {
+        historicalReferenceInfo: memoryContext.historicalReferenceInfo ?? null,
+        ...(openingCalendar ? { date: openingCalendar.date, year: openingCalendar.year, dynasty: null } : {}),
         currentEmperor: null,
         currentEmperorTitle: null,
         currentEraName: null
@@ -908,7 +927,7 @@ ${nameAccessRule}
       };
       if (context.stableCharacter !== char) context.stableCharacter = createTraitProfileView(promptGameData, context.stableCharacter, memoryContext).character;
       traitProfileContexts.add(context);
-      const cacheV2Snapshots = glmCacheV2 || v813Layout ? this.getCacheV2Snapshots(promptGameData, char, memoryContext, v813Layout) : null;
+      const cacheV2Snapshots = glmCacheV2 || v813Layout ? this.getCacheV2Snapshots(promptGameData, char, memoryContext, v813Layout, openingCalendar) : null;
       const cacheV2ConversationText = cacheV2Snapshots ? this.formatConversationFrozen(cacheV2Snapshots.conversation) : null;
       const cacheV2ResponderText = cacheV2Snapshots ? formatStableProfile(cacheV2Snapshots.stableProfile) : null;
       const cacheV2KinshipText = cacheV2Snapshots ? formatStableKinship(cacheV2Snapshots.stableProfile) : null;
@@ -950,6 +969,15 @@ ${nameAccessRule}
       };
       const responderGameFacts = [
         this.buildResponderGameFacts(char, gameData, playerIdentityFamilyAccess),
+        memoryContext?.publicRealmProfile?.length ? [
+          "=== 本角色获准知晓的现实领主与直属封臣 ===",
+          "下列是本场 CK3 公开政局资料，只支持姓名、头衔、称号及实际年号。按场合自然称呼，不由公开身份推得其私事或他人知情。",
+          ...memoryContext.publicRealmProfile.map(({ name, title, rank, relations, era }) => {
+            const relation = { COURT_LORD: "本宫廷领主", LIEGE: "上级领主", SOVEREIGN: "最高领主", DIRECT_VASSAL: "直属封臣" };
+            return `- ${relations.map(key => relation[key]).join("、")}：${JSON.stringify(name)}，${JSON.stringify(title)}${rank ? `（${rank}）` : ""}`
+              + (era ? `，纪年 ${JSON.stringify(era.name + (era.year ? `${era.year}年` : ""))}` : "");
+          })
+        ].join("\n") : "",
         disclosures.other,
         formatSelfConcealment(memoryContext, ageAuthorityGameData, Number(char.id), [...activeParticipantIds])
       ].filter(Boolean).join("\n\n");
