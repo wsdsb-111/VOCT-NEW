@@ -71,6 +71,7 @@ const RENDERER_STEPS = new Set([
   "renderer.firstReady"
 ]);
 const RESULTS = new Set(["OK", "ERROR", "CANCELLED", "STALE", "SKIPPED"]);
+const PROVIDER_END_RESULTS = new Set(["TRUNCATED", "PARTIAL", "UNKNOWN", "FILTERED", "REFUSED", "TOOL_CALLS"]);
 const ATTRIBUTIONS = new Set(["MAIN", "RENDERER", "CK3_LOG", "PROVIDER", "UNKNOWN"]);
 const SESSION_PHASES = new Set(["APP_START", "CK3_LOAD", "CONVERSATION_OPEN", "TURN", "IDLE"]);
 const DATE_SCAN_MODES = new Set(["COLD_RECOVERY", "INCREMENTAL", "INVALIDATED"]);
@@ -205,7 +206,8 @@ function createStartupPerformanceTrace(options = {}) {
       if (!STEPS.has(step)) return false;
       const wallMs = Number(fields.wallMs);
       if (!Number.isFinite(wallMs) || wallMs < 0 || wallMs > MAX_WALL_MS) return false;
-      const result = normalizeResult(fields.result);
+      const result = step === "provider.streamEnd" && PROVIDER_END_RESULTS.has(fields.result)
+        ? fields.result : normalizeResult(fields.result);
       const attribution = normalizeAttribution(fields.attribution);
       const event = {
         traceVersion: TRACE_VERSION,

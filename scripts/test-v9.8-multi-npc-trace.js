@@ -35,6 +35,9 @@ async function run() {
   manager.supersede("synthetic cancellation");
   trace.record("process.resources", { wallMs: 30000, cpuMs: 55, rssBytes: 1024, heapUsedBytes: 512,
     activeResources: 3, privateText: "synthetic cancellation" });
+  for (const result of ["TRUNCATED", "PARTIAL", "UNKNOWN", "CANCELLED"]) {
+    trace.record("provider.streamEnd", { attribution: "PROVIDER", wallMs: 20, result });
+  }
   const events = trace.snapshot().events;
   assert.deepEqual(events.filter(event => event.step === "conversation.queueWait").map(event =>
     [event.logicalTurnOrdinal, event.attemptOrdinal, event.responderOrdinal, event.wallMs]), [[1, 1, 1, 2], [1, 1, 2, 7]]);
@@ -42,6 +45,8 @@ async function run() {
     [["ERROR", 12, 2], ["CANCELLED", 8, 0]]);
   assert.equal(events.filter(event => event.step === "conversation.turnDispatch").length, 1);
   assert.equal(events.find(event => event.step === "process.resources").activeResources, 3);
+  assert.deepEqual(events.filter(event => event.step === "provider.streamEnd").map(event => event.result),
+    ["TRUNCATED", "PARTIAL", "UNKNOWN", "CANCELLED"], "non-complete Provider outcomes remain visible in the trace");
   assert.doesNotMatch(JSON.stringify(events), /private-campaign-label|synthetic cancellation/);
   console.log("PASS V9.8 sequential NPC prompts, serialization, turn attribution, cancellation and trace privacy");
 }
