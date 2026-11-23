@@ -303,7 +303,7 @@ function connectCdp(webSocketUrl, errors) {
         return response.result;
       };
       const evaluate = async (expression, { pinPromise = false } = {}) => {
-        const result = resultFrom(await send("Runtime.evaluate", { expression, awaitPromise: !pinPromise, returnByValue: !pinPromise }));
+        const result = resultFrom(await send("Runtime.evaluate", { expression, awaitPromise: false, returnByValue: !pinPromise }));
         if (!pinPromise) return result?.value;
         const objectId = result?.objectId;
         if (!objectId || result.subtype !== "promise") throw new Error("CDP probe did not return a Promise handle");
