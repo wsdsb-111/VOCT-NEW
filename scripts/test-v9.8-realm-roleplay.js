@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const Handlebars = require("../resources/app/node_modules/handlebars");
 const { createGameData } = require("../resources/app/out/main/game-data/game-data");
 const { Character } = require("../resources/app/out/main/game-data/character");
 const { createLogParser } = require("../resources/app/out/main/game-data/log-parser");
@@ -53,16 +54,16 @@ const writeAndParse = async lines => {
 };
 
 let useV813 = true;
+let mainTemplate = "{{! VOTC_SEGMENT:world_context }}日期={{gameData.date}}；{{gameData.historicalReferenceInfo.context}}";
 const estimateTokens = value => Math.ceil(String(value).length / 4);
 const PromptBuilder = createPromptBuilder({
   TemplateEngine: class {
     renderTemplateString(template, context) {
-      return template.replace(/\{\{gameData\.date\}\}/g, context.gameData.date || "")
-        .replace(/\{\{gameData\.historicalReferenceInfo\.context\}\}/g, context.gameData.historicalReferenceInfo?.context || "");
+      return Handlebars.compile(template)(context);
     }
   },
   PromptScriptLoader: class {},
-  promptConfigManager: { getDefaultMainTemplateContent: () => "{{! VOTC_SEGMENT:world_context }}日期={{gameData.date}}；{{gameData.historicalReferenceInfo.context}}" },
+  promptConfigManager: { getDefaultMainTemplateContent: () => mainTemplate },
   settingsRepository: {
     getChatPromptV813Layout: () => useV813,
     getPromptSettings: () => ({ blocks: [{ id: "main", type: "main", role: "system", enabled: true },
@@ -133,10 +134,15 @@ async function run() {
   preserveSocialRecognition(next, changedDay);
   assert.deepEqual(getPublicRealmIdentities(changedDay, 2), [], "a different date does not authorize the opening political scope");
   scene.gameData = changedDay;
-  assert.match(build(2), /1079\.5\.3/, "same scene renders its opening date after a game-data refresh");
-  assert.doesNotMatch(build(2), /1079\.5\.4/);
+  assert.match(build(2), /本场开场 CK3 日期 ===\n日期：1079\.5\.3/, "opening block retains its date after a game-data refresh");
+  assert.match(build(2), /日期=1079\.5\.4/, "custom templates can still request the latest CK3 date");
+  const bundledMain = fs.readFileSync(path.resolve(__dirname, "../resources/app/default_userdata/prompts/system/default.hbs"), "utf8");
+  mainTemplate = bundledMain.slice(bundledMain.indexOf("{{! VOTC_SEGMENT:world_context }}"), bundledMain.indexOf("{{! VOTC_SEGMENT:character_base }}"));
+  const openingOnly = build(2);
+  assert.equal((openingOnly.match(/1079\.5\.3/g) || []).length, 1, "bundled world context reuses the opening date without duplicating it");
+  assert.doesNotMatch(openingOnly, /1079\.5\.4/, "bundled world context omits the competing live date");
   useV813 = false;
-  assert.match(build(2), /=== 本场 CK3 日期 ===/);
+  assert.match(build(2), /=== 本场开场 CK3 日期 ===/);
   assert.doesNotMatch(build(2, { cacheV2FrozenSnapshots: null, worldBackground: { text: "此战役使用架空历法" } }),
     /年代常识按真实年份/);
   assert.equal((await writeAndParse(header("未知"))).year, null, "unknown dates do not silently become 976");

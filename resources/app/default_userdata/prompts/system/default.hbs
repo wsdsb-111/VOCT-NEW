@@ -74,8 +74,10 @@
             当前世界与历史背景
 ═══════════════════════════════════════════════════════
 
+{{#unless gameData.hasFrozenOpeningCalendar}}
 【本场时间】
 {{#if gameData.date}}时间：{{gameData.date}}（{{gameData.year}}年）{{else}}时间：未能确认{{/if}}
+{{/unless}}
 {{#if gameData.dynasty}}朝代：{{gameData.dynasty}}{{/if}}
 {{#if gameData.currentEmperor}}
 在位：{{gameData.currentEmperorTitle}} {{gameData.currentEmperor}}

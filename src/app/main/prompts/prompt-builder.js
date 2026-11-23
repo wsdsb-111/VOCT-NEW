@@ -569,7 +569,7 @@ ${nameAccessRule}
 
     static formatConversationFrozen(snapshot) {
       if (Object.hasOwn(snapshot, "historicalRoleplay")) {
-        const calendar = ["=== 本场 CK3 日期 ===", `日期：${snapshot.date || "未能确认"}`];
+        const calendar = ["=== 本场开场 CK3 日期 ===", `日期：${snapshot.date || "未能确认"}`];
         if (snapshot.historicalRoleplay) {
           calendar.push("以该日期为角色历史见闻的上限，按场景地区、角色文化、身份和场合采用当地此时已通行的语气、称呼、礼数、行为与衣着。年代常识按真实年份，政权、在位者和年号依下文获准的 CK3 存档事实。使用此时已经出现且角色有机会知悉的人物、作品和事迹。别人提到陌生名字只表示你听到其说法。时间、知情或礼制细节不确定就保守回应，勿预知后世。台词保持自然，尊卑亲疏按场合变化。");
         }
@@ -913,7 +913,7 @@ ${nameAccessRule}
       appendDisclosures("frozen", "Previously Disclosed Names and Traits", PROMPT_LIFECYCLE.RESPONDER_FROZEN);
       const promptGameData = openingCalendar || memoryContext?.historicalReferenceInfo ? Object.assign(Object.create(Object.getPrototypeOf(gameData)), gameData, {
         historicalReferenceInfo: memoryContext.historicalReferenceInfo ?? null,
-        ...(openingCalendar ? { date: openingCalendar.date, year: openingCalendar.year, dynasty: null } : {}),
+        ...(openingCalendar ? { hasFrozenOpeningCalendar: true, dynasty: null } : {}),
         currentEmperor: null,
         currentEmperorTitle: null,
         currentEraName: null
