@@ -1411,6 +1411,7 @@ ${nameAccessRule}
         dynamicTailTokens: blocksWithTokens.slice(firstDynamicBlock < 0 ? blocksWithTokens.length : firstDynamicBlock).reduce((total, tokenBlock) => total + (Number(tokenBlock.tokens) || 0), 0)
       };
       const planned = finalizePromptBuild(legacyBuild, { mode: options.promptPlanMode, memoryContext,
+        traceSerialization: options.traceSerialization,
         providerConfig, promptSettings, estimateTokens: text => TokenCounter.estimateTokens(text),
         scope: { campaignToken: ageAuthorityGameData.campaignToken ?? memoryContext?.sourceCampaignToken ?? null,
           conversationId: memoryContext?.conversationId ?? null, ownerId: Number(char.id), responderId: Number(char.id),

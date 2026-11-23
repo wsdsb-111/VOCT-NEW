@@ -72,10 +72,16 @@ jobs:
       - name: Cold-start complete Windows distribution
         if: ${{ !cancelled() && steps.materialize.outcome == 'success' }}
         run: node scripts/test-v9.4-windows-packaged-smoke.js --launch --keep-temp
+      - name: Upgrade from V9.7.4 and roll back the isolated runtime
+        env:
+          VOTC_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/verify-v9.8-runtime-upgrade.js
       - name: Preserve anonymous packaged smoke evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: v94-packaged-smoke-${{ github.event.pull_request.head.sha || github.sha }}
-          path: .build/v9.4-construction/smoke-temp/**/evidence.json
+          path: |
+            .build/v9.4-construction/smoke-temp/**/evidence.json
+            .build/v98-runtime-upgrade-*/evidence.json
           if-no-files-found: ignore

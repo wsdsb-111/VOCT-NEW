@@ -735,8 +735,10 @@ async function run(options) {
   }
 }
 
-Promise.resolve().then(() => run(parseArgs(process.argv.slice(2)))).then(code => { process.exitCode = code; }).catch(error => {
+if (require.main === module) Promise.resolve().then(() => run(parseArgs(process.argv.slice(2)))).then(code => { process.exitCode = code; }).catch(error => {
   console.error(`V9.4 Windows packaged smoke: FAIL (${error.message})`);
   console.error(usage());
   process.exitCode = 1;
 });
+
+module.exports = { inspectOneLaunch };

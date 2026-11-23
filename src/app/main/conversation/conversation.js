@@ -1468,15 +1468,16 @@ class Conversation {
     return this.getGenerationManager().cancel(reason);
   }
   // Handle response for a single NPC
-  async respondAs(npc, turnEpoch = this.turnEpoch, { narrationRewriteOf = null } = {}) {
+  async respondAs(npc, turnEpoch = this.turnEpoch, { narrationRewriteOf = null, traceAttempt } = {}) {
     if (this.isV813PrefixEnabled?.()) npc = this.gameData.characters.get(Number(npc?.id)) || npc;
     if (turnEpoch !== this.turnEpoch || !this.isCharacterAvailableForConversation(npc)) {
+      finishTraceSpan(traceAttempt?.settle, { result: turnEpoch === this.turnEpoch ? "SKIPPED" : "STALE" });
       console.log(`[Conversation] Skipping unavailable NPC response: ${npc?.shortName || npc?.id || "unknown"}`);
       return;
     }
     this.resetContextUsageScene(turnEpoch);
     let diagnosticsContext = null;
-    try { diagnosticsContext = this.performanceTraceContext?.nextTurn?.() || null; } catch (_error) {}
+    try { diagnosticsContext = traceAttempt?.context || this.performanceTraceContext?.nextTurn?.() || null; } catch (_error) {}
     const conversationTurnSpan = startTraceSpan(performanceTrace, "conversation.turn", { attribution: "MAIN", context: diagnosticsContext });
     let conversationTurnResult = "OK";
     // Clear mentioned characters from previous message
@@ -1534,6 +1535,8 @@ class Conversation {
       const promptGameRevision = () => planFingerprint([this.gameData.campaignToken, this.gameData.date, this.gameData.totalDays,
         this.gameData.scene, this.gameData.location, this.gameData.locationController]);
       const builtGameRevision = promptGameRevision();
+      const traceSerialization = operation => traceOperation(performanceTrace, "serialization",
+        { attribution: "MAIN", context: diagnosticsContext, signal: controller.signal }, operation);
       const canonicalPromptBuild = traceOperation(performanceTrace, "prompt.build", { attribution: "MAIN", context: diagnosticsContext }, () => PromptBuilder.buildMessagesWithTokenCount(
         this.getPromptHistoryForCharacter(npc.id),
         npc,
@@ -1541,7 +1544,7 @@ class Conversation {
         this.getPromptSummaryForCharacter(npc.id),
         memoryContext,
         activeConfig,
-        { promptPlanScope: { campaignToken: this.gameData.campaignToken, conversationId: this.id, ownerId: Number(npc.id),
+        { traceSerialization, promptPlanScope: { campaignToken: this.gameData.campaignToken, conversationId: this.id, ownerId: Number(npc.id),
             responderId: Number(npc.id), playerId: Number(this.gameData.playerID), conversationEpoch: this.conversationEpoch, logicalTurnEpoch: turnEpoch },
           ...(narrationTarget ? { currentTurnInstructions: "请只重新表达你在本轮的最后一条台词，不要续写新一轮，也不要重新回应其后的发言。已经发生的游戏动作及其结果保持不变；不得撤销、重复或新增动作，只输出替换台词。" } : {}) }
       ));
@@ -1710,7 +1713,8 @@ class Conversation {
             if (event.usage?.native) providerUsage = event.usage;
             if (requestPhase === "streaming" && event.usage?.native) publishContextUsage("streaming");
           },
-          beforeSendGuard: () => {
+          beforeSendGuard: () => traceOperation(performanceTrace, "conversation.sourceGuard",
+            { attribution: "MAIN", context: diagnosticsContext, signal: controller.signal }, () => {
             this.captureWorldBackground?.();
             if (narrationTarget && (!this.messages.includes(narrationTarget) || narrationTarget.content !== originalNarration)) {
               const error = new Error("Original narration changed before send");
@@ -1785,7 +1789,7 @@ class Conversation {
                 console.warn("[MemoryDiagnostics] Memory attempt diagnostics unavailable");
               }
             }
-          },
+          }),
           memoryAttemptDiagnostics,
           conversationId: this.id,
           responderId: npc.id,
@@ -1976,6 +1980,7 @@ class Conversation {
         this.getGenerationManager().finish(responseState, { wasCancelled });
       } finally {
         finishTraceSpan(conversationTurnSpan, { result: conversationTurnResult, errorCode: conversationTurnResult === "ERROR" ? "provider_error" : undefined });
+        finishTraceSpan(traceAttempt?.settle, { result: conversationTurnResult });
       }
     }
     if (narrationTarget) return narrationCommitted ? { success: true, mode: "NARRATION_ONLY" }

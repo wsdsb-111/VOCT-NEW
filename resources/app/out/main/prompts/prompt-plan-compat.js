@@ -14,7 +14,7 @@ function finalizePromptBuild(legacyBuild, inputs) {
   try {
     promptPlan = buildPromptPlanV9({ ...inputs, mode, authorizedInputs: legacyBuild,
       layoutId: legacyBuild.promptProfile.layoutId, promptProfileId: legacyBuild.promptProfile.id });
-    serialized = serializePromptPlan(promptPlan);
+    serialized = inputs.traceSerialization ? inputs.traceSerialization(() => serializePromptPlan(promptPlan)) : serializePromptPlan(promptPlan);
   } catch (error) {
     // Unrepresentable legacy script messages keep the existing source guard and final provider budget.
     // Invalid scopes, revoked sources, duplicate IDs or missing spans never use this compatibility path.

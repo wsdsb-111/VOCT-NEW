@@ -1,3 +1,7 @@
+# V9.8 工程候选
+
+V9.8 聚焦多人对话耗时归因、数据与安装安全、实机长时间运行及恢复。GLM 低命中归档为已接受的服务商限制。[V9.8 基线与验收](V9.8.md)
+
 # 2026-11-23 V9.7.4 姓名披露双场 CK3 实机验收（用户确认 PASS）
 
 **验收状态：`V9_7_4_NAME_DISCLOSURE_LIVE_ACCEPTANCE = PASS_USER_CONFIRMED`。** 用户于 2026-11-23（Asia/Taipei）确认此前提出的 CK3 姓名披露双场实机验收清单全部通过。将 V9.7.4 姓名披露链路作为后续 V9.8 开发的**稳定功能基线**；涉及该链路的后续更改须维持不回归。
@@ -6,7 +10,7 @@
 
 **独立自动化证据：** 基线代码 `e2fd6d790c8b6c304d0f9336fff2c03c6be0b106` 的 Windows Release Regression [#44301455293](https://github.com/wsdsb-111/VOCT-NEW/actions/runs/44301455293) 已通过 545/545 发布组（674 个测试文件、128 项归档检查），包含姓名解析、跨场 Store 读回、实际 Provider 适配器出站与撤销、Windows 启动测试；359 项构建映射一致。本记录仅补充**用户实机验收结果**，不修改旧运行结果及历史 PENDING 状态，也不宣称 V9.8 缓存、全 Provider 实机或长时 Soak 已验收。
 
-**V9.8 移交：** 姓名披露专项已收口；保持 `disclosures-v1.json` 格式、五代亲属/特殊关系权限、监听者隔离、来源撤销和 `responder-disclosures-frozen/current` 缓存生命周期。缓存命中率定位与优化仍为 V9.8 首要开发目标。
+**V9.8 移交：** 姓名披露专项已收口；保持 `disclosures-v1.json` 格式、五代亲属/特殊关系权限、监听者隔离、来源撤销和 `responder-disclosures-frozen/current` 缓存生命周期。当前发布验收以 [V9.8 路线](V9.8.md) 为准。
 
 # 2026-11-18 V9.7.4 姓名披露（已本地安装）
 

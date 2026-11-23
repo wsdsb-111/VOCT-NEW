@@ -31,7 +31,12 @@ const STEPS = new Set([
   "worldline.frozenPrefetch",
   "memoryRecovery.pending",
   "conversation.turn",
+  "conversation.turnDispatch",
+  "conversation.ipcSend",
+  "conversation.queueWait",
+  "conversation.logicalTurn",
   "conversation.prepare",
+  "conversation.sourceGuard",
   "action.evaluate",
   "action.checks",
   "action.prompt",
@@ -51,6 +56,7 @@ const STEPS = new Set([
   "renderer.frameGap",
   "renderer.inputToFrame",
   "postTurn.work",
+  "process.resources",
   "background.clipboard.poll",
   "background.letter.logReader",
   "background.dateScanCold",
@@ -130,6 +136,9 @@ function normalizeContext(value) {
       normalized.conversationIdHash = value.conversationIdHash;
     }
     if (Number.isSafeInteger(value.turnOrdinal) && value.turnOrdinal > 0) normalized.turnOrdinal = value.turnOrdinal;
+    for (const field of ["logicalTurnOrdinal", "attemptOrdinal", "responderOrdinal"]) {
+      if (Number.isSafeInteger(value[field]) && value[field] > 0) normalized[field] = value[field];
+    }
     return normalized;
   } catch (_error) {
     return {};
@@ -141,7 +150,7 @@ function phaseForStep(step, requestedPhase) {
   if (step === "app.launch" || step === "settings.load" || step === "prompt.seed" || step === "runqueue.recovery" || step === "worldline.start" || step === "letterReader.start" || step === "pendingReceipt.recovery" || step === "renderer.firstReady") return "APP_START";
   if (step === "ck3.gameLoad" || step === "bridge.date" || step === "runfile.consumer" || step.startsWith("background.")) return "CK3_LOAD";
   if (step === "conversation.open" || step === "gameData.logParse" || step === "summary.load" || step === "knowledge.disclosureSnapshot" || step === "knowledge.directObservation" || step === "officialRecollection.sync" || step === "worldline.frozenPrefetch" || step === "memoryRecovery.pending") return "CONVERSATION_OPEN";
-  if (step === "conversation.turn" || step === "conversation.prepare" || step.startsWith("action.") || step === "memory.recall" || step === "worldline.turnQuery" || step === "prompt.build" || step === "tokenEstimate" || step === "serialization" || step.startsWith("provider.") || step.startsWith("renderer.") || step === "postTurn.work") return "TURN";
+  if (step.startsWith("conversation.") || step.startsWith("action.") || step === "memory.recall" || step === "worldline.turnQuery" || step === "prompt.build" || step === "tokenEstimate" || step === "serialization" || step.startsWith("provider.") || step.startsWith("renderer.") || step === "postTurn.work") return "TURN";
   return "IDLE";
 }
 
@@ -211,9 +220,17 @@ function createStartupPerformanceTrace(options = {}) {
       const context = normalizeContext(fields.context);
       if (context.conversationIdHash) event.conversationIdHash = context.conversationIdHash;
       if (context.turnOrdinal) event.turnOrdinal = context.turnOrdinal;
+      for (const field of ["logicalTurnOrdinal", "attemptOrdinal", "responderOrdinal"]) {
+        if (context[field]) event[field] = context[field];
+      }
       if (Number.isSafeInteger(fields.count) && fields.count >= 0) event.count = fields.count;
       if (Number.isSafeInteger(fields.bytesRead) && fields.bytesRead >= 0) event.bytesRead = fields.bytesRead;
       if (Number.isFinite(fields.cpuMs) && fields.cpuMs >= 0 && fields.cpuMs <= MAX_WALL_MS) event.cpuMs = fields.cpuMs;
+      if (step === "process.resources") {
+        for (const field of ["rssBytes", "heapUsedBytes", "activeResources"]) {
+          if (Number.isSafeInteger(fields[field]) && fields[field] >= 0) event[field] = fields[field];
+        }
+      }
       if (Number.isFinite(fields.eventLoopDelayMaxMs) && fields.eventLoopDelayMaxMs >= 0 && fields.eventLoopDelayMaxMs <= MAX_WALL_MS) event.eventLoopDelayMaxMs = fields.eventLoopDelayMaxMs;
       if (Number.isFinite(fields.maxBlockMs) && fields.maxBlockMs >= 0 && fields.maxBlockMs <= MAX_WALL_MS) event.maxBlockMs = fields.maxBlockMs;
       if (DATE_SCAN_MODES.has(fields.mode)) event.mode = fields.mode;
@@ -302,14 +319,25 @@ function createStartupPerformanceTrace(options = {}) {
       context = { turnOrdinal: 0 };
       conversationContexts.set(conversationIdHash, context);
     }
+    const nextTurn = () => ({ conversationIdHash, turnOrdinal: ++context.turnOrdinal });
     return {
-      nextTurn() {
-        try {
-          context.turnOrdinal += 1;
-          return { conversationIdHash, turnOrdinal: context.turnOrdinal };
-        } catch (_error) {
-          return null;
-        }
+      nextTurn,
+      startLogicalTurn(logicalTurnOrdinal, attemptOrdinal) {
+        const scope = { conversationIdHash, logicalTurnOrdinal, attemptOrdinal };
+        const span = startSpan("conversation.logicalTurn", { attribution: "MAIN", context: scope });
+        let responders = 0;
+        let result = "SKIPPED";
+        return {
+          nextResponder() {
+            if (!responders) span.mark("conversation.turnDispatch");
+            const context = { ...scope, ...nextTurn(), responderOrdinal: ++responders };
+            span.mark("conversation.queueWait", { context });
+            return { context, settle({ result: status }) {
+              if (status === "ERROR" || result === "SKIPPED" || result === "OK" && status === "CANCELLED") result = status;
+            } };
+          },
+          finish(override) { span({ result: result === "ERROR" ? result : override || result, count: responders }); }
+        };
       }
     };
   };
@@ -348,6 +376,7 @@ function createStartupPerformanceTrace(options = {}) {
       sampledWindow: true,
       p50Ms: percentile(aggregate.samples, 0.5),
       p95Ms: percentile(aggregate.samples, 0.95),
+      maxMs: percentile(aggregate.samples, 1),
       bytesRead: aggregate.bytesRead
     }));
     return {

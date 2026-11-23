@@ -833,18 +833,23 @@ function registerIpcHandlers(runtime) {
   console.log("Setting up conversation IPC handlers...");
   electron.ipcMain.handle("conversation:sendMessage", async (_, requestArgs) => {
     const { message } = requestArgs;
+    let finish, resultCode = "OK";
+    try { finish = performanceTrace?.enabled ? performanceTrace.startSpan("conversation.ipcSend", { attribution: "MAIN" }) : null; } catch (_error) {}
     try {
-      console.log("IPC: Sending message:", message);
+      console.log("IPC: Sending message (characters=%d)", typeof message === "string" ? message.length : 0);
       const streaming = settingsRepository.getGlobalStreamSetting() || true;
       const result = await (services?.conversation || conversationManager).sendMessage(message, streaming);
       console.log("IPC: Message sent successfully, result type:", typeof result);
       return { streamStarted: false, message: result };
     } catch (error) {
+      resultCode = "ERROR";
       console.error("IPC: Failed to send message:", error);
       return {
         streamStarted: false,
         error: error instanceof Error ? error.message : "Unknown error"
       };
+    } finally {
+      try { finish?.({ result: resultCode, errorCode: "request_error" }); } catch (_error) {}
     }
   });
   electron.ipcMain.handle("conversation:reset", () => {

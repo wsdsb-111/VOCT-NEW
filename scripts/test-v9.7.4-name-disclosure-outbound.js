@@ -170,6 +170,13 @@ async function main() {
     const eventCount = h.events.length;
     await conversation.sendMessage(introduction);
     assert(h.profile().facts.some(fact => fact.factType === "NAME" && fact.disclosurePhase === "current"));
+    const original = conversation.messages[0];
+    const replacement = "我们只聊聊今天的天气。".padEnd(original.content.length, "。");
+    assert.equal(replacement.length, original.content.length);
+    original.content = replacement;
+    conversation.recordCharacterDisclosures();
+    assert(!h.profile().facts.some(fact => fact.factType === "NAME"),
+      "the same message ID, date and length cannot retain a revoked name");
     await conversation.editUserMessage(conversation.messages[0].id, "还是聊聊天气吧。");
     assert(!h.profile().facts.some(fact => fact.factType === "NAME"));
     await h.respond();

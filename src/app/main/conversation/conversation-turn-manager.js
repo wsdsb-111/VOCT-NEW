@@ -49,6 +49,7 @@ class ConversationTurnManager {
       regenerateOfByResponder: Object.freeze({}),
       queueState: "cleared"
     });
+    this.startQueueTrace();
     return this.currentTurn;
   }
 
@@ -74,10 +75,12 @@ class ConversationTurnManager {
       regenerateOfByResponder: Object.freeze({ ...regenerateOfByResponder }),
       queueState: "regenerating"
     });
+    this.startQueueTrace();
     return this.currentTurn;
   }
 
   supersede(reason) {
+    this.finishQueueTrace("CANCELLED");
     this.epoch += 1;
     this.conversation.cancelActiveResponse?.(reason);
     this.queue = [];
@@ -87,6 +90,18 @@ class ConversationTurnManager {
 
   isCurrent(turn) {
     return !!turn && turn.epoch === this.epoch;
+  }
+
+  startQueueTrace() {
+    this.finishQueueTrace("CANCELLED");
+    try {
+      this.queueTrace = this.conversation.performanceTraceContext?.startLogicalTurn?.(this.logicalEpoch, this.epoch);
+    } catch (_error) {}
+  }
+
+  finishQueueTrace(result) {
+    try { this.queueTrace?.finish(result); } catch (_error) {}
+    this.queueTrace = null;
   }
 
   fillQueue({ customQueue, npcs, persistCustomQueue }) {
@@ -100,17 +115,26 @@ class ConversationTurnManager {
 
   async processQueue(epoch = this.epoch) {
     const conversation = this.conversation;
-    if (epoch !== this.epoch || this.queue.length === 0 || conversation.isPaused) return;
+    if (epoch !== this.epoch || conversation.isPaused) return;
+    if (this.queue.length === 0) {
+      if (!conversation.activeResponse) this.finishQueueTrace();
+      return;
+    }
     console.log("Processing queue with", this.queue.length, "NPCs remaining");
     while (epoch === this.epoch && this.queue.length > 0 && !conversation.isPaused) {
       const npc = this.queue.shift();
+      let traceAttempt;
+      try { traceAttempt = this.queueTrace?.nextResponder(); } catch (_error) {}
       try {
-        await conversation.respondAs(npc, epoch);
+        if (traceAttempt) await conversation.respondAs(npc, epoch, { traceAttempt });
+        else await conversation.respondAs(npc, epoch);
       } catch (error) {
+        try { traceAttempt?.settle({ result: "ERROR" }); } catch (_error) {}
         console.error("Unhandled error in respondAs for", npc.shortName, ":", error);
         conversation.emitUpdate();
       }
     }
+    if (epoch === this.epoch && this.queue.length === 0) this.finishQueueTrace();
     if (this.queue.length === 0 && conversation.isPaused) conversation.isPaused = false;
     if (this.queue.length === 0) conversation.emitUpdate();
   }

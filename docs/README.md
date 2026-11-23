@@ -1,3 +1,4 @@
+- [2026-11-23 V9.8 RC、多人对话与长期稳定性](versions/v9/V9.8.md) · [当前验收](versions/v9/STATUS.md)
 - [2026-11-18 V9.7.4 姓名披露可靠性](versions/v9/V9.7.md#name-disclosure-v974-20261118) · [当前验收](versions/v9/STATUS.md)
 - [2026-11-18 V9.7.3 缓存、披露与信件验证](versions/v9/V9.7.md#provider-cache-v973-20261118)：服务商单独对照、姓名与特质在本场和新场的注入顺序、信件生成和模拟送达；见[当前状态](versions/v9/STATUS.md)。
 - [2026-11-18 V9.7.2 GLM官方缓存条件与安全追加候选](versions/v9/V9.7.md#glm-official-append-20261118)：官方条件、追加/保留思考API对照、当前消息纯置换、来源/状态变化回退。

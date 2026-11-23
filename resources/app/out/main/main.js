@@ -32,6 +32,24 @@ const { createBridgeBusinessEvidence } = require("./bridge/bridge-business-evide
 
 const performanceTrace = createStartupPerformanceTrace();
 const appLaunchSpan = performanceTrace.startSpan("app.launch", { attribution: "MAIN" });
+if (performanceTrace.enabled) {
+  let previousSample = performance.now();
+  let previousCpu = process.cpuUsage();
+  const resourceTimer = setInterval(() => {
+    try {
+      const now = performance.now();
+      const cpu = process.cpuUsage();
+      const { rss, heapUsed } = process.memoryUsage();
+      performanceTrace.record("process.resources", { attribution: "MAIN", wallMs: now - previousSample,
+        cpuMs: (cpu.user + cpu.system - previousCpu.user - previousCpu.system) / 1000,
+        rssBytes: rss, heapUsedBytes: heapUsed, activeResources: process.getActiveResourcesInfo?.().length });
+      previousSample = now;
+      previousCpu = cpu;
+    } catch (_error) {}
+  }, 30000);
+  resourceTimer.unref();
+  electron.app.once("will-quit", () => clearInterval(resourceTimer));
+}
 
 function traceMainOperation(step, operation, attribution = "MAIN") {
   if (!performanceTrace.enabled) return operation();
