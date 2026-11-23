@@ -298,10 +298,20 @@ function connectCdp(webSocketUrl, errors) {
         requests.set(id, { method, resolve: sendResolve, reject: sendReject, timer });
         socket.send(JSON.stringify({ id, method, params }));
       });
-      const evaluate = async expression => {
-        const response = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
+      const resultFrom = response => {
         if (response.exceptionDetails) throw new Error(redactAndBoundOutput(response.exceptionDetails.exception?.description || response.exceptionDetails.text || "CDP evaluation failed"));
-        return response.result?.value;
+        return response.result;
+      };
+      const evaluate = async (expression, { pinPromise = false } = {}) => {
+        const result = resultFrom(await send("Runtime.evaluate", { expression, awaitPromise: !pinPromise, returnByValue: !pinPromise }));
+        if (!pinPromise) return result?.value;
+        const objectId = result?.objectId;
+        if (!objectId || result.subtype !== "promise") throw new Error("CDP probe did not return a Promise handle");
+        try {
+          return resultFrom(await send("Runtime.awaitPromise", { promiseObjectId: objectId, returnByValue: true }))?.value;
+        } finally {
+          try { await send("Runtime.releaseObject", { objectId }); } catch (_error) {}
+        }
       };
       resolve({ send, evaluate, socket });
     }, { once: true });
@@ -453,7 +463,7 @@ async function inspectOneLaunch(appDir, profileDir, expectedVersion, passNumber,
     }
     if (!rendererInfo) throw new Error("Renderer did not load with the expected preload bridge");
 
-    const ipcVersion = await renderer.evaluate("electronAPI.getAppVersion()");
+    const ipcVersion = await renderer.evaluate("electronAPI.getAppVersion()", { pinPromise: true });
     if (ipcVersion !== expectedVersion) throw new Error(`Read-only app:getVersion IPC returned ${String(ipcVersion)}`);
     // Decode a local silent PCM sample without playback or network access. Media DLLs may load lazily.
     const mediaDecode = await renderer.evaluate(`(async () => {
@@ -467,7 +477,7 @@ async function inspectOneLaunch(appDir, profileDir, expectedVersion, passNumber,
       const context = new OfflineAudioContext(1, 32, 8000);
       const decoded = await context.decodeAudioData(wav);
       return { samples: decoded.length, sampleRate: decoded.sampleRate, channels: decoded.numberOfChannels };
-    })()`);
+    })()`, { pinPromise: true });
     if (mediaDecode?.samples !== 32 || mediaDecode.sampleRate !== 8000 || mediaDecode.channels !== 1) throw new Error("Packaged media decoder did not decode the synthetic PCM sample");
     await delay(2000);
     if (settledExit) throw new Error(`VOTC.exe exited during the cold-start stability window (${JSON.stringify(settledExit)})`);
@@ -741,4 +751,4 @@ if (require.main === module) Promise.resolve().then(() => run(parseArgs(process.
   process.exitCode = 1;
 });
 
-module.exports = { inspectOneLaunch };
+module.exports = { connectCdp, inspectOneLaunch };

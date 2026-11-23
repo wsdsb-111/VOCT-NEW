@@ -84,4 +84,5 @@ jobs:
           path: |
             .build/v9.4-construction/smoke-temp/**/evidence.json
             .build/v98-runtime-upgrade-*/evidence.json
+          include-hidden-files: true
           if-no-files-found: ignore
