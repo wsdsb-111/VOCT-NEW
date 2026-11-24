@@ -50,6 +50,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
     let recognitionRows = [];
     let realmIdentityRows = [];
     let reignEraRows = [];
+    let courtMemberRows = [];
     let characterHistoryRows = [];
     let characterBackgroundRows = [];
     let pendingCharacterBackground = null;
@@ -253,6 +254,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
             recognitionRows = [];
             realmIdentityRows = [];
             reignEraRows = [];
+            courtMemberRows = [];
             characterHistoryRows = [];
             characterBackgroundRows = [];
             break;
@@ -264,6 +266,9 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
             break;
           case "realm_identity":
             realmIdentityRows.push(data);
+            break;
+          case "court_member":
+            courtMemberRows.push(data);
             break;
           case "reign_era":
             reignEraRows.push(data);
@@ -1142,7 +1147,7 @@ function createLogParser({ GameData, Character, onGameDataParsed = null }) {
       value: !(isWaitingForMultiLine && ["relations", "new_relations"].includes(multiLineType)),
       configurable: true
     });
-    if (gameData) captureRecognitionEvidence(gameData, recognitionRows, realmIdentityRows, reignEraRows);
+    if (gameData) captureRecognitionEvidence(gameData, recognitionRows, realmIdentityRows, reignEraRows, courtMemberRows);
     if (gameData) captureCharacterBackgrounds(gameData, characterHistoryRows, characterBackgroundRows);
     if (gameData && typeof onGameDataParsed === "function") await onGameDataParsed(gameData);
     console.log(gameData);

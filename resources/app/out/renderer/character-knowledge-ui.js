@@ -18,6 +18,7 @@
     IN_PERSON_OBSERVATION: "在场可见的外貌／身体白名单特质",
     PUBLIC_CLOSE_FAMILY: "已公开的父母子女／亲兄弟姐妹关系",
     PUBLIC_NICKNAME: "公开称号",
+    SAME_COURT: "CK3 确认的同一宫廷",
     SOCIAL_RECOGNITION: "本次对话的领主／封臣／领地邻接关系",
     SPECIAL_RELATION: "当前CK3确认的双方特殊关系",
     SUPERNATURAL_RECOGNITION: "当面精确认出的种族身份",
@@ -102,6 +103,7 @@
       PUBLIC_CLOSE_FAMILY: "publicCloseFamily",
       PUBLIC_NICKNAME: "publicNickname",
       SOCIAL_RECOGNITION: "socialRecognition",
+      SAME_COURT: "sameCourt",
       SPECIAL_RELATION: "specialRelation",
       SUPERNATURAL_RECOGNITION: "supernaturalRecognition",
       SUPERNATURAL_SENSE: "supernaturalSense"
@@ -112,9 +114,9 @@
   function renderFact(fact, onChange, disabled, translate) {
     const row = element("article", "character-knowledge-fact");
     const title = element("div", "character-knowledge-fact-heading");
-    const kindKey = fact.factType === "PERCEPTION" ? "perception" : fact.factType === "NAME" ? "name" : fact.factType === "NICKNAME" ? "nickname" : fact.factType === "TITLE" ? "title" : "trait";
-    const kindFallback = fact.factType === "PERCEPTION" ? "感知" : fact.factType === "NAME" ? "姓名" : fact.factType === "NICKNAME" ? "称号" : fact.factType === "TITLE" ? "头衔" : "特质";
-    const kind = localized(translate, `kinds.${kindKey}`, kindFallback);
+    const kinds = { PERCEPTION: "感知", NAME: "姓名", NICKNAME: "称号", TITLE: "头衔", AGE: "年龄", GENDER: "性别", TRAIT: "特质" };
+    const kindKey = Object.hasOwn(kinds, fact.factType) ? fact.factType : "TRAIT";
+    const kind = localized(translate, `kinds.${kindKey.toLowerCase()}`, kinds[kindKey]);
     const value = fact.value || localized(translate, "common.unknownName", "名称未载入");
     title.append(element("strong", "", localized(translate, "ui.factValue", `${kind}：${value}`, { kind, value })));
     const status = fact.sourceStatus === "STALE" ? "STALE" : fact.status;

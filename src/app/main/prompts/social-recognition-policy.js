@@ -61,9 +61,18 @@ function captureRealmIdentities(gameData, identities, eras) {
   return byOwner;
 }
 
-function captureRecognitionEvidence(gameData, rows, realmIdentities = [], reignEras = []) {
+function captureRecognitionEvidence(gameData, rows, realmIdentities = [], reignEras = [], courtMembers = []) {
   const pairs = new Map();
   const specialPairs = new Set();
+  const courtOwners = new Map();
+  if (gameData.campaignToken && normalizeGameDate(gameData.date) && Number.isSafeInteger(gameData.totalDays)) {
+    for (const [member, court, player, day] of courtMembers) {
+      const memberId = Number(member), courtId = Number(court);
+      if (!validId(member) || !(validId(court) || court === "0") || memberId === courtId || !hasCharacter(gameData, memberId)
+        || Number(player) !== Number(gameData.playerID) || !/^\d+$/.test(day) || Number(day) !== gameData.totalDays) continue;
+      courtOwners.set(memberId, !courtOwners.has(memberId) || courtOwners.get(memberId) === courtId ? courtId : null);
+    }
+  }
   for (const [owner, target, player, reason] of rows) {
     if (!validId(owner) || !validId(target) || Number(owner) === Number(target)
       || Number(player) !== Number(gameData.playerID) || !REASONS.has(reason)
@@ -82,7 +91,7 @@ function captureRecognitionEvidence(gameData, rows, realmIdentities = [], reignE
     }
   }
   evidenceByData.set(gameData, { playerId: Number(gameData.playerID), campaignToken: gameData.campaignToken,
-    date: gameData.date, totalDays: gameData.totalDays, pairs, specialPairs,
+    date: gameData.date, totalDays: gameData.totalDays, pairs, specialPairs, courtOwners,
     realmIdentities: captureRealmIdentities(gameData, realmIdentities, reignEras) });
 }
 
@@ -122,7 +131,13 @@ function preserveSocialRecognition(previousData, nextData) {
       })) realmIdentities.delete(ownerId);
     }
   }
-  const frame = { ...previous, realmIdentities };
+  const courtOwners = new Map(previous.courtOwners);
+  if (matches(fresh, nextData)) {
+    for (const [memberId, courtId] of courtOwners) {
+      if (fresh.courtOwners.has(memberId) && fresh.courtOwners.get(memberId) !== courtId) courtOwners.delete(memberId);
+    }
+  }
+  const frame = { ...previous, realmIdentities, courtOwners };
   frames.set(nextData, frame);
   evidenceByData.set(nextData, frame);
 }
@@ -148,6 +163,20 @@ function getPublicRealmIdentities(gameData, ownerId) {
 
 function hasPublicRealmIdentity(gameData, ownerId, targetId) {
   return getPublicRealmIdentities(gameData, ownerId).some(row => row.targetId === Number(targetId));
+}
+
+function hasSameCourtKnowledge(gameData, ownerId, targetId) {
+  const frame = frames.get(gameData);
+  const observer = Number(ownerId), target = Number(targetId);
+  if (observer === target || endedData.has(gameData) || !matches(frame, gameData)
+    || frame.totalDays !== gameData.totalDays || frame.date !== gameData.date
+    || !frame.selectedIds.has(observer) || !frame.selectedIds.has(target)
+    || !hasCharacter(gameData, observer) || !hasCharacter(gameData, target)) return false;
+  const courtId = frame.courtOwners.get(observer);
+  return !!courtId && courtId === frame.courtOwners.get(target) && [observer, target].every(id => {
+    const life = resolveLifeStatus(gameData.characters.get(id));
+    return !life.conflict && life.alive !== false;
+  });
 }
 
 function hasSpecialRelationKnowledge(gameData, ownerId, targetId) {
@@ -190,5 +219,5 @@ function getSupernaturalPerception(observer, target, gameData, { activeParticipa
 }
 
 module.exports = { isSupernaturalIdentity, captureRecognitionEvidence, activateSocialRecognition, deactivateSocialRecognition,
-  getPublicRealmIdentities, hasPublicRealmIdentity,
+  getPublicRealmIdentities, hasPublicRealmIdentity, hasSameCourtKnowledge,
   preserveSocialRecognition, getSocialRecognitionSource, hasSpecialRelationKnowledge, getSupernaturalPerception, SUPERNATURAL_PRESENCE_CUE };

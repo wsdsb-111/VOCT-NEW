@@ -621,21 +621,30 @@ votc_log_social_recognition = {
 	save_scope_as = votc_recognition_observer
 	save_scope_as = votc_recognition_realm_anchor
 	if = {
+		limit = { is_courtier = yes exists = court_owner }
+		court_owner = {
+			debug_log = "VOTC:IN/;/court_member/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/[GetCurrentDate.GetDateAsTotalDays]"
+		}
+	}
+	else = {
+		debug_log = "VOTC:IN/;/court_member/;/[THIS.Char.GetID]/;/0/;/[GetPlayer.GetID]/;/[GetCurrentDate.GetDateAsTotalDays]"
+	}
+	if = {
 		limit = { highest_held_title_tier < tier_barony exists = court_owner }
 		court_owner = {
 			save_scope_as = votc_recognition_realm_anchor
-			votc_log_public_realm_identity = { RELATION = COURT_LORD }
+			debug_log = "VOTC:IN/;/realm_identity/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/[GetCurrentDate.GetDateAsTotalDays]/;/COURT_LORD/;/[THIS.Char.GetFullNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetPrimaryTitle.GetNameNoTooltip]/;/[THIS.Char.GetTitleTierName]"
 		}
 	}
 	scope:votc_recognition_realm_anchor = {
 		every_liege_or_above = {
 			limit = { NOT = { this = scope:votc_recognition_realm_anchor.top_liege } }
-			votc_log_public_realm_identity = { RELATION = LIEGE }
+			debug_log = "VOTC:IN/;/realm_identity/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/[GetCurrentDate.GetDateAsTotalDays]/;/LIEGE/;/[THIS.Char.GetFullNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetPrimaryTitle.GetNameNoTooltip]/;/[THIS.Char.GetTitleTierName]"
 		}
 		top_liege = {
 			if = {
 				limit = { exists = primary_title }
-				votc_log_public_realm_identity = { RELATION = SOVEREIGN }
+				debug_log = "VOTC:IN/;/realm_identity/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/[GetCurrentDate.GetDateAsTotalDays]/;/SOVEREIGN/;/[THIS.Char.GetFullNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetPrimaryTitle.GetNameNoTooltip]/;/[THIS.Char.GetTitleTierName]"
 				if = {
 					limit = {
 						OR = {
@@ -644,12 +653,14 @@ votc_log_social_recognition = {
 							has_variable = hanfan_nianhao_date
 						}
 					}
-					debug_log = "VOTC:IN/;/reign_era/;/[scope:votc_recognition_observer.Char.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/[GetCurrentDate.GetDateAsTotalDays]/;/[THIS.Char.Custom('hanfan_nianhao')]/;/[THIS.Char.Custom('hanfan_nianhao_year')]"
+					debug_log = "VOTC:IN/;/reign_era/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/[GetCurrentDate.GetDateAsTotalDays]/;/[THIS.Char.Custom('hanfan_nianhao')]/;/[THIS.Char.Custom('hanfan_nianhao_year')]"
 				}
 			}
 		}
 	}
-	every_vassal = { votc_log_public_realm_identity = { RELATION = DIRECT_VASSAL } }
+	every_vassal = {
+		debug_log = "VOTC:IN/;/realm_identity/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/[GetCurrentDate.GetDateAsTotalDays]/;/DIRECT_VASSAL/;/[THIS.Char.GetFullNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetPrimaryTitle.GetNameNoTooltip]/;/[THIS.Char.GetTitleTierName]"
+	}
 	every_in_global_list = {
 		variable = mcc_characters_list_v2
 		limit = { NOT = { this = scope:votc_recognition_observer } }
@@ -670,7 +681,7 @@ votc_log_recognition_pair = {
 			highest_held_title_tier >= tier_barony
 			scope:votc_recognition_observer = { is_courtier_of = scope:votc_recognition_target }
 		}
-		debug_log = "VOTC:IN/;/social_recognition/;/[scope:votc_recognition_observer.Char.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/OWN_COURT_LORD"
+		debug_log = "VOTC:IN/;/social_recognition/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/OWN_COURT_LORD"
 	}
 	else_if = {
 		limit = {
@@ -680,7 +691,7 @@ votc_log_recognition_pair = {
 				any_liege_or_above = { this = scope:votc_recognition_target }
 			}
 		}
-		debug_log = "VOTC:IN/;/social_recognition/;/[scope:votc_recognition_observer.Char.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/HIGH_LIEGE"
+		debug_log = "VOTC:IN/;/social_recognition/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/HIGH_LIEGE"
 	}
 	else_if = {
 		limit = {
@@ -688,7 +699,7 @@ votc_log_recognition_pair = {
 			this = scope:votc_recognition_target.top_liege
 			scope:votc_recognition_realm_anchor.top_liege = { character_is_land_realm_neighbor = scope:votc_recognition_target }
 		}
-		debug_log = "VOTC:IN/;/social_recognition/;/[scope:votc_recognition_observer.Char.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/NEIGHBORING_SOVEREIGN"
+		debug_log = "VOTC:IN/;/social_recognition/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/NEIGHBORING_SOVEREIGN"
 	}
 	else_if = {
 		limit = {
@@ -699,12 +710,8 @@ votc_log_recognition_pair = {
 				character_is_land_realm_neighbor = scope:votc_recognition_target
 			}
 		}
-		debug_log = "VOTC:IN/;/social_recognition/;/[scope:votc_recognition_observer.Char.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/BORDERING_RULERS"
+		debug_log = "VOTC:IN/;/social_recognition/;/[GetGlobalVariable('votc_mcc_tmp_var').GetCharacter.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/BORDERING_RULERS"
 	}
-}
-
-votc_log_public_realm_identity = {
-	debug_log = "VOTC:IN/;/realm_identity/;/[scope:votc_recognition_observer.Char.GetID]/;/[THIS.Char.GetID]/;/[GetPlayer.GetID]/;/[GetCurrentDate.GetDateAsTotalDays]/;/$RELATION$/;/[THIS.Char.GetFullNameNicknamedNoTooltipRegnal]/;/[THIS.Char.GetPrimaryTitle.GetNameNoTooltip]/;/[THIS.Char.GetTitleTierName]"
 }
 
 log_characterr = {

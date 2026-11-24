@@ -6,10 +6,12 @@ const nodeFs = require("node:fs");
 const nodePath = require("node:path");
 const crypto = require("node:crypto");
 const { normalizeGameDate } = require("../worldline/character-temporal-facts");
+const { resolveCharacterAge } = require("../worldline/character-age-service");
+const { resolveCharacterSexConsensus } = require("../worldline/character-demographic-normalizer");
 const { normalizeTraitKey, resolveTraitVisibility } = require("../prompts/trait-visibility-policy");
 const { getAutomaticTraitAccess, isPublicCloseFamily } = require("../prompts/trait-profile-selector");
 const { getSocialRecognitionSource, hasSpecialRelationKnowledge, getSupernaturalPerception, isSupernaturalIdentity,
-  getPublicRealmIdentities, hasPublicRealmIdentity } = require("../prompts/social-recognition-policy");
+  getPublicRealmIdentities, hasPublicRealmIdentity, hasSameCourtKnowledge } = require("../prompts/social-recognition-policy");
 const { getSensedSpeciesTrait } = require("../prompts/trait-visibility-policy");
 const { sourceParagraphSegments, validateSourceItem, presentIds } = require("../memory-system/finalization-visibility");
 const { extractCharacterDisclosures, getDisclosureFactCandidates } = require("./character-disclosure-extraction");
@@ -175,6 +177,10 @@ class ConversationDisclosureStore {
     const special = hasSpecialRelationKnowledge(frame.data, ownerId, targetId);
     const social = getSocialRecognitionSource(frame.data, ownerId, targetId);
     const currentDay = normalizeGameDate(frame.data.date).serial;
+    const sameCourt = frame.participantIds.includes(targetId) && hasSameCourtKnowledge(frame.data, ownerId, targetId);
+    const courtName = String(target?.firstName || target?.shortName || "").replace(/<[^>]*>/g, "").trim().normalize("NFKC");
+    const hidesCourtName = sameCourt && state.records.some(record => record.factType === "NAME" && record.targetRuntimeId === targetId
+      && hidesRealmIdentity(record, frame.scope.campaignToken, ownerId, currentDay));
     const publicIdentity = social || hasPublicRealmIdentity(frame.data, ownerId, targetId)
       && !state.records.some(record => record.targetRuntimeId === targetId
         && hidesRealmIdentity(record, frame.scope.campaignToken, ownerId, currentDay));
@@ -196,10 +202,12 @@ class ConversationDisclosureStore {
       const publicNickname = candidate.factType === "NICKNAME";
       const familyFact = closeFamily && ["NAME", "TITLE", "TRAIT"].includes(candidate.factType);
       const specialFact = special && ["NAME", "TITLE", "TRAIT"].includes(candidate.factType);
+      const courtFact = sameCourt && (publicNickname || !hidesCourtName && candidate.factType === "NAME"
+        && courtName && candidate.value.normalize("NFKC") === courtName);
       const socialFact = publicIdentity
         && ["NAME", "TITLE", "NICKNAME"].includes(candidate.factType);
       const intrinsic = manual?.status !== "MANUAL_HIDDEN"
-        && (publicNickname || familyFact || specialFact || socialFact || candidate.factType === "TRAIT" && automatic.traitKeys.includes(candidate.factKey));
+        && (publicNickname || courtFact || familyFact || specialFact || socialFact || candidate.factType === "TRAIT" && automatic.traitKeys.includes(candidate.factKey));
       const status = intrinsic ? "AUTO_DISCLOSED" : manual?.status || (evidence.length || native ? "AUTO_DISCLOSED" : "UNKNOWN");
       const observable = candidate.factType === "TRAIT" && resolveTraitVisibility(candidate.canonicalKey || candidate.factKey.slice(6)).status === "OBSERVABLE";
       // The player can explicitly disclose their own traits. Other people's
@@ -212,16 +220,32 @@ class ConversationDisclosureStore {
       const species = speciesOnly ? getSensedSpeciesTrait(candidate.factKey) : null;
       return [{ ...candidate, ...(species ? { value: species.name, aliases: [species.name, species.traitId], speciesOnly: true } : {}),
         status, effectiveKnown: status === "AUTO_DISCLOSED" || status === "MANUAL_KNOWN",
-        current: true, currentDirectObservation: intrinsic && (familyFact || publicNickname
+        current: true, currentDirectObservation: intrinsic && (familyFact || publicNickname || courtFact
           || !specialFact && !socialFact && !["SOCIAL_RECOGNITION", "SUPERNATURAL_RECOGNITION"].includes(automatic.source)), hasDisclosureRecord: evidence.length > 0,
         disclosurePhase: evidence.some(item => item.conversationId !== frame.conversation.id) ? "prior" : evidence.length ? "current" : null,
-        source: intrinsic ? publicNickname ? evidence.length ? "CONVERSATION_DISCLOSURE" : "PUBLIC_NICKNAME"
+        source: intrinsic ? courtFact ? "SAME_COURT" : publicNickname ? evidence.length ? "CONVERSATION_DISCLOSURE" : "PUBLIC_NICKNAME"
           : familyFact ? "PUBLIC_CLOSE_FAMILY" : specialFact ? "SPECIAL_RELATION" : socialFact ? "SOCIAL_RECOGNITION" : automatic.source === "OBSERVABLE" ? "IN_PERSON_OBSERVATION" : automatic.source
           : manual ? "MANUAL" : native ? "GAME_DATA_KNOWN_SECRET" : evidence.length ? "CONVERSATION_DISCLOSURE" : "UNDISCLOSED",
         sourceSnapshotId: frame.scope.sourceSnapshotId, factSourceSnapshotId,
         firstAcquiredDate: intrinsic ? evidence[0]?.gameDate || frame.data.date : manual?.acquiredDate || evidence[0]?.gameDate || (native ? frame.data.date : null),
         revision: record?.revision || 0, sourceStatus: record && !intrinsic && !manual && !evidence.length && !native ? "STALE" : "CURRENT" }];
     });
+    if (sameCourt) {
+      const age = resolveCharacterAge(target, { currentGameDate: frame.data.date, currentTotalDays: frame.data.totalDays,
+        currentCampaignToken: frame.data.campaignToken });
+      const { sex } = resolveCharacterSexConsensus({ snapshot: target });
+      for (const [factType, value] of [
+        ["AGE", age.age === null || age.sourceConflict ? null : `${age.age}岁`],
+        ["GENDER", sex === "female" ? "女性" : sex === "male" ? "男性" : null]
+      ]) {
+        if (!value) continue;
+        facts.push({ factType, factKey: factType.toLowerCase(), value, aliases: [],
+          status: "AUTO_DISCLOSED", effectiveKnown: true, current: true, currentDirectObservation: true,
+          source: "SAME_COURT", sourceStatus: "CURRENT", hasDisclosureRecord: false,
+          sourceSnapshotId: frame.scope.sourceSnapshotId, factSourceSnapshotId: `fact:${hash([frame.scope.campaignToken, targetId, factType, value])}`,
+          firstAcquiredDate: frame.data.date, revision: 0 });
+      }
+    }
     const perception = getSupernaturalPerception(owner, target, frame.data, { activeParticipantIds: frame.activeParticipantIds,
       hiddenTraitKeys: facts.filter(fact => fact.status === "MANUAL_HIDDEN" && fact.factType === "TRAIT").map(fact => fact.factKey) });
     if (perception.level === "SUPERNATURAL" && !facts.some(fact => fact.factType === "TRAIT" && fact.effectiveKnown && isSupernaturalIdentity(fact.factKey))) {

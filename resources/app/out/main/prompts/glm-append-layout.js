@@ -61,7 +61,7 @@ function prepareGlmAppendLayout(build, config, previous, { disabled = false } = 
     orderRefs: ordered.map(row => row.ref), wireHashes: ordered.map(row => row.hash),
     tailCount: tail.length, serializedFingerprint: build.serialized.serializedFingerprint };
   if (!applied) return { build: { ...build, glmAppendLayoutApplied: false }, receipt };
-  const nextPlan = { ...plan, layoutRevision: plan.layoutRevision === "v9_8_1_glm_profile_1" ? "v9_8_1_glm_profile_append_1" : REVISION, messageGroups: ordered.map(row => row.group),
+  const nextPlan = { ...plan, layoutRevision: REVISION, messageGroups: ordered.map(row => row.group),
     diagnostics: { ...plan.diagnostics } };
   nextPlan.diagnostics.planFingerprint = planSeal(nextPlan);
   const serialized = serializePromptPlan(nextPlan);

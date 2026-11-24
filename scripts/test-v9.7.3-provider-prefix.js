@@ -79,67 +79,25 @@ assert.deepEqual(next.build.messages.at(-1), { role: "system", content: "updated
 assert.deepEqual(next.build.messages.slice(0, -first.receipt.tailCount).slice(0, first.build.messages.length - first.receipt.tailCount),
   first.build.messages.slice(0, -first.receipt.tailCount));
 assert.deepEqual(multiset(next.build.messages), multiset(serialized.messages));
-// V9.8.1 takes only the current responder's durable-looking fields from the reviewed script.
-const { PromptScriptLoader } = require("../src/app/main/prompts/prompt-script-loader");
-const standard = createFixture("v813-success-frozen");
-const standardRuntime = createPromptRuntime(mainDir, standard);
-const description = standard.promptSettings.blocks.find(block => block.type === "description");
-description.id = "character-description";
-description.scriptPath = path.resolve(__dirname, "../src/app/default_userdata/prompts/character_description/standard/pListMccTest2.js");
-const examples = standard.promptSettings.blocks.find(block => block.type === "examples");
-examples.enabled = false;
-const fixtureLoader = standardRuntime.PromptBuilder.scriptLoader;
-const stockLoader = new PromptScriptLoader();
-stockLoader.executeExamples = fixtureLoader.executeExamples;
-standardRuntime.PromptBuilder.scriptLoader = stockLoader;
-standard.responder.faith = "fixture-response-faith";
-standard.responder.personality = "fixture-response-personality";
-standard.responder.traits = [{ id: "patient", category: "Personality Trait", name: "fixture-patient", desc: "fixture-description" }];
-const player = standard.gameData.characters.get(standard.gameData.playerID);
-player.culture = "fixture-player-culture-private";
-const buildProfile = (provider = config, mode = "v9") => standardRuntime.PromptBuilder.buildMessagesWithTokenCount(
-  standard.history, standard.responder, standard.gameData, standard.currentSessionSummary, standard.memoryContext,
-  provider, { promptPlanMode: mode });
-const old = buildProfile(config, "legacy");
-const current = buildProfile();
-const profileBlocks = build => build.promptPlan.blocks.filter(block => block.id.startsWith("glm-"));
-const currentFacts = build => build.promptPlan.blocks.find(block => block.id === "responder-game-facts").content;
-const [profile, identity] = profileBlocks(current);
-assert.equal(profile.id, "glm-responder-profile");
-assert.equal(identity.id, "glm-identity-rules");
-assert(identity.content.includes("私下交谈和信件"));
-assert(currentFacts(current).includes("当前回合开始交谈"));
-assert(!currentFacts(current).includes(identity.content));
-assert(currentFacts(old).includes(identity.content));
-assert(profile.order < current.promptPlan.blocks.find(block => block.legacyType === "history").order);
-assert(profile.content.includes("fixture-response-faith"));
-assert(profile.content.includes("fixture-response-personality"));
-assert(!profile.content.includes("fictional new title") && !profile.content.includes("primary title:"));
-assert(!profile.content.includes("fixture-player-culture-private"));
-assert(!profile.content.includes(player.fullName));
-assert.deepEqual(profileBlocks(old), []);
-assert.deepEqual(profileBlocks(buildProfile({ providerType: "deepseek", defaultModel: "deepseek-v4-flash" })), []);
-assert.deepEqual(profileBlocks(buildProfile(config, "shadow")), []);
-const provider = new ZhipuProvider();
-const wireProfile = build => provider.buildDiagnosticRequest({ model: config.defaultModel, stream: true, messages: build.messages }, config).messages;
-const before = wireProfile(current);
-const historyEnd = current.serialized.messageSpans.find(span => span.blockId === "history").end;
-standard.responder.primaryTitle = "fictional new title";
-standard.responder.gold += 2;
-standard.history.push({ role: "assistant", content: "new fixture reply" }, { role: "user", content: "new fixture input" });
-const update = buildProfile();
-assert.deepEqual(wireProfile(update).slice(0, historyEnd), before.slice(0, historyEnd));
-assert(currentFacts(update).includes("fictional new title"));
-standard.responder.faith = "fixture-current-faith";
-const changed = profileBlocks(buildProfile())[0].content;
-assert(changed.includes("fixture-current-faith") && !changed.includes("fixture-response-faith"));
-examples.enabled = true;
-assert.deepEqual(profileBlocks(buildProfile()), []);
-examples.enabled = false;
-standardRuntime.PromptBuilder.scriptLoader = fixtureLoader;
-const custom = buildProfile();
-assert.deepEqual(profileBlocks(custom), []);
-assert(custom.messages.some(message => message.content.startsWith("DESCRIPTION FIXTURE:")));
-console.log("PASS V9.8.1 GLM responder profile, exact legacy fallback, current game facts and history prefix");
+// V9.8.1's split profile layout is rolled back; GLM retains the V9.8.0 history-first request order.
+const rollbackFixture = createFixture("v813-success-frozen");
+const rollbackRuntime = createPromptRuntime(mainDir, rollbackFixture);
+const rollbackDescription = rollbackFixture.promptSettings.blocks.find(block => block.type === "description");
+rollbackDescription.id = "character-description";
+rollbackDescription.scriptPath = path.resolve(__dirname, "../src/app/default_userdata/prompts/character_description/standard/pListMccTest2.js");
+rollbackFixture.promptSettings.blocks.find(block => block.type === "examples").enabled = false;
+const rollbackConfig = { providerType: "zhipu", defaultModel: "glm-5.3-flash", glmClearThinking: true };
+const rolledBack = rollbackRuntime.PromptBuilder.buildMessagesWithTokenCount(rollbackFixture.history, rollbackFixture.responder,
+  rollbackFixture.gameData, rollbackFixture.currentSessionSummary, rollbackFixture.memoryContext, rollbackConfig);
+const rollbackBlocks = rolledBack.promptPlan.blocks;
+const historyIndex = rollbackBlocks.findIndex(block => block.legacyType === "history");
+const descriptionIndex = rollbackBlocks.findIndex(block => block.id === "character-description-live");
+const responderFactsIndex = rollbackBlocks.findIndex(block => block.id === "responder-game-facts");
+assert.equal(rolledBack.promptPlan.layoutRevision, "v9_7_3_history_prefix_1");
+assert(!rollbackBlocks.some(block => ["glm-responder-profile", "glm-identity-rules"].includes(block.id)));
+assert(historyIndex >= 0 && descriptionIndex > historyIndex && responderFactsIndex > historyIndex);
+assert(rollbackBlocks[responderFactsIndex].content.includes("私下交谈和信件"));
+assert(rollbackBlocks[responderFactsIndex].content.includes("只能引用本请求"));
+console.log("PASS V9.8.0 GLM message order rollback and retained identity rules");
 
 console.log("PASS V9.7.3 provider prefix: production builders/adapters, live-state breakpoints, legacy/custom fallback and GLM tail freshness");

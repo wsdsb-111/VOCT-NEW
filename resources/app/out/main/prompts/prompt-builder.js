@@ -24,9 +24,6 @@ const { createPromptAssembly, captureBlockSpans, markTrustedMainSegment } = requ
 const { finalizePromptBuild } = require("./prompt-plan-compat");
 const { fingerprint: planFingerprint } = require("./prompt-plan-contract");
 
-const PLAYER_IDENTITY_SOURCE_RULES = `  - 私下交谈和信件不会自动变成全世界的传闻。对话记忆中的 public 只表示当场公开说出，不是全球公开；只有该记忆明确授权的知情者可以引用。亲友、同国、同地、身份声望和时间流逝都不是获得他人私聊的证据。
-  - 只能引用本请求为当前回应角色提供的获准记忆、来源明确的公开事实或本人已听见的当前对话。没有具体来源时，不得用“听说”“传闻”“有人告诉我”补造玩家过去的谈话、经历、交易或秘密，也不得为后台人物资料编造传播渠道；可以询问，但不能装作已经知道。`;
-
 const traitProfileContexts = new WeakSet();
 
 const PROMPT_LIFECYCLE = Object.freeze({
@@ -476,16 +473,20 @@ function createPromptBuilder({
      * Character-description scripts can be customized or disabled. Keep exact
      * responder facts close to history so direct factual questions use CK3 data.
      */
-    static buildPlayerIdentityKnowledge(char, gameData, publicCloseFamily = false) {
+    static buildPlayerIdentityKnowledge(char, gameData, publicCloseFamily = false, memoryContext = null) {
       const playerId = Number(gameData?.playerID);
       if (!gameData?.characters?.has(playerId) || Number(char?.id) === playerId) return null;
       const specialRelationship = isSpecialRelationKnown(Number(char.id), playerId, gameData);
+      const sameCourt = memoryContext?.disclosureProfiles?.get?.(playerId)?.some(fact => fact.source === "SAME_COURT"
+        && fact.campaignToken === gameData.campaignToken && fact.ownerId === Number(char.id)
+        && fact.entityId === playerId && fact.effectiveKnown === true);
       const formalRelationships = [
         ...currentRelationship(gameData, Number(char.id), playerId).types,
         ...currentRelationship(gameData, playerId, Number(char.id)).types
       ].filter(value => /^(friend|friends|best friend|rival|nemesis|lover|soulmate|spouse|wife|husband|father|mother|parent|son|daughter|child|brother|sister|sibling|uncle|aunt|cousin|liege|vassal|guardian|ward|courtier|朋友|好友|挚友|至交|仇敌|宿敌|恋人|情人|灵魂伴侣|领主|封臣|监护人|被监护人|廷臣)$/i.test(value.replace(/_/g, " "))
         || parseRelationIntent(value).sourcePhrase === value);
       const relationships = [...new Set([
+        ...(sameCourt ? ["同一宫廷"] : []),
         ...formalRelationships,
         ...buildStableKinship(char, gameData).filter(relative => Number(relative.runtimeId) === playerId).map(relative => relative.kinshipType)
       ])];
@@ -502,18 +503,19 @@ function createPromptBuilder({
       return `=== 玩家身份知情边界（本轮高优先级，适用于当前回应角色） ===
   - 当前 CK3 身份识别关系证据：${relationships.join("、") || (specialRelationship ? "CK3特殊关系标记" : "未提供")}。${specialRelationship ? "双方存在当前CK3确认的特殊关系，获准互知当前完整人物资料。" : publicCloseFamily ? "双方是当前可靠公开的近亲，关系证据支持相应称谓。" : "关系证据支持双方相识及相应称谓，不自动授予全部后台身份资料；缺少记录不等于从未相识。"}
 ${identityKnowledgeRule}
-${nameAccessRule}
+${nameAccessRule}${sameCourt ? "\n  - CK3 确认双方为同一宫廷的廷臣。直接使用本轮已获知清单明确列出的玩家姓名、性别、年龄、称号，按日常相识交谈。" : ""}
   - 当前回合开始交谈、同场、好感数值、SHARED_SCENE 或本次相遇的直接交谈次数，都不等于已知玩家身份。没有上述具体身份来源时，应按尚未识别的对方自然回应，不得主动叫出后台姓名、家族、头衔或官职，也不得因为系统提供资料而装作早已认识。
-${PLAYER_IDENTITY_SOURCE_RULES}`;
+  - 私下交谈和信件不会自动变成全世界的传闻。对话记忆中的 public 只表示当场公开说出，不是全球公开；只有该记忆明确授权的知情者可以引用。亲友、同国、同地、身份声望和时间流逝都不是获得他人私聊的证据。
+  - 只能引用本请求为当前回应角色提供的获准记忆、来源明确的公开事实或本人已听见的当前对话。没有具体来源时，不得用“听说”“传闻”“有人告诉我”补造玩家过去的谈话、经历、交易或秘密，也不得为后台人物资料编造传播渠道；可以询问，但不能装作已经知道。`;
     }
-    static buildResponderGameFacts(char, gameData = null, publicCloseFamily = false) {
+    static buildResponderGameFacts(char, gameData = null, publicCloseFamily = false, memoryContext = null) {
       if (!char) return null;
       const age = resolveCharacterAge(char, { currentGameDate: gameData?.date, currentTotalDays: gameData?.totalDays, currentCampaignToken: gameData?.campaignToken }).age;
       const primaryTitle = typeof char.primaryTitle === "string" ? char.primaryTitle.trim() : "";
       const title = primaryTitle && !["None", "None of", "None von", "None de"].includes(primaryTitle) ? primaryTitle : "无主要头衔";
       const courtPosition = typeof char.heldCourtAndCouncilPositions === "string" && char.heldCourtAndCouncilPositions.trim() ? char.heldCourtAndCouncilPositions.trim() : "无";
       const titleRank = typeof char.titleRankConcept === "string" && char.titleRankConcept !== "concept_none" ? char.titleRankConcept : "无";
-      const playerIdentityKnowledge = this.buildPlayerIdentityKnowledge(char, gameData, publicCloseFamily);
+      const playerIdentityKnowledge = this.buildPlayerIdentityKnowledge(char, gameData, publicCloseFamily, memoryContext);
       return `=== 当前回应角色的权威游戏资料（本轮 CK3 数据） ===
   - 游戏姓名／称号：${char.fullName || char.shortName || "未知"}
   - 姓名：${char.shortName || char.firstName || "未知"}
@@ -870,9 +872,6 @@ ${PLAYER_IDENTITY_SOURCE_RULES}`;
       const configuredProfile = resolveProviderPromptProfile(providerConfig || settingsRepository.getActiveProviderConfig?.() || null, v89Settings.chatPromptV810ProviderAdapter !== false);
       const promptProfile = v89LayoutEnabled ? configuredProfile : resolveProviderPromptProfile(null, false);
       const glmCacheLayout = promptProfile.glmCacheLayout === true;
-      const glmProfileParts = v813Layout && promptProfile.id === "glm_cache_v2"
-        && providerConfig?.providerType === "zhipu" && providerConfig.defaultModel === "glm-5.3-flash"
-        && blocks.some(block => block.enabled && block.type === "history") ? new Map() : null;
       const glmCacheV2 = !v813Layout && promptProfile.id === "glm_cache_v2";
       const layoutId = resolvePromptLayoutId(promptProfile, { v89LayoutEnabled, runtimeProfileSplit, v813Layout });
       const { messages: llmMessages, blocks: blocksWithTokens } = createPromptAssembly();
@@ -972,9 +971,8 @@ ${PLAYER_IDENTITY_SOURCE_RULES}`;
         role: "system",
         stable: false
       };
-      const responderFacts = this.buildResponderGameFacts(char, gameData, playerIdentityFamilyAccess);
       const responderGameFacts = [
-        responderFacts,
+        this.buildResponderGameFacts(char, gameData, playerIdentityFamilyAccess, memoryContext),
         memoryContext?.publicRealmProfile?.length ? [
           "=== 本角色获准知晓的现实领主与直属封臣 ===",
           "下列是本场 CK3 公开政局资料，只支持姓名、头衔、称号及实际年号。按场合自然称呼，不由公开身份推得其私事或他人知情。",
@@ -987,11 +985,6 @@ ${PLAYER_IDENTITY_SOURCE_RULES}`;
         disclosures.other,
         formatSelfConcealment(memoryContext, ageAuthorityGameData, Number(char.id), [...activeParticipantIds])
       ].filter(Boolean).join("\n\n");
-      if (glmProfileParts && responderFacts?.endsWith("\n" + PLAYER_IDENTITY_SOURCE_RULES)) {
-        const live = responderFacts.slice(0, -(PLAYER_IDENTITY_SOURCE_RULES.length + 1)) + responderGameFacts.slice(responderFacts.length);
-        glmProfileParts.set("responder-game-facts", { id: "glm-identity-rules", label: "Player Identity Source Rules", content: responderGameFacts,
-          profile: PLAYER_IDENTITY_SOURCE_RULES, live });
-      }
       const latestUserQuery = [...workingHistory].reverse().find((message) => message.role === "user")?.content || "";
       const ageDiagnostics = [];
       const familyDiagnostics = [];
@@ -1358,7 +1351,6 @@ ${PLAYER_IDENTITY_SOURCE_RULES}`;
           glmCacheLayout,
           glmCacheV2,
           v813Layout,
-          glmProfileParts,
           hoistedMainSegmentIds: hoistedMainSegments.get(block),
           runtimeProfileSplit,
           deferredMainSegments,
@@ -1450,7 +1442,7 @@ ${PLAYER_IDENTITY_SOURCE_RULES}`;
         declaredStaticTokens,
         dynamicTailTokens: blocksWithTokens.slice(firstDynamicBlock < 0 ? blocksWithTokens.length : firstDynamicBlock).reduce((total, tokenBlock) => total + (Number(tokenBlock.tokens) || 0), 0)
       };
-      const planned = finalizePromptBuild(legacyBuild, { mode: options.promptPlanMode, memoryContext, glmProfileParts,
+      const planned = finalizePromptBuild(legacyBuild, { mode: options.promptPlanMode, memoryContext,
         traceSerialization: options.traceSerialization,
         providerConfig, promptSettings, estimateTokens: text => TokenCounter.estimateTokens(text),
         scope: { campaignToken: ageAuthorityGameData.campaignToken ?? memoryContext?.sourceCampaignToken ?? null,
@@ -1551,10 +1543,7 @@ ${PLAYER_IDENTITY_SOURCE_RULES}`;
             const profileCache = baseContext.memoryContext?.stableDescriptionCache;
             // Scripts may read any projected field; re-render before retaining text so
             // a cached full description cannot bypass a later disclosure revocation.
-            const parts = options.glmProfileParts && block.id === "character-description"
-              ? this.scriptLoader.executeDescriptionForGlm?.(descScriptPath, gameData, character.id) : null;
-            const descriptionBlock = parts ? parts.content : this.scriptLoader.executeDescription(descScriptPath, gameData, character.id);
-            if (parts?.profile && parts.live) options.glmProfileParts.set("character-description-live", { ...parts, id: "glm-responder-profile", label: "Current Responder Profile" });
+            const descriptionBlock = this.scriptLoader.executeDescription(descScriptPath, gameData, character.id);
             const cacheKey = options.runtimeProfileSplit ? `v7:${descScriptPath}:${character.id}`
               : `v8.14.2:${descScriptPath}:${character.id}`;
             if (descriptionBlock && !options.runtimeProfileSplit && profileCache instanceof Map) profileCache.set(cacheKey, descriptionBlock);

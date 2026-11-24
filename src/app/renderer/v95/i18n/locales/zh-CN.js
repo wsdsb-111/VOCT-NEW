@@ -24,9 +24,9 @@ export default {
   errors: { STALE_CONTEXT: "上下文已改变，请刷新此视图。", CAMPAIGN_CHANGED: "战役已改变，请重新加载。", CONVERSATION_CHANGED: "对话已改变，请重新加载。", REVISION_CONFLICT: "来源已变化，请刷新后编辑。", SOURCE_REVOKED: "此来源已不再可用。", PERMISSION_DENIED: "未获授权查看此信息。", PROVIDER_UNAVAILABLE: "服务商不可用，请检查配置。", REQUEST_CANCELLED: "请求已取消。", EFFECT_UNKNOWN: "效果未知，请先回读后端状态。", IPC_UNAVAILABLE: "应用连接暂不可用。", VALIDATION_ERROR: "提交的值无效。", UNKNOWN_ERROR: "请求失败，请刷新或查看诊断。" },
   legacyKnowledge: {
     common: { unknownName: "姓名未载入" },
-    kinds: { perception: "感知", name: "姓名", nickname: "称号", title: "头衔", trait: "特质" },
+    kinds: { perception: "感知", name: "姓名", nickname: "称号", title: "头衔", age: "年龄", gender: "性别", trait: "特质" },
     statuses: { known: "已知", autoDisclosed: "对话已披露", manualKnown: "人工标记已知", manualHidden: "人工设为未知", unknown: "未确认", stale: "来源已变化", directKnown: "直接可知", unavailable: "状态未载入" },
-    sources: { stale: "对应的原始对话来源已变化", conversationDisclosure: "原始对话披露记录", undisclosed: "原始对话没有披露记录", manual: "人工认知设置", gameDataKnownSecret: "运行数据的披露记录", inPersonObservation: "在场可见的外貌／身体白名单特质", publicCloseFamily: "已公开的父母子女／亲兄弟姐妹关系", supernaturalRecognition: "当面精确认出的种族身份", supernaturalSense: "当面感到超自然气息，具体种族未辨明", specialRelation: "当前CK3确认的双方特殊关系", socialRecognition: "本次对话的领主／封臣／领地邻接关系", publicNickname: "公开称号", unknown: "来源未分类" },
+    sources: { stale: "对应的原始对话来源已变化", conversationDisclosure: "原始对话披露记录", undisclosed: "原始对话没有披露记录", manual: "人工认知设置", gameDataKnownSecret: "运行数据的披露记录", inPersonObservation: "在场可见的外貌／身体白名单特质", publicCloseFamily: "已公开的父母子女／亲兄弟姐妹关系", supernaturalRecognition: "当面精确认出的种族身份", supernaturalSense: "当面感到超自然气息，具体种族未辨明", specialRelation: "当前CK3确认的双方特殊关系", socialRecognition: "本次对话的领主／封臣／领地邻接关系", sameCourt: "CK3 确认的同一宫廷", publicNickname: "公开称号", unknown: "来源未分类" },
     ui: {
       factValue: "{{kind}}：{{value}}", hasDisclosureRecord: "已有对话披露记录", acquiredAt: "获知时间：{{date}}", setUnknown: "设为未知", markKnown: "标记已知",
       setUnknownTooltip: "只改变“谁知道”所选人物对这项特质的认知", markKnownTooltip: "只将“谁知道”所选人物标记为明确知道这项特质",

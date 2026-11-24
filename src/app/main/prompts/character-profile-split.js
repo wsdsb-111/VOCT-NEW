@@ -28,28 +28,4 @@ function splitCharacterProfile(description) {
   return { stableContent: stable.join("\n"), dynamicContent: runtime.join("\n") };
 }
 
-function splitResponderCharacterProfile(description, responderId, items) {
-  const fallback = { profile: "", live: description };
-  if (typeof description !== "string" || responderId == null || String(responderId).trim() === "" || !Array.isArray(items) || !items.length) return fallback;
-  if (items.some(item => typeof item !== "string")) return fallback;
-  const idMatch = /^id\(([^()\r\n]+)\)$/.exec(items[0]);
-  if (!idMatch || idMatch[1] !== String(responderId)) return fallback;
-
-  const itemStart = description.indexOf(items[0]);
-  if (itemStart < 1) return fallback;
-  const heading = description.slice(0, itemStart);
-  if (heading[0] !== "[" || /[\r\n\[\]]/.test(heading.slice(1)) || (!heading.endsWith("'s character info: ") && !heading.endsWith("的角色信息："))) return fallback;
-
-  const responderSection = `${heading}${items.join("; \n")}]`;
-  if (!description.startsWith(responderSection) || !description.slice(responderSection.length).startsWith("\n")) return fallback;
-
-  const stableItem = /^(?:personality traits|sexuality|personality|personality_core|faith|culture): |(?:性格特质|性取向|性格|性格核心|信仰|文化)：/;
-  const profileItems = items.filter(item => stableItem.test(item));
-  if (!profileItems.length || profileItems.some(item => /[\[\]]/.test(item))) return fallback;
-  const liveItems = items.filter(item => !stableItem.test(item));
-  const profile = `${heading}${profileItems.join("; \n")}]`;
-  const liveSection = liveItems.length ? `${heading}${liveItems.join("; \n")}]` : "";
-  return { profile, live: `${liveSection}${description.slice(responderSection.length)}` };
-}
-
-module.exports = { splitCharacterProfile, splitResponderCharacterProfile };
+module.exports = { splitCharacterProfile };

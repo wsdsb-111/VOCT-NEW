@@ -146,8 +146,133 @@ async function run() {
   assert.doesNotMatch(build(2, { cacheV2FrozenSnapshots: null, worldBackground: { text: "此战役使用架空历法" } }),
     /年代常识按真实年份/);
   assert.equal((await writeAndParse(header("未知"))).year, null, "unknown dates do not silently become 976");
+
+  const courtPerson = (id, shortName, fullName, title, age, pronoun, nickname) => {
+    const fields = Array(28).fill("");
+    Object.assign(fields, { 0: id, 1: shortName, 2: fullName, 3: title, 4: pronoun, 5: age,
+      14: "汉", 18: shortName, 27: nickname });
+    return row("character", ...fields);
+  };
+  const courtFixture = ({ secondCourt = 900, age = "31", campaign = "votc8c-123456789012" } = {}) => [
+    ...header().filter(line => !String(line).startsWith("VOTC:CAMPAIGN/")), `VOTC:CAMPAIGN/${campaign}`,
+    courtPerson(40, "周谨", "周谨全名", "不可旁知的公爵头衔", "28", "he", "青衫公子"),
+    courtPerson(41, "柳青", "柳青全名", "不可旁知的伯爵头衔", age, "she", "玉笛娘子"),
+    courtPerson(42, "顾宁", "顾宁全名", "候场者头衔", "22", "she", "候场称号"),
+    row("court_member", 40, 900, 1, 393860),
+    row("court_member", 41, secondCourt, 1, 393860),
+    row("court_member", 42, 900, 1, 393860),
+    row("trait", 41, "secret_witch", "secret", "秘密巫师", "不可公开的秘密特质")
+  ];
+  const courtData = await writeAndParse(courtFixture());
+  const courtScene = { id: "court-scene", isActive: true, gameData: courtData,
+    selectedCharacterIds: new Set([40, 41]), presentCharacterIds: new Set([40, 41]), messages: [] };
+  const courtStore = new ConversationDisclosureStore({ dataDir: path.join(temporaryRoot, "same-court"), getCurrentConversation: () => courtScene });
+  const courtProfile = (ownerRuntimeId = 40, targetRuntimeId = 41) => courtStore.getDisclosureProfile({
+    campaignToken: courtScene.gameData.campaignToken, ownerRuntimeId, targetRuntimeId
+  });
+  assert.equal(courtProfile().facts.some(fact => fact.source === "SAME_COURT"), false,
+    "raw court membership alone does not grant disclosure before participants are activated");
+  activateSocialRecognition(courtData, [40, 41]);
+  const sameCourt = courtProfile();
+  const courtFact = (type, value) => sameCourt.facts.find(fact => fact.factType === type && (!value || fact.value === value));
+  assert.equal(courtFact("NAME", "柳青")?.source, "SAME_COURT", "only the supported personal name is known");
+  assert.equal(sameCourt.facts.some(fact => fact.factType === "NAME" && fact.value === "柳青全名"), false,
+    "same-court knowledge does not expose a distinct full name");
+  assert.equal(courtFact("NICKNAME", "玉笛娘子")?.source, "SAME_COURT");
+  assert.equal(courtFact("AGE", "31岁")?.source, "SAME_COURT");
+  assert.equal(courtFact("GENDER", "女性")?.source, "SAME_COURT");
+  assert(courtProfile(41, 40).facts.some(fact => fact.factType === "NAME"
+    && fact.value === "周谨" && fact.source === "SAME_COURT"), "court knowledge applies in both directions");
+  assert.equal(sameCourt.facts.some(fact => ["TITLE", "TRAIT"].includes(fact.factType)), false,
+    "same-court knowledge grants no title or private trait");
+  const unselectedCourtMember = courtProfile(40, 42);
+  assert.equal(unselectedCourtMember.status, "READY", "a mentioned target can be read without becoming a participant");
+  assert.equal(unselectedCourtMember.facts.some(fact => fact.source === "SAME_COURT"
+    || ["NAME", "AGE", "GENDER"].includes(fact.factType)), false,
+  "an unselected court member receives no same-court identity facts");
+
+  const buildCourtPrompt = () => {
+    const visibility = buildCharacterDisclosureContext({ service: courtStore, gameData: courtScene.gameData,
+      responderId: 40, targetIds: [41] });
+    return PromptBuilder.buildMessagesWithTokenCount([{ role: "user", content: "请谈谈此人的资料。" }],
+      courtScene.gameData.characters.get(40), courtScene.gameData, "", {
+        ...visibility, cacheV2FrozenSnapshots: null, openingGameDate: null
+      }, { providerType: "deepseek" }).messages.map(message => message.content).join("\n");
+  };
+  mainTemplate = "Court QA.";
+  const sameCourtPrompt = buildCourtPrompt();
+  assert.match(sameCourtPrompt, /柳青/);
+  assert.match(sameCourtPrompt, /玉笛娘子/);
+  assert.match(sameCourtPrompt, /31岁/);
+  assert.match(sameCourtPrompt, /女性/);
+  assert.doesNotMatch(sameCourtPrompt, /柳青全名|不可旁知的伯爵头衔|秘密巫师|不可公开的秘密特质/);
+
+  const hiddenName = courtFact("NAME", "柳青");
+  courtStore._write({ schemaVersion: 1, sourceRevisions: {}, records: [{
+    ...hiddenName, ownerRuntimeId: "40", targetRuntimeId: "41", campaignToken: courtData.campaignToken,
+    factType: hiddenName.factType, factKey: hiddenName.factKey, value: hiddenName.value, revision: 1, evidence: [],
+    manual: { status: "MANUAL_HIDDEN", factSourceSnapshotId: hiddenName.factSourceSnapshotId, acquiredDate: courtData.date }
+  }] });
+  assert.doesNotMatch(buildCourtPrompt(), /柳青/,
+    "a manual hidden-name decision overrides the same-court name while other facts remain available");
+  assert.match(buildCourtPrompt(), /玉笛娘子|31岁|女性/);
+
+  const noAgeData = await writeAndParse(courtFixture({ age: "" }));
+  courtScene.id = "court-no-age";
+  courtScene.gameData = noAgeData;
+  courtScene.selectedCharacterIds = new Set([40, 41]);
+  courtScene.presentCharacterIds = new Set([40, 41]);
+  activateSocialRecognition(noAgeData, [40, 41]);
+  const noAgeStore = new ConversationDisclosureStore({ dataDir: path.join(temporaryRoot, "same-court-no-age"), getCurrentConversation: () => courtScene });
+  const noAgeProfile = noAgeStore.getDisclosureProfile({ ownerRuntimeId: 40, targetRuntimeId: 41 });
+  assert.equal(noAgeProfile.facts.some(fact => fact.factType === "AGE"), false,
+    "same-court access does not invent age when CK3 supplied no age");
+
+  const badRowsData = await writeAndParse([...courtFixture().filter(line => !String(line).includes("court_member")),
+    row("court_member", 40, 900, 2, 393860), row("court_member", 41, 900, 1, 393859)]);
+  courtScene.id = "court-bad-row-scope";
+  courtScene.gameData = badRowsData;
+  activateSocialRecognition(badRowsData, [40, 41]);
+  const badRowsStore = new ConversationDisclosureStore({ dataDir: path.join(temporaryRoot, "same-court-bad-rows"), getCurrentConversation: () => courtScene });
+  assert.equal(badRowsStore.getDisclosureProfile({ ownerRuntimeId: 40, targetRuntimeId: 41 }).facts
+    .some(fact => fact.source === "SAME_COURT"), false, "wrong-player and stale-day rows cannot establish same court");
+
+  const contradictoryLife = await writeAndParse(courtFixture());
+  contradictoryLife.characters.get(41).alive = true;
+  contradictoryLife.characters.get(41).deathDate = "1079.5.2";
+  courtScene.id = "court-life-conflict";
+  courtScene.gameData = contradictoryLife;
+  activateSocialRecognition(contradictoryLife, [40, 41]);
+  const contradictoryLifeStore = new ConversationDisclosureStore({ dataDir: path.join(temporaryRoot, "same-court-life-conflict"), getCurrentConversation: () => courtScene });
+  assert.equal(contradictoryLifeStore.getDisclosureProfile({ ownerRuntimeId: 40, targetRuntimeId: 41 }).facts
+    .some(fact => fact.source === "SAME_COURT"), false, "a living/death contradiction blocks same-court knowledge");
+
+  const changedCourtData = await writeAndParse(courtFixture({ secondCourt: 901 }));
+  preserveSocialRecognition(courtData, changedCourtData);
+  courtScene.id = "court-action-readback";
+  courtScene.gameData = changedCourtData;
+  const readbackStore = new ConversationDisclosureStore({ dataDir: path.join(temporaryRoot, "same-court-readback"), getCurrentConversation: () => courtScene });
+  assert.equal(readbackStore.getDisclosureProfile({ ownerRuntimeId: 40, targetRuntimeId: 41 }).facts
+    .some(fact => fact.source === "SAME_COURT"), false, "a fresh contradictory court owner revokes the opening knowledge");
+  const leftCourtData = await writeAndParse(courtFixture({ secondCourt: 0 }));
+  preserveSocialRecognition(courtData, leftCourtData);
+  courtScene.gameData = leftCourtData;
+  assert(!readbackStore.getDisclosureProfile({ ownerRuntimeId: 40, targetRuntimeId: 41 }).facts
+    .some(fact => fact.source === "SAME_COURT"), "explicit native non-membership revokes court knowledge");
+  const reopenedConflict = await writeAndParse(courtFixture({ secondCourt: 901 }));
+  courtScene.id = "court-reopened-conflict";
+  courtScene.gameData = reopenedConflict;
+  activateSocialRecognition(reopenedConflict, [40, 41]);
+  assert.equal(readbackStore.getDisclosureProfile({ ownerRuntimeId: 40, targetRuntimeId: 41 }).facts
+    .some(fact => fact.source === "SAME_COURT"), false, "a new scene reevaluates contradictory owners");
+  const reopenedValid = await writeAndParse(courtFixture());
+  courtScene.id = "court-reopened-valid";
+  courtScene.gameData = reopenedValid;
+  activateSocialRecognition(reopenedValid, [40, 41]);
+  assert.equal(readbackStore.getDisclosureProfile({ ownerRuntimeId: 40, targetRuntimeId: 41 }).facts
+    .some(fact => fact.source === "SAME_COURT"), true, "a later scene can reevaluate and grant valid same-court facts");
 }
 
-run().then(() => console.log("PASS V9.8 realm roleplay: CK3 date, scoped hierarchy, custom era, prompt projection and manual privacy"))
+run().then(() => console.log("PASS V9.8 realm roleplay: CK3 date, scoped hierarchy, same-court disclosure, custom era, prompt projection and manual privacy"))
   .catch(error => { console.error(error); process.exitCode = 1; })
   .finally(() => fs.rmSync(temporaryRoot, { recursive: true, force: true }));

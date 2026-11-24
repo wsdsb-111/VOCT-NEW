@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "runtimeVersion": "9.8.1",
+  "runtimeVersion": "9.8.3",
   "mod": {
     "upstreamBaseVersion": "2.0.4",
     "maintainedModBase": "2.0.5"

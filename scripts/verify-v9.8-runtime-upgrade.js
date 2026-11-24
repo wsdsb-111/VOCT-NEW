@@ -27,7 +27,7 @@ async function run() {
   const profile = path.join(scratch, "profile");
   fs.mkdirSync(profile);
   const current = verifyRuntimeBuild({ rootDir: root, deployed: true });
-  assert.equal(current.appVersion, "9.8.1");
+  assert.equal(current.appVersion, "9.8.3");
   const evidence = { status: "FAIL", candidate, baseline: oldRevision, releases: [], deploys: [], syntheticProfile: true };
   const stage = (revision, version, payload) => {
     git("restore", `--source=${revision}`, "--worktree", "--", ...inputs);
@@ -66,11 +66,11 @@ async function run() {
     });
     const hashFixture = () => files.map(file => sha256(fs.readFileSync(file)));
     const hashes = hashFixture();
-    stage(candidate, "9.8.1", current.payloadSha256);
-    assert(deploy("9.8.1", current.payloadSha256) > 0);
-    assert.equal(deploy("9.8.1", current.payloadSha256), 0);
+    stage(candidate, "9.8.3", current.payloadSha256);
+    assert(deploy("9.8.3", current.payloadSha256) > 0);
+    assert.equal(deploy("9.8.3", current.payloadSha256), 0);
     assert.deepEqual(hashFixture(), hashes);
-    await launch("9.8.1", "upgraded");
+    await launch("9.8.3", "upgraded");
 
     stage(oldRevision, "9.7.4", oldPayload);
     assert(deploy("9.7.4", oldPayload) > 0);
@@ -81,8 +81,8 @@ async function run() {
     evidence.status = "PASS";
   } finally {
     try {
-      stage(candidate, "9.8.1", current.payloadSha256);
-      deploy("9.8.1", current.payloadSha256);
+      stage(candidate, "9.8.3", current.payloadSha256);
+      deploy("9.8.3", current.payloadSha256);
     } catch (error) {
       evidence.status = "FAIL";
       throw error;

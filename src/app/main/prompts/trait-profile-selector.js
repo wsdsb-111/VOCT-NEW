@@ -294,6 +294,8 @@ function createTraitProfileView(gameData, character, memoryContext = null, { inc
             && (knowsProfile || ageFacts.some(fact => fact.effectiveKnown === true));
           if (!knowsAge) {
             if ("age" in result) result.age = null;
+          }
+          if (!knowsAge || !knowsProfile && ageFacts.some(fact => fact.source === "SAME_COURT")) {
             for (const key of ["birth", "birthDate", "birthDateTotalDays", "birthTotalDays", "ageAtDeath", "ageAtDeathSource"]) delete result[key];
           }
           for (const key of ["primaryTitle", "titleRankConcept", "heldCourtAndCouncilPositions"]) {

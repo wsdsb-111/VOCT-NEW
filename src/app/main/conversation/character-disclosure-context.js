@@ -38,7 +38,8 @@ function buildCharacterDisclosureContext({ service, gameData, responderId, targe
       continue;
     }
     const evidencePrefix = gameData.campaignToken + "|" + currentDate + "/" + gameData.totalDays + "|";
-    const facts = (profile.facts || []).filter(fact => ["NAME", "NICKNAME", "TRAIT", "TITLE", "PERCEPTION"].includes(fact.factType)
+    const facts = (profile.facts || []).filter(fact => (["NAME", "NICKNAME", "TRAIT", "TITLE", "PERCEPTION"].includes(fact.factType)
+      || fact.source === "SAME_COURT" && ["AGE", "GENDER"].includes(fact.factType))
       && ["KNOWN", "AUTO_DISCLOSED", "MANUAL_KNOWN", "MANUAL_HIDDEN"].includes(fact.status)
       && (fact.evidenceSourceSnapshotId
         ? fact.evidenceSourceSnapshotId.startsWith(evidencePrefix)
@@ -105,14 +106,16 @@ function currentKnownCharacterFacts(memoryContext, gameData, responderId) {
     for (const fact of facts) {
       const acquiredDate = normalizeGameDate(fact?.firstAcquiredDate);
       const value = typeof fact?.value === "string" ? fact.value.replace(/[\u0000-\u001f\u007f]/gu, " ").replace(/\s+/gu, " ").trim() : "";
-      if (!["NAME", "TITLE", "TRAIT", "PERCEPTION"].includes(fact?.factType) || fact.ownerId !== ownerId || fact.entityId !== targetId
+      const sameCourt = fact?.source === "SAME_COURT";
+      if (!(["NAME", "TITLE", "TRAIT", "PERCEPTION"].includes(fact?.factType)
+        || sameCourt && ["NICKNAME", "AGE", "GENDER"].includes(fact.factType)) || fact.ownerId !== ownerId || fact.entityId !== targetId
         || fact.campaignToken !== campaignToken || fact.current !== true || fact.effectiveKnown !== true
         || !["AUTO_DISCLOSED", "MANUAL_KNOWN"].includes(fact.status) || fact.sourceStatus !== "CURRENT"
         || !/^[a-f0-9]{64}$/.test(fact.sourceSnapshotId || "") || !/^fact:[a-f0-9]{64}$/.test(fact.factSourceSnapshotId || "")
         || !acquiredDate || acquiredDate.serial > currentDate.serial || !value || value.length > 120) continue;
-      const disclosurePhase = ["NAME", "TRAIT"].includes(fact.factType) && fact.hasDisclosureRecord === true
+      const disclosurePhase = !sameCourt && ["NAME", "TRAIT"].includes(fact.factType) && fact.hasDisclosureRecord === true
         && ["prior", "current"].includes(fact.disclosurePhase) ? fact.disclosurePhase : null;
-      result.push({ targetId, factType: fact.factType, value, disclosurePhase });
+      result.push({ targetId, factType: fact.factType, value, disclosurePhase, sameCourt });
     }
   }
   return result;
@@ -137,10 +140,10 @@ function formatKnownNameFacts(memoryContext, gameData, responderId) {
 
 function formatFacts(knownFacts) {
   const names = formatNames(knownFacts);
-  const labels = { TITLE: "头衔／官职", TRAIT: "特质／身份", PERCEPTION: "气息感知" };
+  const labels = { TITLE: "头衔／官职", TRAIT: "特质／身份", PERCEPTION: "气息感知", NICKNAME: "称号", AGE: "年龄", GENDER: "性别" };
   const rows = knownFacts
     .filter(fact => fact.factType !== "NAME")
-    .map(fact => `- Target Runtime ID ${fact.targetId}，${labels[fact.factType]}：${fact.value}`);
+    .map(fact => `- Target Runtime ID ${fact.targetId}，${fact.sameCourt ? "同宫廷已知" : ""}${labels[fact.factType]}：${fact.value}`);
   const facts = rows.length ? "=== 本回应角色已获知的特质与身份 ===\n" + [...new Set(rows)].sort().join("\n")
     + "\n以上逐项事实已经由本回应角色获知，包括有效的对话披露和手动认知；不得再声称尚未知晓这些事实。只知道列明的项目，不得推断其它特质、身份、秘密或经历。" : "";
   const perceptionRule = rows.some(row => row.includes("气息感知"))
