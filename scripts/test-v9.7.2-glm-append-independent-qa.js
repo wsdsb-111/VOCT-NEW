@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const { makeConversation } = require("./test-v9.4-conversation-plan-main-chain");
 const { Conversation } = require("../src/app/main/conversation/conversation");
 const { createEffectiveRequestSnapshot, fingerprintMessages } = require("../src/app/main/providers/effective-request");
-const { prepareGlmAppendLayout } = require("../src/app/main/prompts/glm-append-layout");
+const { prepareGlmAppendLayout, REVISION } = require("../src/app/main/prompts/glm-append-layout");
 const { planSeal } = require("../src/app/main/prompts/prompt-plan-contract");
 
 const config = {
@@ -68,18 +68,19 @@ function makeState() {
     llmManager,
     memoryEngine: {
       trace: { record() {} },
+      ensureConversationState: () => conversation.memoryState,
       validatePlayerMemoryContext: () => ({ valid: true, reason: null }),
       invalidateConversationRecallState() {}
     }
   });
 
-  const startUserTurn = (participantIds) => {
+  const startUserTurn = (participantIds, content) => {
     const highestId = conversation.messages.reduce((max, message) =>
       Number.isSafeInteger(message?.id) ? Math.max(max, message.id) : max, conversation.nextId - 1);
     const playerMessageId = highestId + 1;
     conversation.nextId = playerMessageId + 1;
     conversation.messages.push({ id: playerMessageId, role: "user",
-      speakerCharacterId: fixture.gameData.playerID, content: `PLAYER TURN ${playerMessageId}` });
+      speakerCharacterId: fixture.gameData.playerID, content: content ?? `PLAYER TURN ${playerMessageId}` });
     conversation.getTurnManager().startUserTurn({
       playerMessageId,
       activeParticipantIds: [fixture.gameData.playerID, ...participantIds],
@@ -237,4 +238,50 @@ async function run() {
   console.log("PASS V9.7.2 GLM append independent QA: A prefix, A-to-B receipt isolation, sticky instruction/suffix, cancel/error/continuation commit guards and clear/end");
 }
 
-if (require.main === module) run().catch(error => { console.error(error.stack || error); process.exitCode = 1; });
+async function runConfirmedActionTail() {
+  const { conversation, fixture, requests, startUserTurn } = makeState();
+  const npc = fixture.responder;
+  fixture.promptSettings.blocks.find(block => block.type === "examples").enabled = false;
+  const getMemory = conversation.checkAndSummarizeIfNeeded;
+  conversation.checkAndSummarizeIfNeeded = async (...args) => ({
+    ...await getMemory(...args), confirmedActionText: conversation.getConfirmedActionContextFor(npc.id)
+  });
+
+  await conversation.respondAs(npc, conversation.turnEpoch);
+  const first = requests.at(-1);
+  const receipt = conversation.glmAppendReceipts.get(npc.id);
+  assert(receipt);
+  conversation.messages.push({ id: conversation.nextId++, type: "action-feedback", feedbacks: [
+    { lifecycle: { status: "CONFIRMED" }, diagnostic: {
+      confirmedStateChange: { type: "GOLD_TRANSFER", sourceRuntimeId: npc.id, targetRuntimeId: fixture.gameData.playerID, amount: 42 },
+      stateAfter: { sourceGold: 112, targetGold: 159 }
+    } },
+    { lifecycle: { status: "ACKNOWLEDGED" }, diagnostic: {
+      confirmedStateChange: { type: "GOLD_TRANSFER", amount: 9000 }
+    } }
+  ] });
+  startUserTurn([npc.id], "你伯父是谁？");
+  await conversation.respondAs(npc, conversation.turnEpoch);
+  const second = requests.at(-1);
+  const reusableLength = first.messages.length - receipt.tailCount;
+  assert.deepEqual(second.messages.slice(0, reusableLength), first.messages.slice(0, reusableLength));
+  assert.equal(second.metadata.promptPlanProof.plan.layoutRevision, REVISION);
+  const action = second.metadata.promptPlanProof.serialized.messageSpans.find(span => span.blockId === "action-confirmed-context");
+  assert.match(second.messages[action.start].content, /支付 42 金；核验后余额 112 \/ 159/);
+  const family = second.metadata.promptPlanProof.serialized.messageSpans.find(span => span.blockId === "responder-family-facts");
+  assert(family && family.start >= reusableLength, "the real family query emits its current facts in the refreshed tail");
+  assert(!second.messages.some(message => message.content.includes("支付 9000 金")));
+  const secondReceipt = conversation.glmAppendReceipts.get(npc.id);
+  assertInstructionTail(second, secondReceipt);
+
+  startUserTurn([npc.id], "换个话题。");
+  await conversation.respondAs(npc, conversation.turnEpoch);
+  const third = requests.at(-1);
+  const nextReusableLength = second.messages.length - secondReceipt.tailCount;
+  assert.deepEqual(third.messages.slice(0, nextReusableLength), second.messages.slice(0, nextReusableLength));
+  assert(!third.metadata.promptPlanProof.plan.blocks.some(block => block.id === "responder-family-facts"),
+    "a new topic removes the previous family facts from the wire");
+  console.log(`PASS V9.8.4 action and family tails through Conversation and transport guards (${reusableLength} then ${nextReusableLength} reused messages)`);
+}
+
+if (require.main === module) run().then(runConfirmedActionTail).catch(error => { console.error(error.stack || error); process.exitCode = 1; });

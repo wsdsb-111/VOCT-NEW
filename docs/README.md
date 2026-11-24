@@ -1,4 +1,4 @@
-- [2026-11-24 V9.8.3 GLM 布局恢复与同宫廷认知](versions/v9/V9.8.md) · [当前验收](versions/v9/STATUS.md)
+- [2026-11-24 V9.8.4 GLM 对话安全追加](versions/v9/V9.8.md) · [当前验收](versions/v9/STATUS.md)
 - [2026-11-18 V9.7.4 姓名披露可靠性](versions/v9/V9.7.md#name-disclosure-v974-20261118) · [当前验收](versions/v9/STATUS.md)
 - [2026-11-18 V9.7.3 缓存、披露与信件验证](versions/v9/V9.7.md#provider-cache-v973-20261118)：服务商单独对照、姓名与特质在本场和新场的注入顺序、信件生成和模拟送达；见[当前状态](versions/v9/STATUS.md)。
 - [2026-11-18 V9.7.2 GLM官方缓存条件与安全追加候选](versions/v9/V9.7.md#glm-official-append-20261118)：官方条件、追加/保留思考API对照、当前消息纯置换、来源/状态变化回退。
@@ -13,7 +13,7 @@
 
 **V9.7.1已本机安装**：[自主背景设定](versions/v9/V9.7.md#v971-custom-world-background) · [当前验收](versions/v9/STATUS.md)。按战役隔离、当前上限5000字符（2026-11-16放宽）、下一场对话起冻结生效。下方V9.7为已验收基线。
 
-当前源码候选为 **V9.8.3 GLM 布局恢复与同宫廷认知**；V9.8.0 多人对话测量与受管升级回滚证据保留为历史基线。V9.7.0 Legacy Decommission 及旧 Workshop 一体化分发取消记录继续作为历史版本内容。
+当前源码候选为 **V9.8.4 GLM 对话安全追加**；V9.8.0 多人对话测量与受管升级回滚证据保留为历史基线。V9.7.0 Legacy Decommission 及旧 Workshop 一体化分发取消记录继续作为历史版本内容。
 
 - [当前交付与 CI 状态](versions/v9/STATUS.md)。
 - [V9.7 版本册](versions/v9/V9.7.md)：设计、基线、台账、等价矩阵、数据保留、实施、验证及 V9.8 移交。
